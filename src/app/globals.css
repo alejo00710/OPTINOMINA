@@ -1,0 +1,93 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-primary: #1e293b;
+  --color-accent: #3b82f6;
+  --color-accent-hover: #2563eb;
+  --color-surface: #ffffff;
+  --color-background: #f8fafc;
+  --color-border: #e2e8f0;
+  --radius-stitch: 1.5rem;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-primary antialiased;
+    font-family: var(--font-sans);
+  }
+}
+
+@layer components {
+  /* Stitch Design System - Elegant & Corporate */
+  
+  .stitch-card {
+    @apply bg-white border border-slate-200/60 rounded-[1.5rem] transition-all duration-500 overflow-hidden;
+    transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.01);
+  }
+
+  .stitch-card:hover {
+    @apply border-blue-400/30 -translate-y-1;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.03), 0 10px 10px -5px rgba(0, 0, 0, 0.01);
+  }
+
+  .stitch-glass {
+    @apply bg-white/80 border border-white/40 backdrop-blur-xl;
+  }
+
+  .stitch-button-primary {
+    @apply bg-slate-900 text-white px-6 py-3.5 rounded-2xl font-bold text-sm tracking-tight hover:bg-blue-600 transition-all active:scale-95 shadow-lg shadow-slate-200 flex items-center justify-center gap-2;
+  }
+
+  .stitch-button-outline {
+    @apply bg-white border border-slate-200 text-slate-600 px-6 py-3.5 rounded-2xl font-bold text-sm tracking-tight hover:bg-slate-50 hover:text-slate-900 transition-all active:scale-95 flex items-center justify-center gap-2;
+  }
+
+  .stitch-sidebar-item {
+    @apply flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all duration-300 font-medium;
+  }
+
+  .stitch-badge {
+    @apply px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border;
+  }
+}
+
+/* Custom Utilities */
+@utility animate-stitch {
+  animation: stitch-fade-in 0.6s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+@utility gradient-text {
+  @apply bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent;
+}
+
+@keyframes stitch-fade-in {
+  from { opacity: 0; transform: translateY(15px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-from-bottom {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1);    }
+}
+
+@utility animate-slide-in {
+  animation: slide-in-from-bottom 0.35s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+/* Smooth Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1;
+}
