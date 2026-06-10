@@ -406,31 +406,44 @@ const cleanWorkerPunches = (punches, startDate, endDate) => {
   }
 
   // 4. Regla Siderúrgica del Cruce de Medianoche (Fecha Efectiva)
+  // Evaluamos de manera iterativa para construir el contexto
   const punchesByDate = {};
+  
   for (let i = 0; i < filteredPunches.length; i++) {
     const p = filteredPunches[i];
     let effectiveDate = p.fecha;
     
     if (p.hora >= "00:00" && p.hora <= "07:00") {
       let isNightShiftExit = true; 
+      
       if (i > 0) {
         const prev = filteredPunches[i - 1];
         const diffHours = (p.realTimeMs - prev.realTimeMs) / 3600000;
         
-        // Si han pasado más de 14 horas desde la última marca, es un nuevo turno (Entrada de mañana)
         if (diffHours > 14) {
           isNightShiftExit = false;
-        } 
-        // Si la marca anterior fue una salida en la tarde (ej. 16:00 o 17:00) y pasaron ~13 horas,
-        // esto es una nueva entrada al día siguiente.
-        else if (diffHours > 8) {
-          if (prev.hora >= "07:00" && prev.hora <= "17:30") {
-            isNightShiftExit = false;
+        } else {
+          const prevEffectiveDate = prev.effectiveDate || prev.fecha;
+          const punchesInPrevDay = punchesByDate[prevEffectiveDate] || [];
+          const firstPunchOfPrevDay = punchesInPrevDay[0]?.hora;
+
+          if (firstPunchOfPrevDay && firstPunchOfPrevDay < "16:00") {
+            // El turno anterior empezó en la mañana o tarde (ej. 06:00 o 13:30).
+            // Si la marca actual es >= 04:00 (ej. 05:34), es la entrada del nuevo día.
+            if (p.hora >= "04:00") {
+              isNightShiftExit = false;
+            } else if (diffHours > 8) {
+              // Si pasaron más de 8 horas, también asumimos nuevo turno.
+              isNightShiftExit = false;
+            }
+          } else {
+            // El turno anterior empezó en la noche (>= 16:00).
+            if (diffHours > 14) {
+              isNightShiftExit = false;
+            }
           }
         }
       } else {
-        // Si es la primera marca de toda la quincena y es a las 06:00 AM, asumimos que es entrada
-        // a menos que sea antes de las 04:00 AM.
         if (p.hora >= "04:00") {
           isNightShiftExit = false;
         }
@@ -447,6 +460,7 @@ const cleanWorkerPunches = (punches, startDate, endDate) => {
       }
     }
     
+    p.effectiveDate = effectiveDate; // Store it for context
     if (!punchesByDate[effectiveDate]) {
       punchesByDate[effectiveDate] = [];
     }
@@ -464,27 +478,44 @@ const cleanWorkerPunches = (punches, startDate, endDate) => {
     let hr_ent = "";
     let hr_sal_desc1 = "";
     let hr_ent_desc1 = "";
+    let hr_sal_desc2 = "";
+    let hr_ent_desc2 = "";
     let hr_sal = "";
 
-    if (dayPunches.length === 1) {
+    const n = dayPunches.length;
+    if (n === 1) {
       hr_ent = dayPunches[0].hora;
-    } else if (dayPunches.length === 2) {
+    } else if (n === 2) {
       hr_ent = dayPunches[0].hora;
       hr_sal = dayPunches[1].hora;
-    } else if (dayPunches.length === 3) {
+    } else if (n === 3) {
       hr_ent = dayPunches[0].hora;
-      const thirdPunch = dayPunches[2].hora;
-      if (thirdPunch > "14:00") {
-        hr_sal = thirdPunch;
+      const diffHours = (dayPunches[2].realTimeMs - dayPunches[0].realTimeMs) / 3600000;
+      if (diffHours > 6) {
+        hr_ent_desc1 = dayPunches[1].hora;
+        hr_sal = dayPunches[2].hora;
       } else {
-        hr_sal_desc1 = dayPunches[1].hora;
-        hr_sal = thirdPunch;
+        hr_ent_desc1 = dayPunches[1].hora;
+        hr_sal_desc1 = dayPunches[2].hora;
       }
-    } else {
+    } else if (n === 4) {
       hr_ent = dayPunches[0].hora;
-      hr_sal_desc1 = dayPunches[1].hora;
-      hr_ent_desc1 = dayPunches[2].hora;
-      hr_sal = dayPunches[dayPunches.length - 1].hora;
+      hr_ent_desc1 = dayPunches[1].hora;
+      hr_sal_desc1 = dayPunches[2].hora;
+      hr_sal = dayPunches[3].hora;
+    } else if (n === 5) {
+      hr_ent = dayPunches[0].hora;
+      hr_ent_desc1 = dayPunches[1].hora;
+      hr_sal_desc1 = dayPunches[2].hora;
+      hr_ent_desc2 = dayPunches[3].hora;
+      hr_sal = dayPunches[4].hora;
+    } else if (n >= 6) {
+      hr_ent = dayPunches[0].hora;
+      hr_ent_desc1 = dayPunches[1].hora;
+      hr_sal_desc1 = dayPunches[2].hora;
+      hr_ent_desc2 = dayPunches[3].hora;
+      hr_sal_desc2 = dayPunches[4].hora;
+      hr_sal = dayPunches[n - 1].hora;
     }
 
     attendanceRows[dateStr] = {
@@ -492,6 +523,8 @@ const cleanWorkerPunches = (punches, startDate, endDate) => {
       hr_ent,
       hr_sal_desc1,
       hr_ent_desc1,
+      hr_sal_desc2,
+      hr_ent_desc2,
       hr_sal
     };
   });
