@@ -261,6 +261,55 @@ const emptyAttendanceDay = (dateStr) => ({
 
 const isEmployeeHeaderRow = (firstCell) => {
   const s = String(firstCell || "").trim();
+
+  const handleExportBackup = () => {
+    const backupData = {
+      nominaRows,
+      attendanceLogs,
+      overrides,
+      startDate,
+      endDate,
+      timestamp: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setToast({ message: "Backup exportado exitosamente.", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleImportBackup = (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+         const data = JSON.parse(event.target.result);
+         if (data.nominaRows) setNominaRows(data.nominaRows);
+         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
+         if (data.overrides) setOverrides(data.overrides);
+         if (data.startDate) setStartDate(data.startDate);
+         if (data.endDate) setEndDate(data.endDate);
+         
+         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
+      } catch (error) {
+         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
+      }
+      setTimeout(() => setToast(null), 4000);
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = '';
+  };
+
   return (
     s.startsWith("Employee:") ||
     /^Employee\s*ID:/i.test(s) ||
@@ -604,7 +653,56 @@ function EditableCell({ value, onChange, type = "text", className = "", isCurren
 
   if (isEditing) {
     if (options && Array.isArray(options)) {
-      return (
+    
+  const handleExportBackup = () => {
+    const backupData = {
+      nominaRows,
+      attendanceLogs,
+      overrides,
+      startDate,
+      endDate,
+      timestamp: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setToast({ message: "Backup exportado exitosamente.", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleImportBackup = (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+         const data = JSON.parse(event.target.result);
+         if (data.nominaRows) setNominaRows(data.nominaRows);
+         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
+         if (data.overrides) setOverrides(data.overrides);
+         if (data.startDate) setStartDate(data.startDate);
+         if (data.endDate) setEndDate(data.endDate);
+         
+         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
+      } catch (error) {
+         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
+      }
+      setTimeout(() => setToast(null), 4000);
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = '';
+  };
+
+  return (
         <select
           value={localVal || ""}
           onChange={(e) => setLocalVal(e.target.value)}
@@ -621,7 +719,56 @@ function EditableCell({ value, onChange, type = "text", className = "", isCurren
         </select>
       );
     }
-    return (
+  
+  const handleExportBackup = () => {
+    const backupData = {
+      nominaRows,
+      attendanceLogs,
+      overrides,
+      startDate,
+      endDate,
+      timestamp: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setToast({ message: "Backup exportado exitosamente.", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleImportBackup = (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+         const data = JSON.parse(event.target.result);
+         if (data.nominaRows) setNominaRows(data.nominaRows);
+         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
+         if (data.overrides) setOverrides(data.overrides);
+         if (data.startDate) setStartDate(data.startDate);
+         if (data.endDate) setEndDate(data.endDate);
+         
+         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
+      } catch (error) {
+         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
+      }
+      setTimeout(() => setToast(null), 4000);
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = '';
+  };
+
+  return (
       <input
         type={type}
         step="any"
@@ -645,6 +792,55 @@ function EditableCell({ value, onChange, type = "text", className = "", isCurren
   } else if (value === null || value === undefined || (typeof value === "number" && isNaN(value))) {
     displayVal = "-";
   }
+
+
+  const handleExportBackup = () => {
+    const backupData = {
+      nominaRows,
+      attendanceLogs,
+      overrides,
+      startDate,
+      endDate,
+      timestamp: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setToast({ message: "Backup exportado exitosamente.", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleImportBackup = (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+         const data = JSON.parse(event.target.result);
+         if (data.nominaRows) setNominaRows(data.nominaRows);
+         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
+         if (data.overrides) setOverrides(data.overrides);
+         if (data.startDate) setStartDate(data.startDate);
+         if (data.endDate) setEndDate(data.endDate);
+         
+         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
+      } catch (error) {
+         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
+      }
+      setTimeout(() => setToast(null), 4000);
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = '';
+  };
 
   return (
     <div
@@ -1555,6 +1751,55 @@ export default function NominaPage() {
     setTimeout(() => setToast(null), 4000);
   };
 
+
+  const handleExportBackup = () => {
+    const backupData = {
+      nominaRows,
+      attendanceLogs,
+      overrides,
+      startDate,
+      endDate,
+      timestamp: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setToast({ message: "Backup exportado exitosamente.", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleImportBackup = (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+         const data = JSON.parse(event.target.result);
+         if (data.nominaRows) setNominaRows(data.nominaRows);
+         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
+         if (data.overrides) setOverrides(data.overrides);
+         if (data.startDate) setStartDate(data.startDate);
+         if (data.endDate) setEndDate(data.endDate);
+         
+         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
+      } catch (error) {
+         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
+      }
+      setTimeout(() => setToast(null), 4000);
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = '';
+  };
+
   return (
     <div className="w-full max-w-[98%] xl:max-w-[96%] mx-auto space-y-8 animate-stitch pb-12">
       
@@ -1584,6 +1829,19 @@ export default function NominaPage() {
             <CheckCircle2 size={14} />
             Guardar Cambios
           </button>
+          <label className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all shadow-md active:scale-95 duration-200 cursor-pointer">
+            <RotateCcw size={14} className="rotate-180" />
+            Cargar Backup
+            <input type="file" accept=".json" onChange={handleImportBackup} className="hidden" />
+          </label>
+          <button
+            onClick={handleExportBackup}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 border border-indigo-200/80 rounded-xl text-xs font-black transition-all shadow-sm active:scale-95 duration-200"
+          >
+            <RotateCcw size={14} />
+            Descargar Backup
+          </button>
+
           <button
             onClick={handleResetOverrides}
             className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200/80 rounded-xl text-xs font-black transition-all shadow-sm active:scale-95 duration-200"
@@ -1727,7 +1985,56 @@ export default function NominaPage() {
                 iconColor = "text-emerald-500";
               }
 
-              return (
+            
+  const handleExportBackup = () => {
+    const backupData = {
+      nominaRows,
+      attendanceLogs,
+      overrides,
+      startDate,
+      endDate,
+      timestamp: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setToast({ message: "Backup exportado exitosamente.", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleImportBackup = (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+         const data = JSON.parse(event.target.result);
+         if (data.nominaRows) setNominaRows(data.nominaRows);
+         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
+         if (data.overrides) setOverrides(data.overrides);
+         if (data.startDate) setStartDate(data.startDate);
+         if (data.endDate) setEndDate(data.endDate);
+         
+         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
+      } catch (error) {
+         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
+      }
+      setTimeout(() => setToast(null), 4000);
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = '';
+  };
+
+  return (
                 <div key={catName} className={`stitch-card p-5 border shadow-sm transition-all duration-300 hover:shadow-md ${themeClass}`}>
                   <div className="flex justify-between items-center mb-3">
                     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${pillClass}`}>
@@ -1798,7 +2105,56 @@ export default function NominaPage() {
                         const isProtected = ["consecutivo", "nombre"].includes(col.key);
                         if (isProtected) return null;
                         const isHidden = !!hiddenColumns[col.key];
-                        return (
+                      
+  const handleExportBackup = () => {
+    const backupData = {
+      nominaRows,
+      attendanceLogs,
+      overrides,
+      startDate,
+      endDate,
+      timestamp: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setToast({ message: "Backup exportado exitosamente.", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleImportBackup = (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+         const data = JSON.parse(event.target.result);
+         if (data.nominaRows) setNominaRows(data.nominaRows);
+         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
+         if (data.overrides) setOverrides(data.overrides);
+         if (data.startDate) setStartDate(data.startDate);
+         if (data.endDate) setEndDate(data.endDate);
+         
+         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
+      } catch (error) {
+         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
+      }
+      setTimeout(() => setToast(null), 4000);
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = '';
+  };
+
+  return (
                           <label key={col.key} className="flex items-center gap-2 hover:bg-slate-50 p-1.5 rounded-lg cursor-pointer">
                             <input
                               type="checkbox"
@@ -1842,7 +2198,56 @@ export default function NominaPage() {
                   <tbody className="divide-y divide-slate-100 text-xs font-bold">
                      {filteredPayrollData.map((item) => {
                         const row = item.masterRow;
-                        return (
+                      
+  const handleExportBackup = () => {
+    const backupData = {
+      nominaRows,
+      attendanceLogs,
+      overrides,
+      startDate,
+      endDate,
+      timestamp: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setToast({ message: "Backup exportado exitosamente.", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleImportBackup = (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+         const data = JSON.parse(event.target.result);
+         if (data.nominaRows) setNominaRows(data.nominaRows);
+         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
+         if (data.overrides) setOverrides(data.overrides);
+         if (data.startDate) setStartDate(data.startDate);
+         if (data.endDate) setEndDate(data.endDate);
+         
+         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
+      } catch (error) {
+         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
+      }
+      setTimeout(() => setToast(null), 4000);
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = '';
+  };
+
+  return (
                            <tr key={row.consecutivo} className="hover:bg-slate-50/50 transition-colors">
                               <td className="px-6 py-4 text-slate-500">{row.cedula}</td>
                               <td className="px-6 py-4 text-slate-900">{row.nombre}</td>
@@ -1893,7 +2298,56 @@ export default function NominaPage() {
                         return PLANILLA_COLUMNS.map(col => {
                            const cKey = `${workerData.masterRow.cedula}_${col.key}`;
                            const val = overrides[cKey] !== undefined ? overrides[cKey] : (workerData.masterRow[col.key] !== undefined ? workerData.masterRow[col.key] : "");
-                           return (
+                         
+  const handleExportBackup = () => {
+    const backupData = {
+      nominaRows,
+      attendanceLogs,
+      overrides,
+      startDate,
+      endDate,
+      timestamp: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setToast({ message: "Backup exportado exitosamente.", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleImportBackup = (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+         const data = JSON.parse(event.target.result);
+         if (data.nominaRows) setNominaRows(data.nominaRows);
+         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
+         if (data.overrides) setOverrides(data.overrides);
+         if (data.startDate) setStartDate(data.startDate);
+         if (data.endDate) setEndDate(data.endDate);
+         
+         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
+      } catch (error) {
+         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
+      }
+      setTimeout(() => setToast(null), 4000);
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = '';
+  };
+
+  return (
                              <div key={col.key} className="bg-white border border-slate-200 p-3 rounded-xl flex flex-col justify-center shadow-sm space-y-1">
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex-1 truncate" title={col.label}>{col.label}</span>
                                 <input
@@ -1943,7 +2397,56 @@ export default function NominaPage() {
             </div>
           );
           
-          return (
+        
+  const handleExportBackup = () => {
+    const backupData = {
+      nominaRows,
+      attendanceLogs,
+      overrides,
+      startDate,
+      endDate,
+      timestamp: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setToast({ message: "Backup exportado exitosamente.", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleImportBackup = (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+         const data = JSON.parse(event.target.result);
+         if (data.nominaRows) setNominaRows(data.nominaRows);
+         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
+         if (data.overrides) setOverrides(data.overrides);
+         if (data.startDate) setStartDate(data.startDate);
+         if (data.endDate) setEndDate(data.endDate);
+         
+         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
+      } catch (error) {
+         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
+      }
+      setTimeout(() => setToast(null), 4000);
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = '';
+  };
+
+  return (
             <div className="space-y-6 animate-stitch">
               <div className="flex justify-between items-center bg-slate-900 p-6 rounded-3xl shadow-xl">
                  <div>
@@ -2001,7 +2504,56 @@ export default function NominaPage() {
                                 const dayName = dateObj.toLocaleDateString("es-CO", { weekday: "short" });
                                 const displayDate = day.dia;
                                 const prefix = `${selectedWorkerData.masterRow.cedula}_${displayDate}`;
-                                return (
+                              
+  const handleExportBackup = () => {
+    const backupData = {
+      nominaRows,
+      attendanceLogs,
+      overrides,
+      startDate,
+      endDate,
+      timestamp: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setToast({ message: "Backup exportado exitosamente.", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleImportBackup = (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+         const data = JSON.parse(event.target.result);
+         if (data.nominaRows) setNominaRows(data.nominaRows);
+         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
+         if (data.overrides) setOverrides(data.overrides);
+         if (data.startDate) setStartDate(data.startDate);
+         if (data.endDate) setEndDate(data.endDate);
+         
+         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
+      } catch (error) {
+         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
+      }
+      setTimeout(() => setToast(null), 4000);
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = '';
+  };
+
+  return (
                                    <tr key={displayDate} className="hover:bg-slate-50">
                                       <td className="px-2 py-2 whitespace-nowrap"><span className="text-slate-400 mr-1">{dayName}</span> {displayDate}</td>
                                       <td className="px-2 py-2 text-blue-600 font-mono">{day.hr_ent || "-"}</td>
@@ -2222,7 +2774,56 @@ export default function NominaPage() {
            {function() {
               const selectedWorkerData = filteredPayrollData.find(d => d.masterRow.nombre === selectedWorkerName) || filteredPayrollData[0];
               if (!selectedWorkerData) return null;
-              return (
+            
+  const handleExportBackup = () => {
+    const backupData = {
+      nominaRows,
+      attendanceLogs,
+      overrides,
+      startDate,
+      endDate,
+      timestamp: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setToast({ message: "Backup exportado exitosamente.", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleImportBackup = (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+         const data = JSON.parse(event.target.result);
+         if (data.nominaRows) setNominaRows(data.nominaRows);
+         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
+         if (data.overrides) setOverrides(data.overrides);
+         if (data.startDate) setStartDate(data.startDate);
+         if (data.endDate) setEndDate(data.endDate);
+         
+         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
+      } catch (error) {
+         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
+      }
+      setTimeout(() => setToast(null), 4000);
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = '';
+  };
+
+  return (
 <div className="max-w-2xl mx-auto bg-white p-10 rounded-[2.5rem] border border-slate-200/60 shadow-xl space-y-8 print:p-0 print:border-none print:shadow-none" id="printable-colilla">
             {/* Header info */}
             <div className="flex justify-between items-start pb-6 border-b border-slate-200/60">
