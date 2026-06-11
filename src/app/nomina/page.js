@@ -382,13 +382,21 @@ const cleanWorkerPunches = (punches, startDate, endDate) => {
 
   if (!punches || punches.length === 0) return attendanceRows;
 
-  // 2. Ordenamiento Cronológico Absoluto
+  // 1.5. Filtrado Estricto por Rango de Fechas
+  const [startYear, startMonth, startDay] = startDate.split("-").map(Number);
+  const [endYear, endMonth, endDay] = endDate.split("-").map(Number);
+  const startMs = new Date(startYear, startMonth - 1, startDay, 0, 0, 0).getTime();
+  const endMs = new Date(endYear, endMonth - 1, endDay, 23, 59, 59).getTime();
+  const contextStartMs = startMs - (24 * 3600000); // 24 horas de contexto previo
+
+  // 2. Ordenamiento Cronológico Absoluto y Filtrado de Fechas
   const punchesWithTime = punches.map(p => {
     const [y, m, d] = p.fecha.split("-").map(Number);
     const [hh, mm] = p.hora.split(":").map(Number);
     const realTimeMs = new Date(y, m - 1, d, hh, mm).getTime();
     return { ...p, realTimeMs };
-  }).sort((a, b) => a.realTimeMs - b.realTimeMs);
+  }).filter(p => p.realTimeMs >= contextStartMs && p.realTimeMs <= endMs)
+  .sort((a, b) => a.realTimeMs - b.realTimeMs);
 
   // 3. De-duplicación por proximidad (5 minutos)
   const filteredPunches = [];
@@ -415,37 +423,52 @@ const cleanWorkerPunches = (punches, startDate, endDate) => {
     
     if (p.hora >= "00:00" && p.hora <= "07:00") {
       let isNightShiftExit = true; 
-      
-      if (i > 0) {
-        const prev = filteredPunches[i - 1];
-        const diffHours = (p.realTimeMs - prev.realTimeMs) / 3600000;
-        
-        if (diffHours > 14) {
-          isNightShiftExit = false;
-        } else {
+
+      // 1. Detección Inteligente por Look-ahead (Para salidas huérfanas)
+      // Buscamos la siguiente marca de este MISMO día calendario.
+      let nextP = null;
+      for (let j = i + 1; j < filteredPunches.length; j++) {
+        if (filteredPunches[j].fecha === p.fecha) {
+          nextP = filteredPunches[j];
+          break;
+        }
+      }
+
+      let lookaheadDetermined = false;
+      if (nextP && nextP.hora >= "15:00") {
+        const gapToNext = (nextP.realTimeMs - p.realTimeMs) / 3600000;
+        if (gapToNext >= 13) {
+          // Es 100% una marca de salida del turno de la noche anterior.
+          isNightShiftExit = true;
+          lookaheadDetermined = true;
+        }
+      }
+
+      // 2. Lógica de Máquina de Estados (Si no fue determinado por Look-ahead)
+      if (!lookaheadDetermined) {
+        if (i > 0) {
+          const prev = filteredPunches[i - 1];
+          const diffHours = (p.realTimeMs - prev.realTimeMs) / 3600000;
+          
           const prevEffectiveDate = prev.effectiveDate || prev.fecha;
           const punchesInPrevDay = punchesByDate[prevEffectiveDate] || [];
-          const firstPunchOfPrevDay = punchesInPrevDay[0]?.hora;
+          const firstPunchOfPrevDay = punchesInPrevDay.length > 0 ? punchesInPrevDay[0].hora : prev.hora;
 
           if (firstPunchOfPrevDay && firstPunchOfPrevDay < "16:00") {
-            // El turno anterior empezó en la mañana o tarde (ej. 06:00 o 13:30).
-            // Si la marca actual es >= 04:00 (ej. 05:34), es la entrada del nuevo día.
             if (p.hora >= "04:00") {
               isNightShiftExit = false;
             } else if (diffHours > 8) {
-              // Si pasaron más de 8 horas, también asumimos nuevo turno.
               isNightShiftExit = false;
             }
           } else {
-            // El turno anterior empezó en la noche (>= 16:00).
             if (diffHours > 14) {
               isNightShiftExit = false;
             }
           }
-        }
-      } else {
-        if (p.hora >= "04:00") {
-          isNightShiftExit = false;
+        } else {
+          if (p.hora >= "04:00") {
+            isNightShiftExit = false;
+          }
         }
       }
 
@@ -488,34 +511,51 @@ const cleanWorkerPunches = (punches, startDate, endDate) => {
     } else if (n === 2) {
       hr_ent = dayPunches[0].hora;
       hr_sal = dayPunches[1].hora;
-    } else if (n === 3) {
+    } else {
       hr_ent = dayPunches[0].hora;
-      const diffHours = (dayPunches[2].realTimeMs - dayPunches[0].realTimeMs) / 3600000;
-      if (diffHours > 6) {
-        hr_ent_desc1 = dayPunches[1].hora;
-        hr_sal = dayPunches[2].hora;
-      } else {
-        hr_ent_desc1 = dayPunches[1].hora;
-        hr_sal_desc1 = dayPunches[2].hora;
-      }
-    } else if (n === 4) {
-      hr_ent = dayPunches[0].hora;
-      hr_ent_desc1 = dayPunches[1].hora;
-      hr_sal_desc1 = dayPunches[2].hora;
-      hr_sal = dayPunches[3].hora;
-    } else if (n === 5) {
-      hr_ent = dayPunches[0].hora;
-      hr_ent_desc1 = dayPunches[1].hora;
-      hr_sal_desc1 = dayPunches[2].hora;
-      hr_ent_desc2 = dayPunches[3].hora;
-      hr_sal = dayPunches[4].hora;
-    } else if (n >= 6) {
-      hr_ent = dayPunches[0].hora;
-      hr_ent_desc1 = dayPunches[1].hora;
-      hr_sal_desc1 = dayPunches[2].hora;
-      hr_ent_desc2 = dayPunches[3].hora;
-      hr_sal_desc2 = dayPunches[4].hora;
       hr_sal = dayPunches[n - 1].hora;
+      
+      const middle = dayPunches.slice(1, -1);
+      
+      if (middle.length === 1) {
+        // Una marca huérfana en medio del turno (asumimos que salió a descansar y olvidó marcar regreso)
+        hr_sal_desc1 = middle[0].hora;
+      } else if (middle.length === 2) {
+        // Dos marcas intermedias, evaluar si son un descanso válido (menos de 90 mins)
+        const gapMins = (middle[1].realTimeMs - middle[0].realTimeMs) / 60000;
+        if (gapMins <= 90) {
+          // La primera marca es la salida a descanso (Descanso Sal), la segunda es el regreso (Descanso Ent)
+          hr_sal_desc1 = middle[0].hora;
+          hr_ent_desc1 = middle[1].hora;
+        } else {
+          // Brecha muy grande, se asumen dos salidas a descansos distintos
+          hr_sal_desc1 = middle[0].hora;
+          hr_sal_desc2 = middle[1].hora;
+        }
+      } else if (middle.length === 3) {
+        // Tres marcas intermedias, buscar cuál es el par válido
+        const gap1 = (middle[1].realTimeMs - middle[0].realTimeMs) / 60000;
+        const gap2 = (middle[2].realTimeMs - middle[1].realTimeMs) / 60000;
+        
+        if (gap1 <= 90 && gap1 <= gap2) {
+          hr_sal_desc1 = middle[0].hora;
+          hr_ent_desc1 = middle[1].hora;
+          hr_sal_desc2 = middle[2].hora;
+        } else if (gap2 <= 90 && gap2 < gap1) {
+          hr_sal_desc1 = middle[0].hora;
+          hr_sal_desc2 = middle[1].hora;
+          hr_ent_desc2 = middle[2].hora;
+        } else {
+          hr_sal_desc1 = middle[0].hora;
+          hr_sal_desc2 = middle[1].hora;
+        }
+      } else if (middle.length >= 4) {
+        // Cuatro o más marcas intermedias (Turnos 12 horas, asume pares consecutivos)
+        hr_sal_desc1 = middle[0].hora;
+        hr_ent_desc1 = middle[1].hora;
+        hr_sal_desc2 = middle[2].hora;
+        hr_ent_desc2 = middle[3].hora;
+      }
     }
 
     attendanceRows[dateStr] = {
@@ -720,8 +760,110 @@ const LIQUIDATION_CONCEPTS = [
   { key: "h_extra_festiva_nocturna", label: "Extras Festivas Nocturnas", pctKey: "h_extra_festiva_nocturna_pct", hrKey: "h_extra_festiva_nocturna_hr", valKey: "h_extra_festiva_nocturna_val", defaultPct: 2.5, textClass: "text-rose-900" }
 ];
 
+
+export async function parseBiometricExcel(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+
+        // Leer como array 2D de strings puros
+        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false });
+
+        const cleanData = [];
+        let currentEmployeeName = "";
+        let currentCedula = "";
+
+        rows.forEach(row => {
+          if (!row || !row.length) return;
+          const col0 = String(row[0] || '').trim();
+
+          // Detección de Fila de Cabecera de Empleado
+          // Ejemplo: "Employee ID: 10,Nombres: ENODIS POLO,Departamento: Departamento"
+          if (col0.startsWith("Employee ID:")) {
+              const idMatch = col0.match(/Employee ID:\s*([^,]+)/i);
+              if (idMatch) currentCedula = idMatch[1].trim();
+              
+              const nameMatch = col0.match(/Nombres:\s*([^,]+)/i);
+              if (nameMatch) currentEmployeeName = nameMatch[1].trim();
+              return;
+          }
+
+          // Detección de Fila de Datos (Normalmente la Fecha esta en la col 3 y Hora en la col 4)
+          const fechaStr = String(row[3] || '').trim();
+          const horaStr = String(row[4] || '').trim();
+
+          // Validación de que sean fecha y hora
+          if ((fechaStr.includes('-') || fechaStr.includes('/')) && horaStr.includes(':')) {
+              let year, month, day;
+              let fStr = fechaStr;
+              
+              if (fStr.includes('/')) {
+                  const parts = fStr.split('/');
+                  day = parts[0].padStart(2, '0');
+                  month = parts[1].padStart(2, '0');
+                  year = parts[2];
+                  if (year.length === 2) year = "20" + year; 
+                  fStr = `${year}-${month}-${day}`;
+              } else if (fStr.includes('-')) {
+                  const parts = fStr.split('-');
+                  if (parts[0].length === 4) {
+                      year = parts[0];
+                      month = parts[1].padStart(2, '0');
+                      day = parts[2].padStart(2, '0');
+                  } else {
+                      day = parts[0].padStart(2, '0');
+                      month = parts[1].padStart(2, '0');
+                      year = parts[2];
+                      if (year.length === 2) year = "20" + year;
+                  }
+                  fStr = `${year}-${month}-${day}`;
+              }
+
+              let hStr = horaStr;
+              let isPM = hStr.toUpperCase().includes('P');
+              hStr = hStr.replace(/[^0-9:]/g, ''); 
+              const timeParts = hStr.split(':');
+              let hours = parseInt(timeParts[0] || '0', 10);
+              let minutes = parseInt(timeParts[1] || '0', 10);
+              if (isPM && hours < 12) hours += 12;
+              if (!isPM && hours === 12) hours = 0; 
+              
+              const hoursStr = String(hours).padStart(2, '0');
+              const minutesStr = String(minutes).padStart(2, '0');
+              hStr = `${hoursStr}:${minutesStr}`;
+
+              const exactTimestamp = new Date(year, parseInt(month) - 1, parseInt(day), hours, minutes).getTime();
+
+              cleanData.push({
+                  cedula: currentCedula,
+                  nombre: currentEmployeeName,
+                  fecha: fStr,
+                  hora: hStr,
+                  timestamp: exactTimestamp
+              });
+          }
+        });
+
+        resolve(cleanData);
+      } catch (error) {
+        reject("Error procesando el archivo Excel: " + error.message);
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  });
+}
+
 export default function NominaPage() {
-  const [activeTab, setActiveTab] = useState("planilla"); // planilla, trabajadores, colilla
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [detailsWorkerName, setDetailsWorkerName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterPosition, setFilterPosition] = useState("all");
 
@@ -751,7 +893,7 @@ export default function NominaPage() {
   });
 
   // Prevent hydration mismatch by using same initial state on server and client, then updating after mount
-  const [startDate, setStartDate] = useState("2026-04-25");
+  const [startDate, setStartDate] = useState("2026-05-01");
   const [endDate, setEndDate] = useState("2026-05-15");
 
   useEffect(() => {
@@ -761,16 +903,16 @@ export default function NominaPage() {
     setEndDate(range.end);
 
     try {
-      const savedRows = localStorage.getItem("optimoldes_nomina_rows_v1");
+      const savedRows = localStorage.getItem("optimoldes_nomina_rows_v2");
       if (savedRows) setNominaRows(JSON.parse(savedRows));
 
-      const savedLogs = localStorage.getItem("optimoldes_attendance_logs_v1");
+      const savedLogs = localStorage.getItem("optimoldes_attendance_logs_v2");
       if (savedLogs) setAttendanceLogs(JSON.parse(savedLogs));
 
-      const savedOverrides = localStorage.getItem("optimoldes_overrides_v1");
+      const savedOverrides = localStorage.getItem("optimoldes_overrides_v2");
       if (savedOverrides) setOverrides(JSON.parse(savedOverrides));
 
-      const savedHidden = localStorage.getItem("optimoldes_hidden_columns_v1");
+      const savedHidden = localStorage.getItem("optimoldes_hidden_columns_v2");
       if (savedHidden) setHiddenColumns(JSON.parse(savedHidden));
     } catch (e) {
       console.error("Error loading persisted payroll data:", e);
@@ -1225,10 +1367,10 @@ export default function NominaPage() {
         detail: "",
       });
       try {
-        localStorage.removeItem("optimoldes_nomina_rows_v1");
-        localStorage.removeItem("optimoldes_attendance_logs_v1");
-        localStorage.removeItem("optimoldes_overrides_v1");
-        localStorage.removeItem("optimoldes_hidden_columns_v1");
+        localStorage.removeItem("optimoldes_nomina_rows_v2");
+        localStorage.removeItem("optimoldes_attendance_logs_v2");
+        localStorage.removeItem("optimoldes_overrides_v2");
+        localStorage.removeItem("optimoldes_hidden_columns_v2");
       } catch (e) {
         /* ignore */
       }
@@ -1243,10 +1385,10 @@ export default function NominaPage() {
 
   const handleSaveToLocalStorage = () => {
     try {
-      localStorage.setItem("optimoldes_nomina_rows_v1", JSON.stringify(nominaRows));
-      localStorage.setItem("optimoldes_attendance_logs_v1", JSON.stringify(attendanceLogs));
-      localStorage.setItem("optimoldes_overrides_v1", JSON.stringify(overrides));
-      localStorage.setItem("optimoldes_hidden_columns_v1", JSON.stringify(hiddenColumns));
+      localStorage.setItem("optimoldes_nomina_rows_v2", JSON.stringify(nominaRows));
+      localStorage.setItem("optimoldes_attendance_logs_v2", JSON.stringify(attendanceLogs));
+      localStorage.setItem("optimoldes_overrides_v2", JSON.stringify(overrides));
+      localStorage.setItem("optimoldes_hidden_columns_v2", JSON.stringify(hiddenColumns));
       setToast({
         message: "¡Cambios guardados con éxito en el navegador!",
         type: "success"
@@ -1294,7 +1436,7 @@ export default function NominaPage() {
     return matched;
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target?.files?.[0];
     if (!file) return;
 
@@ -1305,160 +1447,82 @@ export default function NominaPage() {
       detail: "Leyendo archivo...",
     });
 
-    const reader = new FileReader();
-    reader.onprogress = (ev) => {
-      if (ev.lengthComputable) {
-        const pct = Math.min(40, Math.round((ev.loaded / ev.total) * 40));
-        setUploadStatus((prev) => ({ ...prev, progress: pct }));
-      }
-    };
+    try {
+      const cleanData = await parseBiometricExcel(file);
+      
+      setUploadStatus((prev) => ({
+        ...prev,
+        state: "processing",
+        progress: 55,
+        detail: "Interpretando marcaciones...",
+      }));
 
-    reader.onload = (evt) => {
-      try {
-        setUploadStatus((prev) => ({
-          ...prev,
-          state: "processing",
-          progress: 55,
-          detail: "Interpretando marcaciones...",
-        }));
+      const newAttendance = { ...attendanceLogs };
+      const stats = {
+        parsedCount: 0,
+        filledDays: 0,
+        unmatched: [],
+        matchedNames: [],
+        totalPunches: cleanData.length,
+      };
 
-        const data = evt.target.result;
-        const workbook = XLSX.read(data, { type: "array" });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      // Group punches by employee
+      const punchesByEmployee = {};
+      cleanData.forEach(row => {
+         if (!punchesByEmployee[row.nombre]) {
+            punchesByEmployee[row.nombre] = [];
+         }
+         punchesByEmployee[row.nombre].push(row);
+      });
 
-        const newAttendance = { ...attendanceLogs };
-        let currentEmployee = null;
-        let employeePunches = [];
-        const stats = {
-          parsedCount: 0,
-          filledDays: 0,
-          unmatched: [],
-          matchedNames: [],
-          totalPunches: 0,
-        };
+      for (const [employeeName, punches] of Object.entries(punchesByEmployee)) {
+         const matchedName = matchEmployeeName(employeeName);
+         if (!matchedName) {
+            stats.unmatched.push(employeeName);
+            continue;
+         }
 
-        const flushEmployeeBlock = (accumulatedLogs, employeeName, punches, recordStats) => {
-          if (!employeeName || punches.length === 0) return;
-          const matchedName = matchEmployeeName(employeeName);
-          if (!matchedName) {
-            recordStats.unmatched.push(employeeName);
-            return;
-          }
+         const cleaned = cleanWorkerPunches(punches, startDate, endDate);
+         if (!newAttendance[matchedName]) {
+            newAttendance[matchedName] = [];
+         }
 
-          const cleaned = cleanWorkerPunches(punches, startDate, endDate);
-          if (!accumulatedLogs[matchedName]) {
-            accumulatedLogs[matchedName] = [];
-          }
+         const existing = newAttendance[matchedName];
+         const byDate = new Map(existing.map(d => [d.dia, d]));
 
-          const existing = accumulatedLogs[matchedName];
-          const byDate = new Map(existing.map(d => [d.dia, d]));
-
-          Object.keys(cleaned).forEach(dateStr => {
-            byDate.set(dateStr, {
-              ...(byDate.get(dateStr) || emptyAttendanceDay(dateStr)),
-              ...cleaned[dateStr]
-            });
-          });
-
-          accumulatedLogs[matchedName] = Array.from(byDate.values()).sort((a, b) => a.dia.localeCompare(b.dia));
-          recordStats.parsedCount += 1;
-
-          const filled = Object.keys(cleaned).filter(dateStr => cleaned[dateStr].hr_ent !== "").length;
-          recordStats.filledDays += filled;
-          recordStats.matchedNames.push(matchedName);
-        };
-
-        rows.forEach((row) => {
-          if (!row || row.length === 0) return;
-          const firstCell = String(row[0] || "").trim();
-
-          if (isEmployeeHeaderRow(firstCell)) {
-            flushEmployeeBlock(newAttendance, currentEmployee, employeePunches, stats);
-            currentEmployee = parseEmployeeNameFromHeader(firstCell);
-            employeePunches = [];
-            return;
-          }
-
-          if (
-            firstCell.toLowerCase().includes("estado de empleado") ||
-            firstCell.toLowerCase().includes("reporte de marcaciones")
-          ) {
-            return;
-          }
-
-          if (currentEmployee && row.length >= 6) {
-            const dateStr = parseMarcacionDate(row[3]);
-            const timeStr = parseMarcacionTime(row[4]);
-            const typeStr = String(row[5] || "").trim();
-
-            if (dateStr && timeStr) {
-              employeePunches.push({ fecha: dateStr, hora: timeStr, tipo: typeStr });
-              stats.totalPunches += 1;
+         Object.keys(cleaned).forEach(dateStr => {
+            const currentDay = cleaned[dateStr];
+            if (currentDay.hr_ent || currentDay.hr_sal) {
+               byDate.set(dateStr, { ...(byDate.get(dateStr) || {}), ...currentDay });
             }
-          }
-        });
+         });
 
-        flushEmployeeBlock(newAttendance, currentEmployee, employeePunches, stats);
-
-        if (stats.parsedCount > 0) {
-          setAttendanceLogs(newAttendance);
-          const firstMatched = stats.matchedNames[0];
-          if (firstMatched) setSelectedWorkerName(firstMatched);
-
-          const successHint = stats.filledDays === 0 && stats.totalPunches > 0
-            ? "Marcaciones importadas fuera del rango quincenal actual."
-            : `${stats.parsedCount} colaborador(es) procesado(s) (${startDate} → ${endDate})`;
-
-          setUploadStatus({
-            state: stats.filledDays === 0 && stats.totalPunches > 0 ? "error" : "success",
-            fileName: file.name,
-            progress: 100,
-            detail: successHint,
-          });
-
-          let msg = `Cargado: ${stats.parsedCount} colaboradores, ${stats.totalPunches} marcaciones en total.`;
-          if (stats.unmatched.length > 0) {
-            msg += ` Sin coincidir: ${stats.unmatched.slice(0, 2).join(", ")}`;
-          }
-          setToast({
-            message: msg,
-            type: "success",
-          });
-          setTimeout(() => setToast(null), 5000);
-        } else {
-          setUploadStatus({
-            state: "error",
-            fileName: file.name,
-            progress: 100,
-            detail: "No se identificaron colaboradores del biométrico en la nómina.",
-          });
-          setToast({
-            message: "No se encontraron marcaciones válidas para colaboradores registrados.",
-            type: "error",
-          });
-          setTimeout(() => setToast(null), 5000);
-        }
-      } catch (err) {
-        console.error(err);
-        setUploadStatus({
-          state: "error",
-          fileName: file.name,
-          progress: 100,
-          detail: "Error al procesar el archivo Excel.",
-        });
-        setToast({
-          message: "Formato de archivo inválido.",
-          type: "error",
-        });
-        setTimeout(() => setToast(null), 5000);
-      } finally {
-        if (e.target) e.target.value = "";
+         newAttendance[matchedName] = Array.from(byDate.values());
+         stats.parsedCount++;
+         stats.matchedNames.push(matchedName);
+         stats.filledDays += Object.keys(cleaned).length;
       }
-    };
 
-    reader.readAsArrayBuffer(file);
+      setAttendanceLogs(newAttendance);
+      
+      setToast({
+        message: stats.parsedCount === 0 
+          ? `Se encontraron ${stats.totalPunches} marcas, pero 0 coincidieron.`
+          : `${stats.parsedCount} colaborador(es) procesado(s) correctamente.`,
+        type: stats.parsedCount === 0 ? "error" : "success",
+      });
+      setTimeout(() => setToast(null), 8000);
+
+    } catch (error) {
+      console.error(error);
+      setToast({
+        message: `Error: ${String(error)}`,
+        type: "error",
+      });
+      setTimeout(() => setToast(null), 5000);
+    } finally {
+      if (e.target) e.target.value = '';
+    }
   };
 
   const handleClearAttendanceData = (scope = "worker") => {
@@ -1504,34 +1568,6 @@ export default function NominaPage() {
           <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight leading-none">Nómina y Asistencia</h2>
           <p className="text-slate-500 font-medium text-sm">Cálculos salariales en cascada, marcaciones biométricas y recargos con edición manual estilo Excel.</p>
         </div>
-
-        {/* View Switcher Controls */}
-        <div className="flex gap-1.5 bg-slate-200/60 p-1 rounded-2xl border border-slate-200/40">
-          <button 
-            onClick={() => setActiveTab("planilla")}
-            className={`px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all ${
-              activeTab === "planilla" ? "bg-white text-slate-900 shadow-md" : "text-slate-500 hover:text-slate-900"
-            }`}
-          >
-            Planilla Nómina General
-          </button>
-          <button 
-            onClick={() => setActiveTab("trabajadores")}
-            className={`px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all ${
-              activeTab === "trabajadores" ? "bg-white text-slate-900 shadow-md" : "text-slate-500 hover:text-slate-900"
-            }`}
-          >
-            Hoja Trabajador
-          </button>
-          <button 
-            onClick={() => setActiveTab("colilla")}
-            className={`px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all ${
-              activeTab === "colilla" ? "bg-white text-slate-900 shadow-md" : "text-slate-500 hover:text-slate-900"
-            }`}
-          >
-            Colillas de Pago
-          </button>
-        </div>
       </header>
 
       {/* Global Information Alert & Formula Reset Control */}
@@ -1558,9 +1594,90 @@ export default function NominaPage() {
         </div>
       </div>
 
-      {/* --- TAB 1: PLANILLA GENERAL GENERAL DE NOMINA --- */}
-      {activeTab === "planilla" && (
-        <div className="space-y-6 animate-stitch">
+      
+      {/* Global Controls Bar */}
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-6 flex flex-wrap gap-4 items-end animate-stitch mx-auto w-fit">
+         <div className="flex gap-4 items-center">
+            <div>
+               <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Fecha Inicio</label>
+               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50 border border-slate-200 text-sm font-bold text-slate-700 px-3 py-1.5 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" />
+            </div>
+            <div>
+               <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Fecha Fin</label>
+               <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50 border border-slate-200 text-sm font-bold text-slate-700 px-3 py-1.5 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" />
+            </div>
+         </div>
+
+         <div className="flex gap-3">
+            <label className="cursor-pointer bg-slate-900 hover:bg-emerald-600 text-white text-xs font-black uppercase tracking-wider px-4 py-2 rounded-lg transition-colors flex items-center shadow-sm">
+               <span>📂 Importar Excel Biométrico</span>
+               <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUpload} className="hidden" />
+            </label>
+
+            <button 
+              onClick={() => handleClearAttendanceData('all')}
+              className="bg-rose-100 hover:bg-rose-600 text-rose-600 hover:text-white text-xs font-black uppercase tracking-wider px-4 py-2 rounded-lg transition-colors shadow-sm"
+            >
+               Limpiar Biométrico
+            </button>
+         </div>
+         
+         {activeTab !== "dashboard" && nominaRows.length > 0 && (
+           <div className="ml-auto flex items-center gap-2">
+             <label className="block text-[10px] font-black uppercase text-slate-400">Operario Actual:</label>
+             <select 
+                value={selectedWorkerName} 
+                onChange={(e) => setSelectedWorkerName(e.target.value)}
+                className="bg-emerald-50 border-2 border-emerald-500 text-emerald-900 text-sm font-bold px-3 py-1.5 rounded-lg outline-none min-w-[200px]"
+             >
+               {nominaRows.map(member => (
+                  <option key={member.nombre} value={member.nombre}>{member.nombre}</option>
+               ))}
+             </select>
+           </div>
+         )}
+      </div>
+
+      {/* Tab Navigation */}
+      {nominaRows.length > 0 && (
+        <div className="flex gap-2 p-1.5 bg-slate-200/50 rounded-2xl w-fit mx-auto mb-6">
+          <button
+            onClick={() => setActiveTab("dashboard")}
+            className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === "dashboard" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+          >
+            📊 Panel General
+          </button>
+          <button
+            onClick={() => setActiveTab("liquidacion")}
+            className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === "liquidacion" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+          >
+            📝 Liquidación
+          </button>
+          <button
+            onClick={() => setActiveTab("colilla")}
+            className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === "colilla" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+          >
+            🖨️ Colillas
+          </button>
+        </div>
+      )}
+      
+{nominaRows.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-12 text-center animate-stitch">
+          <div className="bg-slate-50 border border-slate-200 rounded-[2rem] p-12 max-w-lg shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-blue-500 to-indigo-500"></div>
+            <h2 className="text-2xl font-black text-slate-800 tracking-tight">El área de trabajo está vacía</h2>
+            <p className="text-slate-500 mt-4 text-sm font-medium leading-relaxed">
+              Para comenzar, sube el archivo Excel <span className="font-bold text-slate-700">"MATRIZ Y LIQUIDADOR"</span> y luego importa el archivo CSV de marcas biométricas.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <>
+          {activeTab === "dashboard" && (
+          <>
+            {/* --- TAB 1: PLANILLA GENERAL GENERAL DE NOMINA --- */}
+            <div className="space-y-6 animate-stitch">
           
           {/* Quick Metrics */}
           <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1703,178 +1820,97 @@ export default function NominaPage() {
             </div>
           </section>
 
-          {/* Master Table Sheet */}
-          <section className="stitch-card bg-white/70 backdrop-blur-md border border-white/40 shadow-xl overflow-hidden rounded-3xl">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <h4 className="font-extrabold text-slate-900 flex items-center gap-2 text-sm uppercase tracking-wider">
-                <FileText size={16} className="text-slate-400" />
-                Planilla de Nómina General (Columnas B - AO)
-              </h4>
-              <button 
-                onClick={() => alert("Archivo generado con éxito: Planilla_Nomina_OPTIMOLDES.xlsx")}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-accent text-white rounded-xl text-xs font-black transition-all active:scale-95 shadow-md shadow-slate-200"
-              >
-                <Download size={14} />
-                Exportar Planilla
-              </button>
+
+          {/* Simple Worker List for Dashboard */}
+          <section className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl overflow-hidden rounded-3xl">
+            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+               <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider">Directorio de Operarios</h4>
+               <p className="text-xs font-bold text-slate-500">Selecciona un operario para liquidar</p>
             </div>
-
-            <div className="overflow-x-auto max-w-full">
-              <table className="w-full text-left border-collapse table-auto min-w-[3400px]">
-                <thead>
-                  {/* Row 1: Excel Column Letters */}
-                  <tr className="bg-slate-50 text-[10px] font-black text-slate-400 text-center uppercase border-b border-slate-200">
-                    {PLANILLA_COLUMNS.map(col => {
-                      if (hiddenColumns[col.key]) return null;
-                      return (
-                        <th 
-                          key={col.key} 
-                          className={`px-2 py-1 border-r border-slate-200 bg-slate-100/50 ${
-                            col.sticky ? `sticky ${col.sticky} z-20` : ""
-                          }`}
-                        >
-                          {col.letter}
-                        </th>
-                      );
-                    })}
-                  </tr>
-
-                  {/* Row 2: Header Labels */}
-                  <tr className="text-[10px] font-black text-slate-505 uppercase tracking-wider border-b border-slate-200 bg-white">
-                    {PLANILLA_COLUMNS.map(col => {
-                      if (hiddenColumns[col.key]) return null;
-                      return (
-                        <th 
-                          key={col.key} 
-                          className={`px-4 py-3.5 border-r border-slate-200 bg-white ${
-                            col.sticky ? `sticky ${col.sticky} z-20 shadow-[2px_0_5px_rgba(0,0,0,0.03)]` : ""
-                          } ${col.center ? "text-center" : col.key === "nombre" || col.key === "cargo" ? "text-left" : "text-right"}`}
-                        >
-                          {col.label}
-                        </th>
-                      );
-                    })}
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-slate-100 text-xs font-semibold">
-                  {filteredPayrollData.map((item) => {
-                    const row = item.masterRow;
-                    const isExt = row.contract_type === "green";
-                    
-                    return (
-                      <tr 
-                        key={row.consecutivo} 
-                        className={`hover:bg-slate-50/50 transition-colors ${
-                          isExt 
-                            ? "border-l-4 border-emerald-500 bg-emerald-50/5 hover:bg-emerald-50/10" 
-                            : "border-l-4 border-blue-500 bg-blue-50/5 hover:bg-blue-50/10"
-                        }`}
-                      >
-                        {PLANILLA_COLUMNS.map(col => {
-                          if (hiddenColumns[col.key]) return null;
-                          const overrideKey = `${row.nombre}_master_${col.key}`;
-                          const isOver = isCellOverridden(overrideKey);
-                          
-                          // Handle sticky columns separately
-                          if (col.key === "consecutivo") {
-                            return (
-                              <td 
-                                key={col.key} 
-                                className="px-4 py-2.5 text-center border-r border-slate-100 sticky left-0 bg-white z-10 font-bold text-slate-400 shadow-[2px_0_5px_rgba(0,0,0,0.02)]"
-                              >
-                                {row.consecutivo}
-                              </td>
-                            );
-                          }
-                          if (col.key === "nombre") {
-                            return (
-                              <td 
-                                key={col.key} 
-                                className="px-4 py-2.5 border-r border-slate-100 sticky left-16 bg-white z-10 font-black text-slate-900 shadow-[2px_0_5px_rgba(0,0,0,0.02)]"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span 
-                                    className={`w-2.5 h-2.5 rounded-full shrink-0 ${isExt ? "bg-emerald-500" : "bg-blue-500"}`} 
-                                    title={isExt ? "Externo (Saitemp)" : "Interno (Optimoldes)"}
-                                  />
-                                  <span>{row.nombre}</span>
-                                </div>
-                              </td>
-                            );
-                          }
-
-                          return (
-                            <td 
-                              key={col.key} 
-                              className={`px-2 py-1.5 border-r border-slate-100 ${col.bg || ""} ${col.center ? "text-center" : "text-right"}`}
-                            >
-                              {col.editable ? (
-                                <EditableCell
-                                  value={row[col.key]}
-                                  type={col.type === "number" ? "number" : "text"}
-                                  isCurrency={col.isCurrency}
-                                  isDecimal={col.isDecimal}
-                                  isOverridden={isOver}
-                                  options={col.options}
-                                  onChange={(val) => handleCellEdit(overrideKey, val)}
-                                  className={`${col.center ? "text-center" : "text-right"} ${col.textClass || ""}`}
-                                />
-                              ) : (
-                                <div className={`px-2 py-1 text-[11px] font-semibold text-slate-800 ${col.center ? "text-center" : "text-right"} ${col.textClass || ""}`}>
-                                  {typeof row[col.key] === "number" && !isNaN(row[col.key])
-                                    ? col.isCurrency 
-                                      ? `$${fmtCOP(row[col.key])}`
-                                      : col.isDecimal
-                                        ? fmtDec(row[col.key])
-                                        : row[col.key]
-                                    : row[col.key] || "-"}
-                                </div>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-
-                  {/* Totales Generales Row */}
-                  <tr className="bg-slate-900 text-white font-black text-xs border-t-2 border-slate-800">
-                    {PLANILLA_COLUMNS.map(col => {
-                      if (hiddenColumns[col.key]) return null;
-                      if (col.key === "consecutivo") {
+            <div className="overflow-x-auto">
+               <table className="w-full text-left">
+                  <thead>
+                     <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-200">
+                        <th className="px-6 py-3">Cédula</th>
+                        <th className="px-6 py-3">Nombre Completo</th>
+                        <th className="px-6 py-3">Cargo</th>
+                        <th className="px-6 py-3 text-center">Días Liq.</th>
+                        <th className="px-6 py-3 text-right">Neto a Pagar</th>
+                        <th className="px-6 py-3 text-center">Acción</th>
+                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs font-bold">
+                     {filteredPayrollData.map((item) => {
+                        const row = item.masterRow;
                         return (
-                          <td key={col.key} className="px-4 py-4 border-r border-slate-800 sticky left-0 bg-slate-900 z-10 text-center uppercase tracking-widest">
-                            TOTALES
-                          </td>
+                           <tr key={row.consecutivo} className="hover:bg-slate-50/50 transition-colors">
+                              <td className="px-6 py-4 text-slate-500">{row.cedula}</td>
+                              <td className="px-6 py-4 text-slate-900">{row.nombre}</td>
+                              <td className="px-6 py-4 text-slate-500 capitalize">{row.cargo.toLowerCase()}</td>
+                              <td className="px-6 py-4 text-center text-slate-700">{row.dias_pagados}</td>
+                              <td className="px-6 py-4 text-right text-yellow-600 font-black text-sm">${fmtCOP(row.neto_pagar)}</td>
+                              <td className="px-6 py-4 text-center">
+                                 <div className="flex justify-center gap-2">
+                                    <button 
+                                       onClick={() => { setDetailsWorkerName(row.nombre); setIsDetailsModalOpen(true); }}
+                                       className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors shadow-sm"
+                                    >
+                                       Detalles
+                                    </button>
+                                    <button 
+                                       onClick={() => { setSelectedWorkerName(row.nombre); setActiveTab("liquidacion"); }}
+                                       className="px-3 py-1.5 bg-slate-900 hover:bg-emerald-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors shadow-sm"
+                                    >
+                                       Liquidar
+                                    </button>
+                                 </div>
+                              </td>
+                           </tr>
                         );
-                      }
-                      if (col.key === "nombre") {
-                        return (
-                          <td key={col.key} className="px-4 py-4 border-r border-slate-800 sticky left-16 bg-slate-900 z-10 text-left font-black">
-                            {filteredPayrollData.length} Operarios
-                          </td>
-                        );
-                      }
-
-                      const val = totals[col.key];
-                      return (
-                        <td key={col.key} className={`px-4 py-4 border-r border-slate-800 ${col.center ? "text-center" : "text-right"}`}>
-                          {col.type === "number" ? (
-                            col.isCurrency
-                              ? `$${fmtCOP(val)}`
-                              : col.isDecimal
-                                ? fmtDec(val)
-                                : (isNaN(val) ? "-" : Math.round(val))
-                          ) : "-"}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                </tbody>
-              </table>
+                     })}
+                  </tbody>
+               </table>
             </div>
           </section>
+
+          {/* --- DETALLES MODAL --- */}
+          {isDetailsModalOpen && (
+            <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden animate-stitch border border-slate-200">
+                <div className="p-5 sm:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                   <h3 className="font-black text-lg sm:text-xl text-slate-900">
+                      Expediente Completo: <span className="text-emerald-600">{detailsWorkerName}</span>
+                   </h3>
+                   <button onClick={() => setIsDetailsModalOpen(false)} className="w-8 h-8 flex items-center justify-center bg-slate-200 hover:bg-rose-100 hover:text-rose-600 rounded-full text-slate-500 transition-colors font-bold shadow-sm">
+                      ✕
+                   </button>
+                </div>
+                <div className="p-5 sm:p-6 overflow-y-auto max-h-[75vh]">
+                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                     {(() => {
+                        const workerData = filteredPayrollData.find(d => d.masterRow.nombre === detailsWorkerName) || filteredPayrollData[0];
+                        if (!workerData) return null;
+                        return PLANILLA_COLUMNS.map(col => {
+                           const cKey = `${workerData.masterRow.cedula}_${col.key}`;
+                           const val = overrides[cKey] !== undefined ? overrides[cKey] : (workerData.masterRow[col.key] !== undefined ? workerData.masterRow[col.key] : "");
+                           return (
+                             <div key={col.key} className="bg-white border border-slate-200 p-3 rounded-xl flex flex-col justify-center shadow-sm space-y-1">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex-1 truncate" title={col.label}>{col.label}</span>
+                                <input
+                                   type="text"
+                                   value={val}
+                                   onChange={(e) => handleCellEdit(cKey, e.target.value)}
+                                   className={`w-full text-right text-xs font-bold text-slate-800 bg-transparent border-b outline-none ${overrides[cKey] !== undefined ? 'border-yellow-400 bg-yellow-50/50' : 'border-slate-100 hover:border-slate-300'} transition-colors`}
+                                />
+                             </div>
+                           )
+                        });
+                     })()}
+                   </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Bank Transfer Summaries */}
           <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1894,517 +1930,300 @@ export default function NominaPage() {
             </div>
           </section>
         </div>
+        </>
       )}
 
-      {/* --- TAB 2: HOJA INDIVIDUAL DE TRABAJADOR --- */}
-      {activeTab === "trabajadores" && (
-        <div className="space-y-6 animate-stitch">
+            {/* --- TAB 2: FORMULARIO DE LIQUIDACIÓN --- */}
+      {activeTab === "liquidacion" && (
+        function() {
+          const selectedWorkerData = filteredPayrollData.find(d => d.masterRow.nombre === selectedWorkerName) || filteredPayrollData[0];
+          if (!selectedWorkerData) return (
+            <div className="p-12 text-center text-slate-500 font-bold bg-white rounded-3xl border border-slate-200 shadow-sm animate-stitch">
+              Selecciona un operario desde el Panel General para liquidar.
+            </div>
+          );
           
-          {/* Controls, Date range selectors, & Excel Upload */}
-          <section className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-6 bg-white p-6 rounded-3xl border border-slate-200/60 shadow-md">
-            <div className="flex items-center gap-3">
-              <Calendar className="text-slate-700 shrink-0" />
-              <div>
-                <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider">Marcaciones Diarias y Liquidación</h4>
-                <p className="text-slate-500 text-xs font-semibold">Cálculo de recargos de horas extras para liquidación individual.</p>
+          return (
+            <div className="space-y-6 animate-stitch">
+              <div className="flex justify-between items-center bg-slate-900 p-6 rounded-3xl shadow-xl">
+                 <div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Asistencia y Liquidación Individual</span>
+                    <h2 className="text-2xl font-black text-white mt-1">{selectedWorkerData.masterRow.nombre}</h2>
+                    <div className="flex gap-2 text-xs font-bold text-slate-400 mt-1.5">
+                       <span className="bg-slate-800 px-2 py-0.5 rounded text-slate-300">C.C. {selectedWorkerData.masterRow.cedula}</span>
+                       <span className="capitalize">{selectedWorkerData.masterRow.cargo.toLowerCase()}</span>
+                    </div>
+                 </div>
+                 <button onClick={() => setActiveTab("colilla")} className="px-4 py-2 bg-white text-slate-900 hover:bg-emerald-400 hover:text-slate-900 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-colors">
+                   🖨️ Generar Colilla
+                 </button>
               </div>
-            </div>
-            
-            {/* Date period inputs */}
-            <div className="flex flex-wrap items-center gap-4 bg-slate-50 p-2.5 rounded-2xl border border-slate-200/60">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider pl-1">Desde:</span>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="bg-white border border-slate-200 text-xs font-black text-slate-800 rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-slate-955 outline-none cursor-pointer text-slate-900"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Hasta:</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="bg-white border border-slate-200 text-xs font-black text-slate-800 rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-slate-955 outline-none cursor-pointer text-slate-900"
-                />
-              </div>
-            </div>
-
-            {/* Actions: File upload & Worker dropdown selection */}
-            <div className="flex flex-wrap items-center gap-4">
               
-              {/* Drag-and-drop zone */}
-              <div className="flex flex-col gap-2 min-w-[280px]">
-                <div
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.currentTarget.classList.add("border-slate-800", "bg-slate-100/50");
-                  }}
-                  onDragLeave={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.currentTarget.classList.remove("border-slate-800", "bg-slate-100/50");
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.currentTarget.classList.remove("border-slate-800", "bg-slate-100/50");
-                    const file = e.dataTransfer.files?.[0];
-                    if (file) {
-                      handleFileUpload({ target: { files: [file] } });
-                    }
-                  }}
-                  onClick={() => document.getElementById("reloj-file-input").click()}
-                  className={`group relative flex flex-col items-center justify-center border-2 border-dashed rounded-2xl p-4 transition-all duration-300 cursor-pointer shadow-sm text-center ${
-                    uploadStatus.state === "success"
-                      ? "border-emerald-400 bg-emerald-50/60"
-                      : uploadStatus.state === "error"
-                        ? "border-rose-300 bg-rose-50/50"
-                        : "border-slate-200 hover:border-slate-800 bg-slate-50/50 hover:bg-slate-100/30"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    {uploadStatus.state === "reading" || uploadStatus.state === "processing" ? (
-                      <Loader2 className="w-4 h-4 text-slate-600 animate-spin" />
-                    ) : uploadStatus.state === "success" ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    ) : (
-                      <Upload className="w-4 h-4 text-slate-400 group-hover:text-slate-800" />
-                    )}
-                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wide">
-                      {uploadStatus.state === "success"
-                        ? "Archivo cargado"
-                        : uploadStatus.state === "reading" || uploadStatus.state === "processing"
-                          ? "Procesando..."
-                          : "Arrastra o selecciona archivo"}
-                    </span>
-                  </div>
-                  <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase tracking-wider">
-                    Reporte Biométrico Plano (.xlsx)
-                  </p>
-                  <input
-                    id="reloj-file-input"
-                    type="file"
-                    accept=".xlsx,.xls"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                </div>
-
-                {(uploadStatus.state !== "idle" || uploadStatus.fileName) && (
-                  <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 space-y-1.5 shadow-sm">
-                    <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600">
-                      <FileSpreadsheet size={14} className="shrink-0 text-slate-400" />
-                      <span className="truncate" title={uploadStatus.fileName}>
-                        {uploadStatus.fileName}
-                      </span>
-                    </div>
-                    <p className={`text-[9px] font-bold uppercase tracking-wide ${uploadStatus.state === "error" ? "text-rose-600" : "text-emerald-600"}`}>
-                      {uploadStatus.detail}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-2 justify-center">
-                <button
-                  type="button"
-                  onClick={() => handleClearAttendanceData("worker")}
-                  className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95"
-                >
-                  <Trash2 size={13} />
-                  Limpiar Operario
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleClearAttendanceData("all")}
-                  className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-white hover:bg-rose-50 text-rose-800 border border-rose-300 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95"
-                >
-                  <Trash2 size={13} />
-                  Limpiar Todos (Rango)
-                </button>
-              </div>
-
-              {/* Worker selection dropdown */}
-              <div className="flex items-center gap-3 border-l pl-4 border-slate-200">
-                <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Ver Operario:</span>
-                <select
-                  value={selectedWorkerName}
-                  onChange={(e) => setSelectedWorkerName(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-xs font-black text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-slate-950 outline-none cursor-pointer max-w-[220px]"
-                >
-                  {nominaRows.map(member => (
-                    <option key={member.nombre} value={member.nombre}>
-                      {member.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-            </div>
-          </section>
-
-          {/* Selected Worker Header Banner */}
-          {(() => {
-            const isExt = selectedWorkerData.masterRow.contract_type === "green";
-            return (
-              <div 
-                className={`p-6 rounded-[2rem] border transition-all shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
-                  isExt 
-                    ? "bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-white border-emerald-200" 
-                    : "bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-white border-blue-200"
-                }`}
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-3 h-3 rounded-full ${isExt ? "bg-emerald-500" : "bg-blue-500"}`} />
-                    <span className="text-xs font-black tracking-widest uppercase opacity-75 text-slate-500">
-                      {isExt ? "CONTRATO EXTERNO (SAITEMP) - HOJA VERDE" : "CONTRATO EMPRESA (OPTIMOLDES) - HOJA AZUL"}
-                    </span>
-                  </div>
-                  <h3 className="text-2xl font-black text-slate-900 tracking-tight leading-none uppercase">{selectedWorkerName}</h3>
-                  <div className="flex flex-wrap items-center gap-2 mt-1">
-                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">{selectedWorkerData.masterRow.cargo} • C.C. {selectedWorkerData.masterRow.cedula}</p>
-                    <span className="text-slate-300 select-none font-bold">|</span>
-                    <div className="inline-flex items-center gap-1 bg-white hover:bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200 transition-all">
-                      <span className="text-[9px] font-black text-slate-400 uppercase">Categoría:</span>
-                      <select
-                        value={selectedWorkerData.masterRow.categoria}
-                        onChange={(e) => handleCellEdit(`${selectedWorkerName}_master_categoria`, e.target.value)}
-                        className="bg-transparent border-none text-[10px] font-extrabold text-slate-800 focus:outline-none cursor-pointer uppercase py-0"
-                      >
-                        {["INYECCIÓN", "TALLER", "OTROS", "NUEVOS"].map(opt => (
-                          <option key={opt} value={opt} className="bg-white text-slate-800 text-[10px]">{opt}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide pt-1">
-                    Perfil Turnos: <span className="text-slate-700 font-extrabold">{getProfileForCategory(selectedWorkerData.masterRow.categoria) === "INYECCION_MONITORES_MONTADORES" ? "Inyección, Monitores y Montadores" : "Taller y Otros"}</span>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-6">
-                  <div className="text-right">
-                    <span className="text-[10px] font-black text-slate-400 block uppercase">SALARIO BASE (B37)</span>
-                    <span className="text-lg font-black text-slate-900">
-                      ${fmtCOP(selectedWorkerData.liquidation.salario_base)}
-                    </span>
-                  </div>
-                  <div className="text-right border-l pl-6 border-slate-200">
-                    <span className="text-[10px] font-black text-slate-400 block uppercase">TOTAL RECARGOS Y EXTRAS (F36)</span>
-                    <span className={`text-lg font-black ${isExt ? "text-emerald-600" : "text-blue-600"}`}>
-                      ${fmtCOP(selectedWorkerData.liquidation.total_extra_val)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* A. Daily Attendance Log (Rows 7 to 23) */}
-          <section className="stitch-card bg-white/70 backdrop-blur-md border border-white/40 shadow-xl overflow-hidden rounded-3xl">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider flex items-center gap-2">
-                <Clock size={16} className="text-slate-400" />
-                A. Registro Diario de Horas y Descansos (Filas 7 a 23)
-              </h4>
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Hojas individuales de asistencia quincenal</span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse table-auto min-w-[2000px]">
-                <thead>
-                  {/* Row 1: Excel Column Letters */}
-                  <tr className="bg-slate-50 text-[10px] font-black text-slate-400 text-center uppercase border-b border-slate-200">
-                    {DAILY_COLUMNS.map(col => (
-                      <th key={col.key} className="px-2 py-1 border-r border-slate-200 bg-slate-100/50">
-                        {col.letter}
-                      </th>
-                    ))}
-                  </tr>
-
-                  {/* Row 2: Labels */}
-                  <tr className="text-[10px] font-black text-slate-505 uppercase tracking-wider border-b border-slate-200 bg-white">
-                    {DAILY_COLUMNS.map(col => (
-                      <th 
-                        key={col.key} 
-                        className={`px-4 py-3.5 border-r border-slate-200 bg-white ${col.center ? "text-center" : "text-right"}`}
-                      >
-                        {col.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-slate-100 text-xs font-semibold">
-                  {selectedWorkerData.workerDays.map((day) => {
-                    const prefix = `${selectedWorkerName}_day_${day.dia}`;
+              <div className="space-y-6">
+                 {/* Editable Daily Log and Extas Matrix (Full Width) */}
+                 <div className="space-y-6">
                     
-                    return (
-                      <tr key={day.dia} className="hover:bg-slate-50/40 transition-colors">
-                        {DAILY_COLUMNS.map(col => {
-                          const overrideKey = `${prefix}_${col.key}`;
-                          const isOver = isCellOverridden(overrideKey);
-                          
-                          // Handle day label as non-editable
-                          if (col.key === "dia") {
-                            return (
-                              <td key={col.key} className="px-4 py-2 border-r border-slate-100 font-bold text-slate-800 text-center">
-                                {day.dia}
-                              </td>
-                            );
-                          }
+                    {/* Time Tracking (Registro Diario FULL A-X) */}
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm overflow-x-auto">
+                       <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-100 pb-3">Registro Diario (A - X)</h3>
+                       <table className="w-full text-left table-auto">
+                          <thead>
+                             <tr className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-200">
+                                <th className="px-2 py-2" title="Día/Fecha">A (Fecha)</th>
+                                <th className="px-2 py-2 text-blue-500" title="Reloj Hr Ent">B (R.Ent)</th>
+                                <th className="px-2 py-2 text-blue-500" title="Reloj Hr Sal">C (R.Sal)</th>
+                                <th className="px-2 py-2 text-rose-500" title="Descanso 1 Hr Ent">D (D1.E)</th>
+                                <th className="px-2 py-2 text-emerald-500" title="Descanso 1 Hr Sal">E (D1.S)</th>
+                                <th className="px-2 py-2" title="Descanso 1 Total">F (D1.Tot)</th>
+                                <th className="px-2 py-2 text-rose-500" title="Descanso 2 Hr Ent">G (D2.E)</th>
+                                <th className="px-2 py-2 text-emerald-500" title="Descanso 2 Hr Sal">H (D2.S)</th>
+                                <th className="px-2 py-2" title="Descanso 2 Total">I (D2.Tot)</th>
+                                <th className="px-2 py-2 text-purple-500" title="Pago Entrada">J (P.Ent)</th>
+                                <th className="px-2 py-2 text-purple-500" title="Pago Salida">K (P.Sal)</th>
+                                <th className="px-2 py-2" title="Horas Laboradas">L (H.Lab)</th>
+                                <th className="px-2 py-2" title="Descuento Almuerzo">M (D.Alm)</th>
+                                <th className="px-2 py-2" title="Horas Pagadas">N (H.Pag)</th>
+                                <th className="px-2 py-2 text-right" title="Ordinaria Diurna">O (Ord.D)</th>
+                                <th className="px-2 py-2 text-right" title="Ordinaria Nocturna">P (Ord.N)</th>
+                                <th className="px-2 py-2 text-right" title="Festiva Diurna">Q (Fes.D)</th>
+                                <th className="px-2 py-2 text-right" title="Festiva Nocturna">R (Fes.N)</th>
+                                <th className="px-2 py-2 text-right" title="Extra Diurna">S (Ext.D)</th>
+                                <th className="px-2 py-2 text-right" title="Extra Nocturna">T (Ext.N)</th>
+                                <th className="px-2 py-2 text-right" title="Extra Fest Diur">U (Ex.FD)</th>
+                                <th className="px-2 py-2 text-right" title="Extra Fest Noc">V (Ex.FN)</th>
+                                <th className="px-2 py-2 text-right text-rose-500" title="Llegada Tarde">W (Lleg.T)</th>
+                                <th className="px-2 py-2 text-right text-rose-500" title="Llegada Tarde Min">X (Lleg.Min)</th>
+                             </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-[10px] font-semibold text-slate-700">
+                             {selectedWorkerData.workerDays.map((day) => {
+                                const dateObj = new Date(day.dia + "T00:00:00");
+                                const dayName = dateObj.toLocaleDateString("es-CO", { weekday: "short" });
+                                const displayDate = day.dia;
+                                const prefix = `${selectedWorkerData.masterRow.cedula}_${displayDate}`;
+                                return (
+                                   <tr key={displayDate} className="hover:bg-slate-50">
+                                      <td className="px-2 py-2 whitespace-nowrap"><span className="text-slate-400 mr-1">{dayName}</span> {displayDate}</td>
+                                      <td className="px-2 py-2 text-blue-600 font-mono">{day.hr_ent || "-"}</td>
+                                      <td className="px-2 py-2 text-blue-600 font-mono">{day.hr_sal || "-"}</td>
+                                      <td className="px-1 py-1">
+                                         <input type="text" value={overrides[`${prefix}_hr_sal_desc1`] !== undefined ? overrides[`${prefix}_hr_sal_desc1`] : (day.hr_sal_desc1 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_desc1`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1">
+                                         <input type="text" value={overrides[`${prefix}_hr_ent_desc1`] !== undefined ? overrides[`${prefix}_hr_ent_desc1`] : (day.hr_ent_desc1 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_desc1`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-2 py-2 text-center text-slate-400 font-mono">{day.total_desc1 || "-"}</td>
+                                      <td className="px-1 py-1">
+                                         <input type="text" value={overrides[`${prefix}_hr_sal_desc2`] !== undefined ? overrides[`${prefix}_hr_sal_desc2`] : (day.hr_sal_desc2 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_desc2`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1">
+                                         <input type="text" value={overrides[`${prefix}_hr_ent_desc2`] !== undefined ? overrides[`${prefix}_hr_ent_desc2`] : (day.hr_ent_desc2 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_desc2`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-2 py-2 text-center text-slate-400 font-mono">{day.total_desc2 || "-"}</td>
+                                      
+                                      {/* Pago Entrada/Salida */}
+                                      <td className="px-1 py-1">
+                                         <input type="text" value={overrides[`${prefix}_hr_ent_pago`] !== undefined ? overrides[`${prefix}_hr_ent_pago`] : (day.hr_ent_pago || day.hr_ent || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_pago`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none text-purple-600" />
+                                      </td>
+                                      <td className="px-1 py-1">
+                                         <input type="text" value={overrides[`${prefix}_hr_sal_pago`] !== undefined ? overrides[`${prefix}_hr_sal_pago`] : (day.hr_sal_pago || day.hr_sal || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_pago`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none text-purple-600" />
+                                      </td>
 
-                          return (
-                            <td key={col.key} className={`px-2 py-1.5 border-r border-slate-100 ${col.bg || ""} ${col.center ? "text-center" : "text-right"}`}>
-                              <EditableCell
-                                value={day[col.key]}
-                                type={col.type === "number" ? "number" : "text"}
-                                isCurrency={false}
-                                isDecimal={col.isDecimal}
-                                isOverridden={isOver}
-                                onChange={(val) => handleCellEdit(overrideKey, val)}
-                                className={col.center ? "text-center" : "text-right"}
-                              />
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                                      <td className="px-2 py-2 text-center text-slate-400">{Number(day.hr_lab || 0).toFixed(2)}</td>
+                                      <td className="px-2 py-2 text-center text-slate-400">{Number(day.desc_lunch || 0).toFixed(2)}</td>
+                                      <td className="px-2 py-2 text-center font-bold text-slate-600">{Number(day.hr_pag || 0).toFixed(2)}</td>
+                                      
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_diurnas`] !== undefined ? overrides[`${prefix}_diurnas`] : Number(day.diurnas || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_diurnas`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_nocturnas`] !== undefined ? overrides[`${prefix}_nocturnas`] : Number(day.nocturnas || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_nocturnas`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_fes_diu`] !== undefined ? overrides[`${prefix}_fes_diu`] : Number(day.fes_diu || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_fes_diu`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_fes_noc`] !== undefined ? overrides[`${prefix}_fes_noc`] : Number(day.fes_noc || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_fes_noc`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_ext_diu`] !== undefined ? overrides[`${prefix}_ext_diu`] : Number(day.ext_diu || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_ext_diu`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_ext_noc`] !== undefined ? overrides[`${prefix}_ext_noc`] : Number(day.ext_noc || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_ext_noc`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_ext_fes_diu`] !== undefined ? overrides[`${prefix}_ext_fes_diu`] : Number(day.ext_fes_diu || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_ext_fes_diu`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_ext_fes_noc`] !== undefined ? overrides[`${prefix}_ext_fes_noc`] : Number(day.ext_fes_noc || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_ext_fes_noc`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_llegada_tarde`] !== undefined ? overrides[`${prefix}_llegada_tarde`] : Number(day.llegada_tarde || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_llegada_tarde`, e.target.value)} className="w-10 bg-rose-50 border border-slate-200 text-right rounded focus:ring-1 outline-none text-rose-700" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_llegada_tarde_min`] !== undefined ? overrides[`${prefix}_llegada_tarde_min`] : Number(day.llegada_tarde_min || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_llegada_tarde_min`, e.target.value)} className="w-10 bg-rose-50 border border-slate-200 text-right rounded focus:ring-1 outline-none text-rose-700" />
+                                      </td>
+                                   </tr>
+                                )
+                             })}
+                          </tbody>
+                       </table>
+                    </div>
+
+                    {/* Resumen de Horas (Filas 26-38) */}
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm overflow-x-auto">
+                       <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-100 pb-3">Liquidación de Horas (Matriz 26-38)</h3>
+                       
+                       <div className="flex gap-8 mb-6">
+                          <div className="space-y-1">
+                             <label className="text-[10px] font-black text-slate-400 uppercase">Horas que debe (B26)</label>
+                             <input
+                               type="text"
+                               value={overrides[`${selectedWorkerData.masterRow.cedula}_horas_que_debe`] !== undefined ? overrides[`${selectedWorkerData.masterRow.cedula}_horas_que_debe`] : (selectedWorkerData.masterRow.horas_que_debe || 0)}
+                               onChange={(e) => handleCellEdit(`${selectedWorkerData.masterRow.cedula}_horas_que_debe`, e.target.value)}
+                               className="w-32 bg-slate-50 border border-slate-200 text-sm font-bold text-rose-600 rounded-xl px-3 py-2 focus:ring-2 focus:ring-rose-400 outline-none"
+                             />
+                          </div>
+                          <div className="space-y-1">
+                             <label className="text-[10px] font-black text-slate-400 uppercase">Horas Pendientes (F26)</label>
+                             <div className="w-32 bg-slate-100 border border-slate-200 text-sm font-bold text-slate-600 rounded-xl px-3 py-2">
+                               {selectedWorkerData.masterRow.horas_pendientes || 0}
+                             </div>
+                          </div>
+                          <div className="space-y-1">
+                             <label className="text-[10px] font-black text-slate-400 uppercase">Salario Básico (B37)</label>
+                             <input
+                               type="text"
+                               value={overrides[`${selectedWorkerData.masterRow.cedula}_sueldo`] !== undefined ? overrides[`${selectedWorkerData.masterRow.cedula}_sueldo`] : (selectedWorkerData.masterRow.sueldo || 0)}
+                               onChange={(e) => handleCellEdit(`${selectedWorkerData.masterRow.cedula}_sueldo`, e.target.value)}
+                               className="w-40 bg-slate-50 border border-slate-200 text-sm font-bold text-slate-900 rounded-xl px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
+                             />
+                          </div>
+                       </div>
+
+                       <table className="w-full text-left table-auto">
+                          <thead>
+                             <tr className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                                <th className="px-4 py-2">Concepto</th>
+                                <th className="px-4 py-2 text-right">Horas (D)</th>
+                                <th className="px-4 py-2 text-right">Factor (E)</th>
+                                <th className="px-4 py-2 text-right">Valor (F)</th>
+                             </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                             <tr>
+                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">28. Diurnas</td>
+                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.horas_diurnas_ordinarias}</td>
+                                <td className="px-4 py-2 text-right">0.0</td>
+                                <td className="px-4 py-2 text-right text-slate-400">N/A</td>
+                             </tr>
+                             <tr>
+                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">29. Nocturnas</td>
+                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.horas_nocturnas_ordinarias}</td>
+                                <td className="px-4 py-2 text-right text-indigo-500">0.35</td>
+                                <td className="px-4 py-2 text-right text-indigo-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.recargo_nocturno)}</td>
+                             </tr>
+                             <tr>
+                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">30. Festiva Diurna</td>
+                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.horas_festivas_diurnas || 0}</td>
+                                <td className="px-4 py-2 text-right text-indigo-500">0.75</td>
+                                <td className="px-4 py-2 text-right text-indigo-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.recargo_festivo_diurno || 0)}</td>
+                             </tr>
+                             <tr>
+                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">31. Festiva Nocturna</td>
+                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.horas_festivas_nocturnas || 0}</td>
+                                <td className="px-4 py-2 text-right text-indigo-500">2.10</td>
+                                <td className="px-4 py-2 text-right text-indigo-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.recargo_festivo_nocturno || 0)}</td>
+                             </tr>
+                             <tr>
+                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">32. Extra Diurna</td>
+                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.extras_diurnas_horas}</td>
+                                <td className="px-4 py-2 text-right text-emerald-500">1.25</td>
+                                <td className="px-4 py-2 text-right text-emerald-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.val_extras_diurnas)}</td>
+                             </tr>
+                             <tr>
+                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">33. Extra Nocturna</td>
+                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.extras_nocturnas_horas}</td>
+                                <td className="px-4 py-2 text-right text-emerald-500">1.75</td>
+                                <td className="px-4 py-2 text-right text-emerald-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.val_extras_nocturnas)}</td>
+                             </tr>
+                             <tr>
+                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">34. Extra Festiva Diurna</td>
+                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.extras_festivas_horas}</td>
+                                <td className="px-4 py-2 text-right text-emerald-500">2.00</td>
+                                <td className="px-4 py-2 text-right text-emerald-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.val_extras_festivas)}</td>
+                             </tr>
+                             <tr>
+                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">35. Extra Festiva Nocturna</td>
+                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.extras_festivas_nocturnas_horas || 0}</td>
+                                <td className="px-4 py-2 text-right text-emerald-500">2.50</td>
+                                <td className="px-4 py-2 text-right text-emerald-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.val_extras_festivas_nocturnas || 0)}</td>
+                             </tr>
+                             <tr className="bg-slate-50">
+                                <td className="px-4 py-3 uppercase text-[10px] font-black text-slate-900">36. Totales</td>
+                                <td className="px-4 py-3 text-right font-black text-slate-900">{selectedWorkerData.masterRow.total_horas_extras_y_recargos || 0}</td>
+                                <td className="px-4 py-3 text-right"></td>
+                                <td className="px-4 py-3 text-right font-black text-slate-900">${fmtCOP(selectedWorkerData.masterRow.total_vr_pagar_extras || (selectedWorkerData.masterRow.val_extras_diurnas + selectedWorkerData.masterRow.val_extras_nocturnas + selectedWorkerData.masterRow.val_extras_festivas + selectedWorkerData.masterRow.recargo_nocturno))}</td>
+                             </tr>
+                          </tbody>
+                       </table>
+
+                       <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-3">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">44. Novedades:</span>
+                          <span className="text-sm font-bold text-slate-800">1. Recargo nocturno {selectedWorkerData.masterRow.horas_nocturnas_ordinarias} hrs</span>
+                       </div>
+                    </div>
+
+                 </div>
+
+
+              </div>
             </div>
-          </section>
-
-          {/* B. Calculations & Liquidation Summary (Rows 25 to 38) */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Breakdown table */}
-            <div className="lg:col-span-2 stitch-card bg-white/70 backdrop-blur-md border border-white/40 p-6 shadow-xl space-y-6 rounded-3xl">
-              <div className="border-b pb-4 border-slate-100 flex items-center justify-between">
-                <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">
-                  B. Bloque de Liquidación de Recargos (Filas 25 a 36)
-                </h4>
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-black text-slate-400 block uppercase">SALARIO ACORDADO (B37)</span>
-                  <div className="w-36">
-                    <EditableCell
-                      value={selectedWorkerData.liquidation.salario_base}
-                      type="number"
-                      isCurrency={true}
-                      isOverridden={isCellOverridden(`${selectedWorkerName}_liq_salario_base`)}
-                      onChange={(val) => handleCellEdit(`${selectedWorkerName}_liq_salario_base`, val)}
-                      className="text-right font-black border border-slate-200 shadow-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Debt & Pending Hours Info Box */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200/50">
-                <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
-                  <div>
-                    <span className="text-[10px] font-black text-slate-400 block uppercase tracking-wider">Horas que debe (B26)</span>
-                    <span className="text-[9px] font-semibold text-rose-505">Descontadas de horas extras</span>
-                  </div>
-                  <div className="w-20">
-                    <EditableCell
-                      value={selectedWorkerData.liquidation.horas_debe}
-                      type="number"
-                      isDecimal={true}
-                      isOverridden={isCellOverridden(`${selectedWorkerName}_liq_horas_debe`)}
-                      onChange={(val) => handleCellEdit(`${selectedWorkerName}_liq_horas_debe`, val)}
-                      className="text-center font-black text-rose-600 bg-rose-50/30 border-rose-200"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center bg-slate-900 text-white p-3 rounded-xl shadow-sm">
-                  <div>
-                    <span className="text-[10px] font-black text-slate-400 block uppercase tracking-wider">Horas Pendientes (F26)</span>
-                    <span className="text-[9px] font-bold text-yellow-400 block tracking-wider">SUMA(D32:D35)</span>
-                  </div>
-                  <span className="text-lg font-black tracking-tight text-white pr-2">
-                    {selectedWorkerData.liquidation.horas_pendientes.toFixed(2)}h
-                  </span>
-                </div>
-              </div>
-
-              {/* Liquidation breakdown grid */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">
-                      <th className="px-4 py-2.5">Concepto Liquidado</th>
-                      <th className="px-4 py-2.5 text-center">Horas (Columna D)</th>
-                      <th className="px-4 py-2.5 text-center">Factor Recargo (Columna E)</th>
-                      <th className="px-4 py-2.5 text-right">Valor a Pagar (Columna F)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                    {LIQUIDATION_CONCEPTS.map(concept => {
-                      const liq = selectedWorkerData.liquidation;
-                      const prefix = `${selectedWorkerName}_liq`;
-                      
-                      const isHrOver = isCellOverridden(`${prefix}_${concept.hrKey}`);
-                      const isPctOver = isCellOverridden(`${prefix}_${concept.pctKey}`);
-                      const isValOver = isCellOverridden(`${prefix}_${concept.valKey}`);
-
-                      return (
-                        <tr key={concept.key} className="hover:bg-slate-50/30 transition-colors">
-                          <td className={`px-4 py-3 ${concept.textClass}`}>{concept.label}</td>
-                          <td className="px-4 py-3 text-center bg-slate-50/30">
-                            <EditableCell
-                              value={liq[concept.hrKey]}
-                              type="number"
-                              isDecimal={true}
-                              isOverridden={isHrOver}
-                              onChange={(val) => handleCellEdit(`${prefix}_${concept.hrKey}`, val)}
-                              className="text-center"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-center text-slate-400">
-                            <EditableCell
-                              value={liq[concept.pctKey]}
-                              type="number"
-                              isDecimal={true}
-                              isOverridden={isPctOver}
-                              onChange={(val) => handleCellEdit(`${prefix}_${concept.pctKey}`, val)}
-                              className="text-center"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <EditableCell
-                              value={liq[concept.valKey]}
-                              type="number"
-                              isCurrency={true}
-                              isOverridden={isValOver}
-                              onChange={(val) => handleCellEdit(`${prefix}_${concept.valKey}`, val)}
-                              className="text-right"
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
-
-                    {/* Total row (Fila 36) */}
-                    <tr className="bg-slate-900 text-white font-black text-xs">
-                      <td className="px-4 py-3 text-slate-300 font-bold uppercase tracking-wider">TOTAL (Fila 36)</td>
-                      <td className="px-4 py-3 text-center font-extrabold text-white">
-                        {selectedWorkerData.liquidation.total_extra_hrs.toFixed(2)}h
-                      </td>
-                      <td className="px-4 py-3 text-center text-slate-400">-</td>
-                      <td className="px-4 py-3 text-right font-black text-yellow-400 text-sm">
-                        ${fmtCOP(selectedWorkerData.liquidation.total_extra_val)}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Sidebar metadata card */}
-            <div className="space-y-6">
-              <div className="stitch-card bg-slate-955 text-white p-6 space-y-6 rounded-3xl">
-                <div>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-blue-400 block">Resumen de Liquidación</span>
-                  <h3 className="text-lg font-black text-white mt-1 uppercase leading-none">{selectedWorkerName}</h3>
-                  <p className="text-[9px] text-slate-400 font-bold tracking-wider uppercase mt-1.5">{selectedWorkerData.masterRow.cargo}</p>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-400">Salario Básico Mensual:</span>
-                    <span className="font-bold text-white">${fmtCOP(selectedWorkerData.liquidation.salario_base)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-400">Tarifa Ordinaria Hora:</span>
-                    <span className="font-bold text-white">${fmtCOP(selectedWorkerData.liquidation.salario_base / 240)} COP</span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-400">Recargo Nocturno (0.35x):</span>
-                    <span className="font-bold text-indigo-400">${fmtCOP((selectedWorkerData.liquidation.salario_base / 240) * 0.35)} COP</span>
-                  </div>
-                </div>
-
-                {/* Turnos Autorizados por Perfil */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 block mb-1">Turnos Autorizados (Perfil)</span>
-                  <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
-                    {(PERFILES_TURNOS[getProfileForCategory(selectedWorkerData.masterRow.categoria)]?.turnosValidos || []).map(t => (
-                      <div key={t.id} className="flex justify-between items-center text-[10px] font-bold border-b border-slate-800/60 pb-1">
-                        <span className="text-white shrink-0 bg-slate-800 px-1.5 py-0.5 rounded font-mono">{t.id}</span>
-                        <span className="text-slate-300 text-right truncate ml-2 text-[10px]" title={t.nombre}>{t.nombre}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Novelties output box (Row 44) */}
-                <div className="space-y-2">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Novedades Reportadas (A44)</span>
-                  <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 font-mono text-[11px] text-slate-200">
-                    Novedades: <span className="text-emerald-400 font-bold">"{selectedWorkerData.liquidation.novedadesStr}"</span>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-slate-800 flex items-start gap-3">
-                  <AlertCircle size={16} className="text-emerald-400 shrink-0 mt-0.5" />
-                  <p className="text-[10px] text-slate-400 leading-relaxed">
-                    Las horas acumuladas en este desglose individual se transfieren automáticamente a las columnas **H, I, J, K, L** de la planilla general de Nómina para el recálculo total.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-        </div>
+          );
+        }()
       )}
 
       {/* --- TAB 3: COLILLAS DE PAGO --- */}
       {activeTab === "colilla" && (
         <div className="space-y-6 animate-stitch">
-          
-          {/* Print controls */}
-          <section className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/60 shadow-md">
-            <div className="flex items-center gap-3">
-              <FileText className="text-emerald-600" />
-              <div>
-                <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider">Desprendibles de Pago (Colillas)</h4>
-                <p className="text-slate-500 text-xs font-semibold">Generación de desprendibles listos para imprimir o exportar digitalmente.</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-black text-slate-400 uppercase tracking-wider">Seleccionar Operario:</span>
-              <select
-                value={selectedWorkerName}
-                onChange={(e) => setSelectedWorkerName(e.target.value)}
-                className="bg-slate-50 border border-slate-200 text-sm font-black text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-slate-950 outline-none cursor-pointer animate-stitch text-slate-900"
-              >
-                {nominaRows.map(member => (
-                  <option key={member.nombre} value={member.nombre}>
-                    {member.nombre}
-                  </option>
-                ))}
-              </select>
-              <button 
-                onClick={() => window.print()}
-                className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-emerald-600 text-white rounded-xl text-xs font-black transition-all shadow-md active:scale-95"
-              >
-                <Printer size={14} />
-                Imprimir Colilla
-              </button>
-            </div>
-          </section>
+           <section className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/60 shadow-md">
+             <div className="flex items-center gap-3">
+               <div className="w-10 h-10 bg-emerald-100 text-emerald-600 flex items-center justify-center rounded-xl">
+                 🖨️
+               </div>
+               <div>
+                 <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider">Desprendibles de Pago (Colillas)</h4>
+                 <p className="text-slate-500 text-xs font-semibold">Generación de desprendibles listos para imprimir o exportar digitalmente.</p>
+               </div>
+             </div>
+             <div className="flex items-center gap-3">
+               <span className="text-xs font-black text-slate-400 uppercase tracking-wider">Seleccionar Operario:</span>
+               <select
+                 value={selectedWorkerName}
+                 onChange={(e) => setSelectedWorkerName(e.target.value)}
+                 className="bg-slate-50 border border-slate-200 text-sm font-black text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
+               >
+                 {nominaRows.map(member => (
+                   <option key={member.nombre} value={member.nombre}>
+                     {member.nombre}
+                   </option>
+                 ))}
+               </select>
+               <button 
+                 onClick={() => window.print()}
+                 className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-emerald-600 text-white rounded-xl text-xs font-black transition-all shadow-md active:scale-95"
+               >
+                 Imprimir Colilla
+               </button>
+             </div>
+           </section>
 
-          {/* Colilla (Voucher Design) */}
-          <div className="max-w-2xl mx-auto bg-white p-10 rounded-[2.5rem] border border-slate-200/60 shadow-xl space-y-8 print:p-0 print:border-none print:shadow-none" id="printable-colilla">
+           {/* Colilla Form */}
+           {function() {
+              const selectedWorkerData = filteredPayrollData.find(d => d.masterRow.nombre === selectedWorkerName) || filteredPayrollData[0];
+              if (!selectedWorkerData) return null;
+              return (
+<div className="max-w-2xl mx-auto bg-white p-10 rounded-[2.5rem] border border-slate-200/60 shadow-xl space-y-8 print:p-0 print:border-none print:shadow-none" id="printable-colilla">
             {/* Header info */}
             <div className="flex justify-between items-start pb-6 border-b border-slate-200/60">
               <div className="space-y-1">
@@ -2602,12 +2421,18 @@ export default function NominaPage() {
               </div>
             </div>
 
-          </div>
+            </div>
+
+              );
+           }()}
         </div>
       )}
 
+      </>
+    )}
+
       {/* Info Alert footer bar */}
-      <div className="p-6 bg-slate-100 rounded-[1.5rem] border border-slate-200/60 flex items-start gap-4 shadow-sm">
+      <div className="p-6 bg-slate-100 rounded-[1.5rem] border border-slate-200/60 flex items-start gap-4 shadow-sm mt-6">
         <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center text-white shrink-0 shadow-inner">
           <Info size={20} className="text-yellow-400" />
         </div>
@@ -2618,17 +2443,6 @@ export default function NominaPage() {
           </p>
         </div>
       </div>
-
-      {/* Toast popup notifications */}
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-slate-900/95 backdrop-blur-md text-white px-5 py-4 rounded-2xl shadow-xl border border-white/10 animate-slide-in text-xs font-semibold max-w-sm">
-          <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${toast.type === "success" ? "bg-emerald-400" : "bg-red-400"}`} />
-          <span className="flex-1">{toast.message}</span>
-          <button onClick={() => setToast(null)} className="ml-2 text-slate-400 hover:text-white transition-colors">
-            <X size={14} />
-          </button>
-        </div>
-      )}
 
     </div>
   );
