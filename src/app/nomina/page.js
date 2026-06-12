@@ -1,4 +1,7 @@
 "use client";
+import EditableCell from "@/components/Nomina/EditableCell";
+import NominaSummaryCards from "@/components/Nomina/NominaSummaryCards";
+import ColumnVisibilityToggle from "@/components/Nomina/ColumnVisibilityToggle";
 
 import { 
   Coins, 
@@ -30,829 +33,17 @@ import { useState, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { MOCK_NOMINA_ROWS, MOCK_ATTENDANCE_MAP, MOCK_RATES_MAP } from "./excel_data";
 
-// --- Time & Conversion Helpers ---
-const timeStrToDecimal = (t) => {
-  if (t === null || t === undefined || t === "") return 0;
-  if (typeof t === "number") return isNaN(t) ? 0 : t;
-  const s = String(t).trim();
-  const parts = s.split(":");
-  if (parts.length < 2) {
-    const val = parseFloat(s);
-    return isNaN(val) ? 0 : val;
-  }
-  const h = parseInt(parts[0], 10) || 0;
-  const m = parseInt(parts[1], 10) || 0;
-  return h + m / 60;
-};
 
-const decimalToTimeStr = (dec) => {
-  if (dec === null || dec === undefined || isNaN(dec)) return "00:00";
-  let val = parseFloat(dec);
-  if (isNaN(val)) return "00:00";
-  if (val < 0) val += 24;
-  if (val >= 24) val %= 24;
-  const h = Math.floor(val);
-  const m = Math.round((val - h) * 60);
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-};
-
-const diffTimeStr = (t1, t2) => {
-  if (!t1 || !t2) return "00:00";
-  const dec1 = timeStrToDecimal(t1);
-  const dec2 = timeStrToDecimal(t2);
-  let diff = dec2 - dec1;
-  if (diff < 0) diff += 24; // Rollover overnight
-  return decimalToTimeStr(diff);
-};
-
-const getDecimalHours = (t1, t2) => {
-  if (!t1 || !t2) return 0;
-  const dec1 = timeStrToDecimal(t1);
-  const dec2 = timeStrToDecimal(t2);
-  if (isNaN(dec1) || isNaN(dec2)) return 0;
-  let diff = dec2 - dec1;
-  if (diff < 0) diff += 24; // Rollover overnight
-  return Number(diff.toFixed(4));
-};
-
-const getHourDist = (h1, h2) => {
-  let d = Math.abs(h1 - h2);
-  if (d > 12) d = 24 - d;
-  return d;
-};
-
-/**
- * Format a number as Colombian currency (COP) using dots as thousand separators.
- * This is locale-independent so it produces identical output on the Node.js SSR
- * server and the browser, preventing React hydration mismatches.
- */
-const fmtCOP = (n) => {
-  if (n === null || n === undefined || isNaN(n)) return "-";
-  const rounded = Math.round(Number(n));
-  return rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-};
-
-/**
- * Format a decimal number with 1-2 decimal places, using dot-separated thousands
- * and comma as decimal separator (Colombian style), without relying on locale.
- */
-const fmtDec = (n, min = 1, max = 2) => {
-  if (n === null || n === undefined || isNaN(n)) return "-";
-  const val = Number(n);
-  const fixed = val.toFixed(max);
-  // Remove trailing zeros up to min decimal places
-  const parts = fixed.split(".");
-  let dec = parts[1] || "0";
-  while (dec.length > min && dec.endsWith("0")) dec = dec.slice(0, -1);
-  const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  return `${intPart},${dec}`;
-};
-
-// --- Config Parameters ---
-const PERFILES_TURNOS = {
-  INYECCION_MONITORES_MONTADORES: {
-    id: "INYECCION",
-    descripcion: "Operarios de Inyección, Monitores y Montadores",
-    turnosValidos: [
-      { id: "M8", nombre: "Mañana (06:00 - 14:00)", inicio: "06:00", fin: "14:00", descansos: 1 },
-      { id: "T8", nombre: "Tarde (14:00 - 22:00)", inicio: "14:00", fin: "22:00", descansos: 1 },
-      { id: "N8", nombre: "Noche (22:00 - 06:00)", inicio: "22:00", fin: "06:00", descansos: 1 },
-      { id: "M12", nombre: "12H Mañana (06:00 - 18:00)", inicio: "06:00", fin: "18:00", descansos: 2 },
-      { id: "N12", nombre: "12H Noche (18:00 - 06:00)", inicio: "18:00", fin: "06:00", descansos: 2 }
-    ]
-  },
-  TALLER_Y_OTROS: {
-    id: "TALLER",
-    descripcion: "Personal de Taller, Administrativos Técnicos y Otros",
-    turnosValidos: [
-      { id: "TAL_NORM", nombre: "Taller Normal (07:30 - 17:00)", inicio: "07:30", fin: "17:00", descansos: 2 },
-      { id: "TAL_CORT", nombre: "Taller Corto (07:30 - 16:00)", inicio: "07:30", fin: "16:00", descansos: 2 },
-      { id: "TAL_FLEX1", nombre: "Taller Flex A (06:00 - 17:00)", inicio: "06:00", fin: "17:00", descansos: 2 },
-      { id: "TAL_FLEX2", nombre: "Taller Flex B (06:30 - 16:00)", inicio: "06:30", fin: "16:00", descansos: 2 },
-      { id: "M8", nombre: "Mañana (06:00 - 14:00)", inicio: "06:00", fin: "14:00", descansos: 1 },
-      { id: "T8", nombre: "Tarde (14:00 - 22:00)", inicio: "14:00", fin: "22:00", descansos: 1 },
-      { id: "N8", nombre: "Noche (22:00 - 06:00)", inicio: "22:00", fin: "06:00", descansos: 1 },
-      { id: "M12", nombre: "12H Mañana (06:00 - 18:00)", inicio: "06:00", fin: "18:00", descansos: 2 },
-      { id: "N12", nombre: "12H Noche (18:00 - 06:00)", inicio: "18:00", fin: "06:00", descansos: 2 }
-    ]
-  }
-};
-
-const getDefaultCategoryForCargo = (cargo) => {
-  const c = String(cargo || "").toUpperCase().trim();
-  if (
-    c.includes("INYECCIÓN") || 
-    c.includes("INYECCION") || 
-    c.includes("MONTADOR") || 
-    c.includes("MONITOR")
-  ) {
-    return "INYECCIÓN";
-  }
-  if (
-    c.includes("TALLER") || 
-    c.includes("MECÁNICO") || 
-    c.includes("MECANICO") || 
-    c.includes("CNC") || 
-    c.includes("TORNO") || 
-    c.includes("PROGRAMADOR")
-  ) {
-    return "TALLER";
-  }
-  if (c.includes("NUEVO")) {
-    return "NUEVOS";
-  }
-  return "OTROS";
-};
-
-const getProfileForCategory = (category) => {
-  const cat = String(category || "").toUpperCase().trim();
-  if (cat === "INYECCIÓN" || cat === "INYECCION" || cat === "NUEVOS") {
-    return "INYECCION_MONITORES_MONTADORES";
-  }
-  return "TALLER_Y_OTROS";
-};
-
-const getTemplatesForCategory = (category) => {
-  const profileKey = getProfileForCategory(category);
-  const profile = PERFILES_TURNOS[profileKey] || PERFILES_TURNOS.TALLER_Y_OTROS;
-  return profile.turnosValidos.map(t => {
-    const entPago = timeStrToDecimal(t.inicio);
-    const salPago = timeStrToDecimal(t.fin);
-    const overnight = salPago < entPago;
-    const expectedHours = getDecimalHours(t.inicio, t.fin);
-    return {
-      key: t.id,
-      entPago,
-      salPago,
-      expectedHours,
-      overnight,
-      breaks: t.descansos
-    };
-  });
-};
-
-const detectShiftTemplate = (hrEnt, hrSal, durationHrs, category = "OTROS") => {
-  const ent = timeStrToDecimal(hrEnt);
-  let sal = timeStrToDecimal(hrSal);
-  const overnight = sal < ent;
-  if (overnight) sal += 24;
-
-  const shiftsToSearch = getTemplatesForCategory(category);
-
-  let best = shiftsToSearch[0];
-  let bestScore = Infinity;
-
-  for (const t of shiftsToSearch) {
-    const tplSal = t.overnight ? t.salPago + 24 : t.salPago;
-    let score = Math.abs(ent - t.entPago) * 2 + Math.abs(sal - tplSal) * 2;
-    score += Math.abs(durationHrs - t.expectedHours) * 3;
-    if (score < bestScore) {
-      bestScore = score;
-      best = t;
-    }
-  }
-  return best;
-};
-
-const NOMINA_DATE_RANGE_KEY = "nomina_date_range_v1";
-
-const loadPersistedDateRange = () => {
-  if (typeof window === "undefined") {
-    return { start: "2026-04-25", end: "2026-05-15" };
-  }
-  try {
-    const raw = localStorage.getItem(NOMINA_DATE_RANGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed?.start && parsed?.end) return parsed;
-    }
-  } catch {
-    /* ignore */
-  }
-  return { start: "2026-04-25", end: "2026-05-15" };
-};
-
-const emptyAttendanceDay = (dateStr) => ({
-  dia: dateStr,
-  hr_ent: "",
-  hr_sal: "",
-  hr_ent_desc1: "",
-  hr_sal_desc1: "",
-  total_desc1: "00:00",
-  hr_ent_desc2: "",
-  hr_sal_desc2: "",
-  total_desc2: "00:00",
-  hr_ent_pago: "",
-  hr_sal_pago: "",
-  hr_lab: 0,
-  desc_lunch: 0,
-  hr_pag: 0,
-  diurnas: 0,
-  nocturnas: 0,
-  fes_diu: 0,
-  fes_noc: 0,
-  ext_diu: 0,
-  ext_noc: 0,
-  ext_fes_diu: 0,
-  ext_fes_noc: 0,
-  llegada_tarde: 0,
-  llegada_tarde_min: 0,
-});
-
-const isEmployeeHeaderRow = (firstCell) => {
-  const s = String(firstCell || "").trim();
-
-  const handleExportBackup = () => {
-    const backupData = {
-      nominaRows,
-      attendanceLogs,
-      overrides,
-      startDate,
-      endDate,
-      timestamp: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    setToast({ message: "Backup exportado exitosamente.", type: "success" });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  const handleImportBackup = (e) => {
-    const file = e.target?.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-         const data = JSON.parse(event.target.result);
-         if (data.nominaRows) setNominaRows(data.nominaRows);
-         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
-         if (data.overrides) setOverrides(data.overrides);
-         if (data.startDate) setStartDate(data.startDate);
-         if (data.endDate) setEndDate(data.endDate);
-         
-         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
-      } catch (error) {
-         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
-      }
-      setTimeout(() => setToast(null), 4000);
-    };
-    reader.readAsText(file);
-    if (e.target) e.target.value = '';
-  };
-
-  return (
-    s.startsWith("Employee:") ||
-    /^Employee\s*ID:/i.test(s) ||
-    /Nombres:/i.test(s)
-  );
-};
-
-const parseEmployeeNameFromHeader = (firstCell) => {
-  const s = String(firstCell || "").trim();
-  if (!s) return null;
-
-  const nombresMatch = s.match(/Nombres:\s*([^,]+)/i);
-  if (nombresMatch) return nombresMatch[1].trim().toUpperCase();
-
-  if (s.startsWith("Employee:")) {
-    const nameMatch = s.match(/First Name:\s*\[([^\]]+)\]/);
-    const lastNameMatch = s.match(/Last Name:\s*\[([^\]]+)\]/);
-    let empName = "";
-    if (nameMatch) empName += nameMatch[1];
-    if (lastNameMatch && lastNameMatch[1]) empName += " " + lastNameMatch[1];
-    return empName.trim().toUpperCase() || null;
-  }
-
-  return null;
-};
-
-const parseMarcacionDate = (val) => {
-  if (val == null || val === "") return null;
-  if (val instanceof Date && !isNaN(val.getTime())) {
-    const y = val.getFullYear();
-    const m = String(val.getMonth() + 1).padStart(2, "0");
-    const d = String(val.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }
-  if (typeof val === "number") {
-    const epoch = new Date(Date.UTC(1899, 11, 30));
-    const dt = new Date(epoch.getTime() + val * 86400000);
-    if (!isNaN(dt.getTime())) {
-      return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
-    }
-  }
-  const s = String(val).trim();
-  const iso = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
-  if (iso) {
-    return `${iso[1]}-${String(iso[2]).padStart(2, '0')}-${String(iso[3]).padStart(2, '0')}`;
-  }
-  const m2 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-  if (m2) {
-    let p1 = parseInt(m2[1], 10);
-    let p2 = parseInt(m2[2], 10);
-    let d, m;
-    if (p1 > 12) {
-      d = p1; m = p2;
-    } else if (p2 > 12) {
-      m = p1; d = p2;
-    } else {
-      // Default to DD/MM/YYYY for Colombia if ambiguous
-      d = p1; m = p2;
-    }
-    return `${m2[3]}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-  }
-  return null;
-};
-
-const parseMarcacionTime = (val) => {
-  if (val == null || val === "") return null;
-  if (val instanceof Date && !isNaN(val.getTime())) {
-    return `${String(val.getHours()).padStart(2, "0")}:${String(val.getMinutes()).padStart(2, "0")}`;
-  }
-  if (typeof val === "number") {
-    const totalMin = Math.round(val * 24 * 60);
-    const h = Math.floor(totalMin / 60) % 24;
-    const m = totalMin % 60;
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-  }
-  const s = String(val).trim();
-  const m = s.match(/^(\d{1,2}):(\d{2})/);
-  if (m) return `${String(parseInt(m[1], 10)).padStart(2, "0")}:${m[2]}`;
-  return null;
-};
-
-// --- Biometric Cleaning Algorithm ---
-const cleanWorkerPunches = (punches, startDate, endDate) => {
-  // 1. Matriz Fija de la Quincena Inmutable
-  const getDatesInRange = (start, end) => {
-    const dates = [];
-    try {
-      const [sy, sm, sd] = start.split("-").map(Number);
-      const [ey, em, ed] = end.split("-").map(Number);
-      let curr = new Date(sy, sm - 1, sd);
-      const stop = new Date(ey, em - 1, ed);
-      if (isNaN(curr.getTime()) || isNaN(stop.getTime())) return [];
-      let limit = 0;
-      while (curr <= stop && limit < 90) {
-        const ny = curr.getFullYear();
-        const nm = String(curr.getMonth() + 1).padStart(2, "0");
-        const nd = String(curr.getDate()).padStart(2, "0");
-        dates.push(`${ny}-${nm}-${nd}`);
-        curr.setDate(curr.getDate() + 1);
-        limit++;
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    return dates;
-  };
-
-  const dates = getDatesInRange(startDate, endDate);
-  const attendanceRows = {};
-  dates.forEach(dateStr => {
-    attendanceRows[dateStr] = {
-      dia: dateStr,
-      hr_ent: null,
-      hr_sal_desc1: null,
-      hr_ent_desc1: null,
-      hr_sal: null,
-    };
-  });
-
-  if (!punches || punches.length === 0) return attendanceRows;
-
-  // 1.5. Filtrado Estricto por Rango de Fechas
-  const [startYear, startMonth, startDay] = startDate.split("-").map(Number);
-  const [endYear, endMonth, endDay] = endDate.split("-").map(Number);
-  const startMs = new Date(startYear, startMonth - 1, startDay, 0, 0, 0).getTime();
-  const endMs = new Date(endYear, endMonth - 1, endDay, 23, 59, 59).getTime();
-  const contextStartMs = startMs - (24 * 3600000); // 24 horas de contexto previo
-
-  // 2. Ordenamiento Cronológico Absoluto y Filtrado de Fechas
-  const punchesWithTime = punches.map(p => {
-    const [y, m, d] = p.fecha.split("-").map(Number);
-    const [hh, mm] = p.hora.split(":").map(Number);
-    const realTimeMs = new Date(y, m - 1, d, hh, mm).getTime();
-    return { ...p, realTimeMs };
-  }).filter(p => p.realTimeMs >= contextStartMs && p.realTimeMs <= endMs)
-  .sort((a, b) => a.realTimeMs - b.realTimeMs);
-
-  // 3. De-duplicación por proximidad (5 minutos)
-  const filteredPunches = [];
-  for (let i = 0; i < punchesWithTime.length; i++) {
-    const p = punchesWithTime[i];
-    if (filteredPunches.length === 0) {
-      filteredPunches.push(p);
-    } else {
-      const last = filteredPunches[filteredPunches.length - 1];
-      const diffMin = (p.realTimeMs - last.realTimeMs) / 60000;
-      if (diffMin >= 5) {
-        filteredPunches.push(p);
-      }
-    }
-  }
-
-  // 4. Regla Siderúrgica del Cruce de Medianoche (Fecha Efectiva)
-  // Evaluamos de manera iterativa para construir el contexto
-  const punchesByDate = {};
-  
-  for (let i = 0; i < filteredPunches.length; i++) {
-    const p = filteredPunches[i];
-    let effectiveDate = p.fecha;
-    
-    if (p.hora >= "00:00" && p.hora <= "07:00") {
-      let isNightShiftExit = true; 
-
-      // 1. Detección Inteligente por Look-ahead (Para salidas huérfanas)
-      // Buscamos la siguiente marca de este MISMO día calendario.
-      let nextP = null;
-      for (let j = i + 1; j < filteredPunches.length; j++) {
-        if (filteredPunches[j].fecha === p.fecha) {
-          nextP = filteredPunches[j];
-          break;
-        }
-      }
-
-      let lookaheadDetermined = false;
-      if (nextP && nextP.hora >= "15:00") {
-        const gapToNext = (nextP.realTimeMs - p.realTimeMs) / 3600000;
-        if (gapToNext >= 13) {
-          // Es 100% una marca de salida del turno de la noche anterior.
-          isNightShiftExit = true;
-          lookaheadDetermined = true;
-        }
-      }
-
-      // 2. Lógica de Máquina de Estados (Si no fue determinado por Look-ahead)
-      if (!lookaheadDetermined) {
-        if (i > 0) {
-          const prev = filteredPunches[i - 1];
-          const diffHours = (p.realTimeMs - prev.realTimeMs) / 3600000;
-          
-          const prevEffectiveDate = prev.effectiveDate || prev.fecha;
-          const punchesInPrevDay = punchesByDate[prevEffectiveDate] || [];
-          const firstPunchOfPrevDay = punchesInPrevDay.length > 0 ? punchesInPrevDay[0].hora : prev.hora;
-
-          if (firstPunchOfPrevDay && firstPunchOfPrevDay < "16:00") {
-            if (p.hora >= "04:00") {
-              isNightShiftExit = false;
-            } else if (diffHours > 8) {
-              isNightShiftExit = false;
-            }
-          } else {
-            if (diffHours > 14) {
-              isNightShiftExit = false;
-            }
-          }
-        } else {
-          if (p.hora >= "04:00") {
-            isNightShiftExit = false;
-          }
-        }
-      }
-
-      if (isNightShiftExit) {
-        const [y, m, d] = p.fecha.split("-").map(Number);
-        const dateObj = new Date(y, m - 1, d);
-        dateObj.setDate(dateObj.getDate() - 1);
-        const ny = dateObj.getFullYear();
-        const nm = String(dateObj.getMonth() + 1).padStart(2, "0");
-        const nd = String(dateObj.getDate()).padStart(2, "0");
-        effectiveDate = `${ny}-${nm}-${nd}`;
-      }
-    }
-    
-    p.effectiveDate = effectiveDate; // Store it for context
-    if (!punchesByDate[effectiveDate]) {
-      punchesByDate[effectiveDate] = [];
-    }
-    punchesByDate[effectiveDate].push(p);
-  }
-
-  // 5. Asignación Matricial Inteligente
-  Object.keys(punchesByDate).forEach(dateStr => {
-    // Solo asignamos a días dentro de nuestro rango
-    if (!attendanceRows[dateStr]) return;
-
-    const dayPunches = punchesByDate[dateStr].sort((a, b) => a.realTimeMs - b.realTimeMs);
-    if (dayPunches.length === 0) return;
-
-    let hr_ent = "";
-    let hr_sal_desc1 = "";
-    let hr_ent_desc1 = "";
-    let hr_sal_desc2 = "";
-    let hr_ent_desc2 = "";
-    let hr_sal = "";
-
-    const n = dayPunches.length;
-    if (n === 1) {
-      hr_ent = dayPunches[0].hora;
-    } else if (n === 2) {
-      hr_ent = dayPunches[0].hora;
-      hr_sal = dayPunches[1].hora;
-    } else {
-      hr_ent = dayPunches[0].hora;
-      hr_sal = dayPunches[n - 1].hora;
-      
-      const middle = dayPunches.slice(1, -1);
-      
-      if (middle.length === 1) {
-        // Una marca huérfana en medio del turno (asumimos que salió a descansar y olvidó marcar regreso)
-        hr_sal_desc1 = middle[0].hora;
-      } else if (middle.length === 2) {
-        // Dos marcas intermedias, evaluar si son un descanso válido (menos de 90 mins)
-        const gapMins = (middle[1].realTimeMs - middle[0].realTimeMs) / 60000;
-        if (gapMins <= 90) {
-          // La primera marca es la salida a descanso (Descanso Sal), la segunda es el regreso (Descanso Ent)
-          hr_sal_desc1 = middle[0].hora;
-          hr_ent_desc1 = middle[1].hora;
-        } else {
-          // Brecha muy grande, se asumen dos salidas a descansos distintos
-          hr_sal_desc1 = middle[0].hora;
-          hr_sal_desc2 = middle[1].hora;
-        }
-      } else if (middle.length === 3) {
-        // Tres marcas intermedias, buscar cuál es el par válido
-        const gap1 = (middle[1].realTimeMs - middle[0].realTimeMs) / 60000;
-        const gap2 = (middle[2].realTimeMs - middle[1].realTimeMs) / 60000;
-        
-        if (gap1 <= 90 && gap1 <= gap2) {
-          hr_sal_desc1 = middle[0].hora;
-          hr_ent_desc1 = middle[1].hora;
-          hr_sal_desc2 = middle[2].hora;
-        } else if (gap2 <= 90 && gap2 < gap1) {
-          hr_sal_desc1 = middle[0].hora;
-          hr_sal_desc2 = middle[1].hora;
-          hr_ent_desc2 = middle[2].hora;
-        } else {
-          hr_sal_desc1 = middle[0].hora;
-          hr_sal_desc2 = middle[1].hora;
-        }
-      } else if (middle.length >= 4) {
-        // Cuatro o más marcas intermedias (Turnos 12 horas, asume pares consecutivos)
-        hr_sal_desc1 = middle[0].hora;
-        hr_ent_desc1 = middle[1].hora;
-        hr_sal_desc2 = middle[2].hora;
-        hr_ent_desc2 = middle[3].hora;
-      }
-    }
-
-    attendanceRows[dateStr] = {
-      ...attendanceRows[dateStr],
-      hr_ent,
-      hr_sal_desc1,
-      hr_ent_desc1,
-      hr_sal_desc2,
-      hr_ent_desc2,
-      hr_sal
-    };
-  });
-
-  return attendanceRows;
-};
-
-// --- In-cell editing component with premium layout ---
-function EditableCell({ value, onChange, type = "text", className = "", isCurrency = false, isDecimal = false, isOverridden = false, options = null }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [localVal, setLocalVal] = useState(value);
-
-  useEffect(() => {
-    setLocalVal(value);
-  }, [value]);
-
-  const handleBlur = () => {
-    setIsEditing(false);
-    let parsed = localVal;
-    if (type === "number") {
-      parsed = parseFloat(localVal);
-      if (isNaN(parsed)) parsed = 0;
-    }
-    if (parsed !== value) {
-      onChange(parsed);
-    }
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") {
-      handleBlur();
-    } else if (e.key === "Escape") {
-      setLocalVal(value);
-      setIsEditing(false);
-    }
-  };
-
-  if (isEditing) {
-    if (options && Array.isArray(options)) {
-    
-  const handleExportBackup = () => {
-    const backupData = {
-      nominaRows,
-      attendanceLogs,
-      overrides,
-      startDate,
-      endDate,
-      timestamp: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    setToast({ message: "Backup exportado exitosamente.", type: "success" });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  const handleImportBackup = (e) => {
-    const file = e.target?.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-         const data = JSON.parse(event.target.result);
-         if (data.nominaRows) setNominaRows(data.nominaRows);
-         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
-         if (data.overrides) setOverrides(data.overrides);
-         if (data.startDate) setStartDate(data.startDate);
-         if (data.endDate) setEndDate(data.endDate);
-         
-         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
-      } catch (error) {
-         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
-      }
-      setTimeout(() => setToast(null), 4000);
-    };
-    reader.readAsText(file);
-    if (e.target) e.target.value = '';
-  };
-
-  return (
-        <select
-          value={localVal || ""}
-          onChange={(e) => setLocalVal(e.target.value)}
-          onBlur={handleBlur}
-          onKeyDown={handleKeyDown}
-          autoFocus
-          className="w-full min-w-[85px] bg-slate-900 text-white border-2 border-accent rounded px-1.5 py-0.5 outline-none text-[11px] font-bold"
-        >
-          {options.map((opt) => (
-            <option key={opt} value={opt} className="bg-slate-900 text-white text-[11px]">
-              {opt}
-            </option>
-          ))}
-        </select>
-      );
-    }
-  
-  const handleExportBackup = () => {
-    const backupData = {
-      nominaRows,
-      attendanceLogs,
-      overrides,
-      startDate,
-      endDate,
-      timestamp: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    setToast({ message: "Backup exportado exitosamente.", type: "success" });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  const handleImportBackup = (e) => {
-    const file = e.target?.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-         const data = JSON.parse(event.target.result);
-         if (data.nominaRows) setNominaRows(data.nominaRows);
-         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
-         if (data.overrides) setOverrides(data.overrides);
-         if (data.startDate) setStartDate(data.startDate);
-         if (data.endDate) setEndDate(data.endDate);
-         
-         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
-      } catch (error) {
-         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
-      }
-      setTimeout(() => setToast(null), 4000);
-    };
-    reader.readAsText(file);
-    if (e.target) e.target.value = '';
-  };
-
-  return (
-      <input
-        type={type}
-        step="any"
-        value={localVal === null || localVal === undefined || isNaN(localVal) ? "" : localVal}
-        onChange={(e) => setLocalVal(e.target.value)}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        autoFocus
-        className="w-full min-w-[70px] bg-slate-900 text-white border-2 border-accent rounded px-1.5 py-0.5 outline-none text-[11px] font-bold"
-      />
-    );
-  }
-
-  let displayVal = value;
-  if (typeof value === "number" && !isNaN(value)) {
-    if (isCurrency) {
-      displayVal = `$${fmtCOP(value)}`;
-    } else if (isDecimal) {
-      displayVal = fmtDec(value);
-    }
-  } else if (value === null || value === undefined || (typeof value === "number" && isNaN(value))) {
-    displayVal = "-";
-  }
-
-
-  const handleExportBackup = () => {
-    const backupData = {
-      nominaRows,
-      attendanceLogs,
-      overrides,
-      startDate,
-      endDate,
-      timestamp: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    setToast({ message: "Backup exportado exitosamente.", type: "success" });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  const handleImportBackup = (e) => {
-    const file = e.target?.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-         const data = JSON.parse(event.target.result);
-         if (data.nominaRows) setNominaRows(data.nominaRows);
-         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
-         if (data.overrides) setOverrides(data.overrides);
-         if (data.startDate) setStartDate(data.startDate);
-         if (data.endDate) setEndDate(data.endDate);
-         
-         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
-      } catch (error) {
-         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
-      }
-      setTimeout(() => setToast(null), 4000);
-    };
-    reader.readAsText(file);
-    if (e.target) e.target.value = '';
-  };
-
-  return (
-    <div
-      onClick={() => setIsEditing(true)}
-      className={`cursor-pointer hover:bg-accent/10 min-h-[22px] py-1 px-2 rounded-lg transition-all text-[11px] font-semibold border border-transparent hover:border-accent/40 ${
-        isOverridden ? "bg-amber-500/10 border-amber-500/30 text-amber-800 hover:bg-amber-500/20" : "text-slate-800"
-      } ${className}`}
-    >
-      {displayVal}
-    </div>
-  );
-}
+import { 
+  SMLV, AUX_TRANSPORTE, MINIMO_DIARIO_INCAPACIDAD, 
+  DIVISOR_HORAS_EXTRAS, DIVISOR_RECARGOS_NOCTURNOS, 
+  FACTOR_EXTRA_DIURNA, FACTOR_EXTRA_NOCTURNA, FACTOR_EXTRA_FESTIVA, FACTOR_RECARGO_NOCTURNO,
+  PERFILES_TURNOS, getDefaultCategoryForCargo, getProfileForCategory, getTemplatesForCategory, 
+  NOMINA_DATE_RANGE_KEY, loadPersistedDateRange, PLANILLA_COLUMNS, DAILY_COLUMNS, LIQUIDATION_CONCEPTS 
+} from "@/utils/constants";
+import { timeStrToDecimal, decimalToTimeStr, diffTimeStr, getDecimalHours, getHourDist, fmtCOP, fmtDec } from "@/utils/mathNomina";
+import { savePayrollToCloud, loadPayrollFromCloud } from "@/utils/supabase";
+import { detectShiftTemplate, emptyAttendanceDay, cleanWorkerPunches, parseBiometricExcel } from "@/utils/biometricCore";
 
 // Helper to look up overridden state values
 const resolveValue = (overrides, key, formulaFn) => {
@@ -870,194 +61,9 @@ const resolveValue = (overrides, key, formulaFn) => {
   return computed;
 };
 
-const PLANILLA_COLUMNS = [
-  { key: "consecutivo", label: "Consecutivo", letter: "B", type: "number", center: true, sticky: "left-0", width: "w-16", editable: false },
-  { key: "nombre", label: "Nombre", letter: "C", type: "text", sticky: "left-16", width: "w-60", editable: false },
-  { key: "cedula", label: "Cédula", letter: "D", type: "number", editable: true },
-  { key: "cargo", label: "Cargo", letter: "E", type: "text", editable: true },
-  { key: "categoria", label: "Categoría", letter: "CAT", type: "text", center: true, editable: true, options: ["INYECCIÓN", "TALLER", "OTROS", "NUEVOS"] },
-  { key: "salario", label: "Salario Base", letter: "F", type: "number", isCurrency: true, editable: true },
-  { key: "dias_pagados", label: "Días Pagados", letter: "G", type: "number", center: true, editable: true },
-  
-  { key: "horas_diurnas", label: "Hrs Diurnas (H)", letter: "H", type: "number", isDecimal: true, center: true, bg: "bg-blue-500/5", editable: true },
-  { key: "horas_nocturnas", label: "Hrs Nocturnas (I)", letter: "I", type: "number", isDecimal: true, center: true, bg: "bg-blue-500/5", editable: true },
-  { key: "extras_diurnas", label: "Ext Diurnas (J)", letter: "J", type: "number", isDecimal: true, center: true, bg: "bg-blue-500/5", editable: true },
-  { key: "extras_nocturnas", label: "Ext Nocturnas (K)", letter: "K", type: "number", isDecimal: true, center: true, bg: "bg-blue-500/5", editable: true },
-  { key: "extras_festivas", label: "Ext Festivas (L)", letter: "L", type: "number", isDecimal: true, center: true, bg: "bg-blue-500/5", editable: true },
-  
-  { key: "sueldo", label: "Sueldo (M)", letter: "M", type: "number", isCurrency: true, editable: true },
-  { key: "recargo_nocturno", label: "Recargo Noct (N)", letter: "N", type: "number", isCurrency: true, editable: true },
-  { key: "val_extras_diurnas", label: "Ext Diurnas Vr (O)", letter: "O", type: "number", isCurrency: true, editable: true },
-  { key: "val_extras_nocturnas", label: "Ext Nocturnas Vr (P)", letter: "P", type: "number", isCurrency: true, editable: true },
-  { key: "val_extras_festivas", label: "Ext Festivas Vr (Q)", letter: "Q", type: "number", isCurrency: true, editable: true },
-  { key: "comisiones", label: "Comisiones (R)", letter: "R", type: "number", isCurrency: true, editable: true },
-  { key: "transporte", label: "Aux. Transp (S)", letter: "S", type: "number", isCurrency: true, editable: true },
-  { key: "rodamiento", label: "Rodamiento (T)", letter: "T", type: "number", isCurrency: true, editable: true },
-  { key: "dias_incapacidad", label: "Días Incap (U)", letter: "U", type: "number", center: true, editable: true },
-  { key: "incapacidad", label: "Valor Incap (V)", letter: "V", type: "number", isCurrency: true, editable: true },
-  { key: "total_devengados", label: "Total Devengado (W)", letter: "W", type: "number", isCurrency: true, bg: "bg-emerald-500/5 font-extrabold text-emerald-800", editable: true },
-  
-  { key: "salud", label: "Salud 4% (X)", letter: "X", type: "number", isCurrency: true, textClass: "text-rose-600", editable: true },
-  { key: "pension", label: "Pensión 4% (Y)", letter: "Y", type: "number", isCurrency: true, textClass: "text-rose-600", editable: true },
-  { key: "solidaridad", label: "Solidaridad 1% (Z)", letter: "Z", type: "number", isCurrency: true, editable: true },
-  { key: "prestamos", label: "Préstamos (AA)", letter: "AA", type: "number", isCurrency: true, editable: true },
-  { key: "poliza_bolivar", label: "Póliza Bolívar (AB)", letter: "AB", type: "number", isCurrency: true, editable: true },
-  { key: "poliza_plenitud", label: "Póliza Plenitud (AC)", letter: "AC", type: "number", isCurrency: true, editable: true },
-  { key: "libranza_comfama", label: "Comfama (AD)", letter: "AD", type: "number", isCurrency: true, editable: true },
-  { key: "poliza_sura", label: "Póliza Sura (AE)", letter: "AE", type: "number", isCurrency: true, editable: true },
-  { key: "optica", label: "Óptica (AF)", letter: "AF", type: "number", isCurrency: true, editable: true },
-  { key: "celular", label: "Celular (AG)", letter: "AG", type: "number", isCurrency: true, editable: true },
-  { key: "retencion", label: "Retención (AH)", letter: "AH", type: "number", isCurrency: true, editable: true },
-  { key: "total_deducciones", label: "Total Deducido (AI)", letter: "AI", type: "number", isCurrency: true, bg: "bg-rose-500/5 font-extrabold text-rose-800", editable: true },
-  
-  { key: "total_pagar", label: "Total a Pagar (AJ)", letter: "AJ", type: "number", isCurrency: true, editable: true },
-  { key: "bonificacion", label: "Bonif. No Sal (AK)", letter: "AK", type: "number", isCurrency: true, editable: true },
-  { key: "neto_pagar", label: "Neto a Pagar (AL)", letter: "AL", type: "number", isCurrency: true, bg: "bg-amber-500/10 font-black text-amber-900", editable: true },
-  { key: "saldo_prestamo", label: "Saldo Préstamo (AM)", letter: "AM", type: "number", isCurrency: true, editable: true },
-  { key: "verificacion", label: "Verificación 40% (AN)", letter: "AN", type: "number", isCurrency: true, editable: true },
-  { key: "banco", label: "Entidad Banco (AO)", letter: "AO", type: "text", center: true, editable: true }
-];
-
-const DAILY_COLUMNS = [
-  { key: "dia", label: "Día/Fecha", letter: "A", type: "text", center: true },
-  { key: "hr_ent", label: "Reloj Hr Ent", letter: "B", type: "text", center: true, bg: "bg-blue-500/5" },
-  { key: "hr_sal", label: "Reloj Hr Sal", letter: "C", type: "text", center: true, bg: "bg-blue-500/5" },
-  { key: "hr_ent_desc1", label: "Descanso 1 Ent", letter: "D", type: "text", center: true },
-  { key: "hr_sal_desc1", label: "Descanso 1 Sal", letter: "E", type: "text", center: true },
-  { key: "total_desc1", label: "Desc 1 Total", letter: "F", type: "text", center: true, bg: "bg-slate-500/5" },
-  { key: "hr_ent_desc2", label: "Descanso 2 Ent", letter: "G", type: "text", center: true },
-  { key: "hr_sal_desc2", label: "Descanso 2 Sal", letter: "H", type: "text", center: true },
-  { key: "total_desc2", label: "Desc 2 Total", letter: "I", type: "text", center: true, bg: "bg-slate-500/5" },
-  { key: "hr_ent_pago", label: "Pago Entrada", letter: "J", type: "text", center: true, bg: "bg-indigo-500/5 text-indigo-900" },
-  { key: "hr_sal_pago", label: "Pago Salida", letter: "K", type: "text", center: true, bg: "bg-indigo-500/5 text-indigo-900" },
-  { key: "hr_lab", label: "Hrs Laboradas", letter: "L", type: "number", isDecimal: true, bg: "bg-emerald-500/5 text-emerald-900" },
-  { key: "desc_lunch", label: "Desc. Almuerzo", letter: "M", type: "number", isDecimal: true, center: true },
-  { key: "hr_pag", label: "Hrs Pagadas", letter: "N", type: "number", isDecimal: true, center: true },
-  { key: "diurnas", label: "Ordinarias Diurnas", letter: "O", type: "number", isDecimal: true, center: true, bg: "bg-blue-500/5 text-blue-700" },
-  { key: "nocturnas", label: "Ordinarias Nocturnas", letter: "P", type: "number", isDecimal: true, center: true, bg: "bg-indigo-500/5 text-indigo-700" },
-  { key: "fes_diu", label: "Festiva Diurna", letter: "Q", type: "number", isDecimal: true, center: true, bg: "bg-emerald-500/5 text-emerald-700" },
-  { key: "fes_noc", label: "Festiva Nocturna", letter: "R", type: "number", isDecimal: true, center: true, bg: "bg-purple-500/5 text-purple-700" },
-  { key: "ext_diu", label: "Extras Diurnas", letter: "S", type: "number", isDecimal: true, center: true, bg: "bg-amber-500/5 text-amber-700 font-bold" },
-  { key: "ext_noc", label: "Extra Nocturna", letter: "T", type: "number", isDecimal: true, center: true, bg: "bg-orange-500/5 text-orange-700" },
-  { key: "ext_fes_diu", label: "Extra Fes Diu", letter: "U", type: "number", isDecimal: true, center: true, bg: "bg-red-500/5 text-red-700" },
-  { key: "ext_fes_noc", label: "Extra Fes Noc", letter: "V", type: "number", isDecimal: true, center: true, bg: "bg-rose-500/5 text-rose-700" },
-  { key: "llegada_tarde", label: "Llegada Tarde", letter: "W", type: "number", center: true },
-  { key: "llegada_tarde_min", label: "Llegada Tarde Min", letter: "X", type: "number", center: true }
-];
-
-const LIQUIDATION_CONCEPTS = [
-  { key: "h_diurna", label: "Horas Diurnas Ordinarias", pctKey: "h_diurna_pct", hrKey: "h_diurna_hr", valKey: "h_diurna_val", defaultPct: 0.0, textClass: "text-slate-900" },
-  { key: "h_nocturna", label: "Recargo Nocturno Ordinario", pctKey: "h_nocturna_pct", hrKey: "h_nocturna_hr", valKey: "h_nocturna_val", defaultPct: 0.35, textClass: "text-indigo-900 font-bold" },
-  { key: "h_festiva_diurna", label: "Recargo Festivo Diurno", pctKey: "h_festiva_diurna_pct", hrKey: "h_festiva_diurna_hr", valKey: "h_festiva_diurna_val", defaultPct: 0.75, textClass: "text-emerald-900" },
-  { key: "h_festiva_nocturna", label: "Recargo Festivo Nocturno", pctKey: "h_festiva_nocturna_pct", hrKey: "h_festiva_nocturna_hr", valKey: "h_festiva_nocturna_val", defaultPct: 2.1, textClass: "text-purple-900" },
-  { key: "h_extra_diurna", label: "Horas Extras Diurnas (S24 - Debe B26)", pctKey: "h_extra_diurna_pct", hrKey: "h_extra_diurna_hr", valKey: "h_extra_diurna_val", defaultPct: 1.5, textClass: "text-amber-900 font-bold" },
-  { key: "h_extra_nocturna", label: "Horas Extras Nocturnas", pctKey: "h_extra_nocturna_pct", hrKey: "h_extra_nocturna_hr", valKey: "h_extra_nocturna_val", defaultPct: 1.75, textClass: "text-orange-900" },
-  { key: "h_extra_festiva_diurna", label: "Extras Festivas Diurnas", pctKey: "h_extra_festiva_diurna_pct", hrKey: "h_extra_festiva_diurna_hr", valKey: "h_extra_festiva_diurna_val", defaultPct: 2.0, textClass: "text-red-900" },
-  { key: "h_extra_festiva_nocturna", label: "Extras Festivas Nocturnas", pctKey: "h_extra_festiva_nocturna_pct", hrKey: "h_extra_festiva_nocturna_hr", valKey: "h_extra_festiva_nocturna_val", defaultPct: 2.5, textClass: "text-rose-900" }
-];
-
-
-export async function parseBiometricExcel(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-
-        // Leer como array 2D de strings puros
-        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false });
-
-        const cleanData = [];
-        let currentEmployeeName = "";
-        let currentCedula = "";
-
-        rows.forEach(row => {
-          if (!row || !row.length) return;
-          const col0 = String(row[0] || '').trim();
-
-          // Detección de Fila de Cabecera de Empleado
-          // Ejemplo: "Employee ID: 10,Nombres: ENODIS POLO,Departamento: Departamento"
-          if (col0.startsWith("Employee ID:")) {
-              const idMatch = col0.match(/Employee ID:\s*([^,]+)/i);
-              if (idMatch) currentCedula = idMatch[1].trim();
-              
-              const nameMatch = col0.match(/Nombres:\s*([^,]+)/i);
-              if (nameMatch) currentEmployeeName = nameMatch[1].trim();
-              return;
-          }
-
-          // Detección de Fila de Datos (Normalmente la Fecha esta en la col 3 y Hora en la col 4)
-          const fechaStr = String(row[3] || '').trim();
-          const horaStr = String(row[4] || '').trim();
-
-          // Validación de que sean fecha y hora
-          if ((fechaStr.includes('-') || fechaStr.includes('/')) && horaStr.includes(':')) {
-              let year, month, day;
-              let fStr = fechaStr;
-              
-              if (fStr.includes('/')) {
-                  const parts = fStr.split('/');
-                  day = parts[0].padStart(2, '0');
-                  month = parts[1].padStart(2, '0');
-                  year = parts[2];
-                  if (year.length === 2) year = "20" + year; 
-                  fStr = `${year}-${month}-${day}`;
-              } else if (fStr.includes('-')) {
-                  const parts = fStr.split('-');
-                  if (parts[0].length === 4) {
-                      year = parts[0];
-                      month = parts[1].padStart(2, '0');
-                      day = parts[2].padStart(2, '0');
-                  } else {
-                      day = parts[0].padStart(2, '0');
-                      month = parts[1].padStart(2, '0');
-                      year = parts[2];
-                      if (year.length === 2) year = "20" + year;
-                  }
-                  fStr = `${year}-${month}-${day}`;
-              }
-
-              let hStr = horaStr;
-              let isPM = hStr.toUpperCase().includes('P');
-              hStr = hStr.replace(/[^0-9:]/g, ''); 
-              const timeParts = hStr.split(':');
-              let hours = parseInt(timeParts[0] || '0', 10);
-              let minutes = parseInt(timeParts[1] || '0', 10);
-              if (isPM && hours < 12) hours += 12;
-              if (!isPM && hours === 12) hours = 0; 
-              
-              const hoursStr = String(hours).padStart(2, '0');
-              const minutesStr = String(minutes).padStart(2, '0');
-              hStr = `${hoursStr}:${minutesStr}`;
-
-              const exactTimestamp = new Date(year, parseInt(month) - 1, parseInt(day), hours, minutes).getTime();
-
-              cleanData.push({
-                  cedula: currentCedula,
-                  nombre: currentEmployeeName,
-                  fecha: fStr,
-                  hora: hStr,
-                  timestamp: exactTimestamp
-              });
-          }
-        });
-
-        resolve(cleanData);
-      } catch (error) {
-        reject("Error procesando el archivo Excel: " + error.message);
-      }
-    };
-
-    reader.readAsArrayBuffer(file);
-  });
-}
-
 export default function NominaPage() {
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [isDbLoading, setIsDbLoading] = useState(true);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [detailsWorkerName, setDetailsWorkerName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -1093,26 +99,28 @@ export default function NominaPage() {
   const [endDate, setEndDate] = useState("2026-05-15");
 
   useEffect(() => {
-    // Read persisted range on client side only, after hydration has completed
     const range = loadPersistedDateRange();
     setStartDate(range.start);
     setEndDate(range.end);
 
-    try {
-      const savedRows = localStorage.getItem("optimoldes_nomina_rows_v2");
-      if (savedRows) setNominaRows(JSON.parse(savedRows));
-
-      const savedLogs = localStorage.getItem("optimoldes_attendance_logs_v2");
-      if (savedLogs) setAttendanceLogs(JSON.parse(savedLogs));
-
-      const savedOverrides = localStorage.getItem("optimoldes_overrides_v2");
-      if (savedOverrides) setOverrides(JSON.parse(savedOverrides));
-
-      const savedHidden = localStorage.getItem("optimoldes_hidden_columns_v2");
-      if (savedHidden) setHiddenColumns(JSON.parse(savedHidden));
-    } catch (e) {
-      console.error("Error loading persisted payroll data:", e);
-    }
+    const loadCloudData = async () => {
+      try {
+        const cloudData = await loadPayrollFromCloud();
+        if (cloudData) {
+          if (cloudData.nominaRows) setNominaRows(cloudData.nominaRows);
+          if (cloudData.attendanceLogs) setAttendanceLogs(cloudData.attendanceLogs);
+          if (cloudData.overrides) setOverrides(cloudData.overrides);
+          if (cloudData.hiddenColumns) setHiddenColumns(cloudData.hiddenColumns);
+          if (cloudData.startDate) setStartDate(cloudData.startDate);
+          if (cloudData.endDate) setEndDate(cloudData.endDate);
+        }
+      } catch (e) {
+        console.error("Error loading persisted payroll data from cloud:", e);
+      } finally {
+        setIsDbLoading(false);
+      }
+    };
+    loadCloudData();
   }, []);
 
   useEffect(() => {
@@ -1320,7 +328,7 @@ export default function NominaPage() {
       const h_extra_festiva_diurna_pct = resolveValue(overrides, `${liqPrefix}_h_extra_festiva_diurna_pct`, () => 2.0);
       const h_extra_festiva_nocturna_pct = resolveValue(overrides, `${liqPrefix}_h_extra_festiva_nocturna_pct`, () => 2.5);
 
-      const rateHour = salario_base / 240;
+      const rateHour = salario_base / DIVISOR_HORAS_EXTRAS;
       const h_diurna_val = resolveValue(overrides, `${liqPrefix}_h_diurna_val`, () => rateHour * h_diurna_pct * h_diurna_hr);
       const h_nocturna_val = resolveValue(overrides, `${liqPrefix}_h_nocturna_val`, () => rateHour * h_nocturna_pct * h_nocturna_hr);
       const h_festiva_diurna_val = resolveValue(overrides, `${liqPrefix}_h_festiva_diurna_val`, () => rateHour * h_festiva_diurna_pct * h_festiva_diurna_hr);
@@ -1349,14 +357,14 @@ export default function NominaPage() {
       const extras_festivas = resolveValue(overrides, `${mastPrefix}_extras_festivas`, () => h_extra_festiva_diurna_hr);
 
       const sueldo = resolveValue(overrides, `${mastPrefix}_sueldo`, () => (salario_base / 30) * dias_pagados);
-      const recargo_nocturno = resolveValue(overrides, `${mastPrefix}_recargo_nocturno`, () => ((salario_base / 230) * 0.35) * horas_nocturnas);
-      const val_extras_diurnas = resolveValue(overrides, `${mastPrefix}_val_extras_diurnas`, () => ((salario_base / 240) * 1.25) * extras_diurnas);
-      const val_extras_nocturnas = resolveValue(overrides, `${mastPrefix}_val_extras_nocturnas`, () => ((salario_base / 240) * 1.75) * extras_nocturnas);
-      const val_extras_festivas = resolveValue(overrides, `${mastPrefix}_val_extras_festivas`, () => ((salario_base / 240) * 2.0) * extras_festivas);
+      const recargo_nocturno = resolveValue(overrides, `${mastPrefix}_recargo_nocturno`, () => ((salario_base / DIVISOR_RECARGOS_NOCTURNOS) * FACTOR_RECARGO_NOCTURNO) * horas_nocturnas);
+      const val_extras_diurnas = resolveValue(overrides, `${mastPrefix}_val_extras_diurnas`, () => ((salario_base / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_DIURNA) * extras_diurnas);
+      const val_extras_nocturnas = resolveValue(overrides, `${mastPrefix}_val_extras_nocturnas`, () => ((salario_base / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_NOCTURNA) * extras_nocturnas);
+      const val_extras_festivas = resolveValue(overrides, `${mastPrefix}_val_extras_festivas`, () => ((salario_base / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_FESTIVA) * extras_festivas);
 
       const comisiones = resolveValue(overrides, `${mastPrefix}_comisiones`, () => registryRow.comisiones || 0);
-      const minWage = 1750905;
-      const transportBase = 249095;
+      const minWage = SMLV;
+      const transportBase = AUX_TRANSPORTE;
       const transporte = resolveValue(overrides, `${mastPrefix}_transporte`, () => (salario_base <= 2 * minWage ? (transportBase / 30) * dias_pagados : 0));
       const rodamiento = resolveValue(overrides, `${mastPrefix}_rodamiento`, () => registryRow.rodamiento || 0);
 
@@ -1579,21 +587,19 @@ export default function NominaPage() {
     }
   };
 
-  const handleSaveToLocalStorage = () => {
+  const handleSaveToCloud = async () => {
+    setToast({ message: "Guardando en la nube...", type: "info" });
     try {
-      localStorage.setItem("optimoldes_nomina_rows_v2", JSON.stringify(nominaRows));
-      localStorage.setItem("optimoldes_attendance_logs_v2", JSON.stringify(attendanceLogs));
-      localStorage.setItem("optimoldes_overrides_v2", JSON.stringify(overrides));
-      localStorage.setItem("optimoldes_hidden_columns_v2", JSON.stringify(hiddenColumns));
+      await savePayrollToCloud({ startDate, endDate, nominaRows, attendanceLogs, overrides, hiddenColumns });
       setToast({
-        message: "¡Cambios guardados con éxito en el navegador!",
+        message: "¡Datos guardados y sincronizados en la nube!",
         type: "success"
       });
       setTimeout(() => setToast(null), 3000);
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      console.error("Error saving data:", error);
       setToast({
-        message: "Error al guardar los cambios.",
+        message: "Error al guardar en la nube. Revisa la consola.",
         type: "error"
       });
       setTimeout(() => setToast(null), 3000);
@@ -1823,7 +829,7 @@ export default function NominaPage() {
         </div>
         <div className="flex gap-2 shrink-0 w-full md:w-auto justify-end">
           <button
-            onClick={handleSaveToLocalStorage}
+            onClick={handleSaveToCloud}
             className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-emerald-100 active:scale-95 duration-200"
           >
             <CheckCircle2 size={14} />
@@ -1937,132 +943,18 @@ export default function NominaPage() {
             {/* --- TAB 1: PLANILLA GENERAL GENERAL DE NOMINA --- */}
             <div className="space-y-6 animate-stitch">
           
-          {/* Quick Metrics */}
-          <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="stitch-card p-6 bg-slate-900 text-white relative overflow-hidden group shadow-lg">
-              <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Total Neto a Pagar (AL)</p>
-              <h3 className="text-3xl font-black tracking-tight">${fmtCOP(totals.neto_pagar)}</h3>
-              <p className="text-[9px] font-bold text-yellow-400 mt-3 uppercase tracking-wider">Transferencias quincenales</p>
-            </div>
-            <div className="stitch-card p-6 bg-white/80 border border-white/40 shadow-md">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Devengado (W)</p>
-              <h3 className="text-3xl font-black text-slate-900 tracking-tight">${fmtCOP(totals.total_devengados)}</h3>
-              <p className="text-[9px] font-bold text-emerald-500 mt-3 uppercase tracking-wider">Sueldos, recargos y extras</p>
-            </div>
-            <div className="stitch-card p-6 bg-white/80 border border-white/40 shadow-md">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Deducciones (AI)</p>
-              <h3 className="text-3xl font-black text-slate-900 tracking-tight">${fmtCOP(totals.total_deducciones)}</h3>
-              <p className="text-[9px] font-bold text-rose-500 mt-3 uppercase tracking-wider">Salud, Pensión, Pólizas, Préstamos</p>
-            </div>
-            <div className="stitch-card p-6 bg-white/80 border border-white/40 shadow-md">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Colaboradores Activos</p>
-              <h3 className="text-3xl font-black text-slate-900 tracking-tight">{filteredPayrollData.length} Operarios</h3>
-              <p className="text-[9px] font-bold text-indigo-500 mt-3 uppercase tracking-wider">Filtro de planilla</p>
-            </div>
-          </section>
 
-          {/* Segmentación de Costos por Categoría */}
-          <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {Object.entries(categorySegmentedData).map(([catName, data]) => {
-              let themeClass = "border-blue-200/50 bg-gradient-to-br from-blue-50/30 to-white";
-              let pillClass = "bg-blue-100 text-blue-800";
-              let iconColor = "text-blue-500";
-              if (catName === "INYECCIÓN") {
-                themeClass = "border-cyan-200/50 bg-gradient-to-br from-cyan-50/30 to-white";
-                pillClass = "bg-cyan-100 text-cyan-800";
-                iconColor = "text-cyan-500";
-              } else if (catName === "TALLER") {
-                themeClass = "border-purple-200/50 bg-gradient-to-br from-purple-50/30 to-white";
-                pillClass = "bg-purple-100 text-purple-800";
-                iconColor = "text-purple-500";
-              } else if (catName === "OTROS") {
-                themeClass = "border-slate-200/50 bg-gradient-to-br from-slate-50/30 to-white";
-                pillClass = "bg-slate-100 text-slate-800";
-                iconColor = "text-slate-500";
-              } else if (catName === "NUEVOS") {
-                themeClass = "border-emerald-200/50 bg-gradient-to-br from-emerald-50/30 to-white";
-                pillClass = "bg-emerald-100 text-emerald-800";
-                iconColor = "text-emerald-500";
-              }
+        <NominaSummaryCards 
+          totals={totals} 
+          filteredPayrollData={filteredPayrollData} 
+          categorySegmentedData={categorySegmentedData} 
+        />
 
-            
-  const handleExportBackup = () => {
-    const backupData = {
-      nominaRows,
-      attendanceLogs,
-      overrides,
-      startDate,
-      endDate,
-      timestamp: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    setToast({ message: "Backup exportado exitosamente.", type: "success" });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  const handleImportBackup = (e) => {
-    const file = e.target?.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-         const data = JSON.parse(event.target.result);
-         if (data.nominaRows) setNominaRows(data.nominaRows);
-         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
-         if (data.overrides) setOverrides(data.overrides);
-         if (data.startDate) setStartDate(data.startDate);
-         if (data.endDate) setEndDate(data.endDate);
-         
-         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
-      } catch (error) {
-         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
-      }
-      setTimeout(() => setToast(null), 4000);
-    };
-    reader.readAsText(file);
-    if (e.target) e.target.value = '';
-  };
-
-  return (
-                <div key={catName} className={`stitch-card p-5 border shadow-sm transition-all duration-300 hover:shadow-md ${themeClass}`}>
-                  <div className="flex justify-between items-center mb-3">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${pillClass}`}>
-                      {catName}
-                    </span>
-                    <span className="text-xs font-bold text-slate-400">
-                      {data.count} {data.count === 1 ? 'colaborador' : 'colaboradores'}
-                    </span>
-                  </div>
-                  <div className="space-y-2 mt-2">
-                    <div className="flex justify-between items-baseline">
-                      <span className="text-[10px] text-slate-500 font-bold uppercase">Neto a Pagar:</span>
-                      <span className="text-base font-black text-slate-900">${fmtCOP(data.neto)}</span>
-                    </div>
-                    <div className="flex justify-between items-baseline pt-1 border-t border-slate-100">
-                      <span className="text-[10px] text-slate-500 font-bold uppercase">Costo Recargos/Extras:</span>
-                      <span className={`text-xs font-extrabold ${iconColor}`}>${fmtCOP(data.extras)}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </section>
-
-          {/* Table Filters & Query Inputs */}
-          <section className="flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div className="relative w-full md:w-80">
-              <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          {/* Action Bar */}
+          <section className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-4 md:p-6 mb-8 mt-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="relative w-full md:w-80">
+                <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input 
                 type="text" 
                 placeholder="Buscar por nombre o cédula..." 
@@ -2087,94 +979,17 @@ export default function NominaPage() {
                 </select>
               </div>
 
-              {/* Selector de Columnas (Ocultar/Mostrar) */}
-              <div className="relative w-full md:w-auto">
-                <button
-                  onClick={() => setShowColumnManager(!showColumnManager)}
-                  className="w-full md:w-auto inline-flex items-center justify-center gap-2 bg-white px-4 py-2.5 border border-slate-200 rounded-2xl text-xs font-bold text-slate-700 hover:border-slate-800 transition-all cursor-pointer shadow-sm active:scale-95 duration-150"
-                >
-                  <SlidersHorizontal size={14} className="text-slate-400" />
-                  Columnas ({PLANILLA_COLUMNS.length - Object.values(hiddenColumns).filter(Boolean).length} visibles)
-                </button>
 
-                {showColumnManager && (
-                  <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-2xl shadow-xl p-4 z-40 max-h-[300px] overflow-y-auto space-y-2">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Mostrar / Ocultar Columnas</p>
-                    <div className="grid grid-cols-2 gap-2 text-[11px] font-semibold text-slate-700">
-                      {PLANILLA_COLUMNS.map(col => {
-                        const isProtected = ["consecutivo", "nombre"].includes(col.key);
-                        if (isProtected) return null;
-                        const isHidden = !!hiddenColumns[col.key];
-                      
-  const handleExportBackup = () => {
-    const backupData = {
-      nominaRows,
-      attendanceLogs,
-      overrides,
-      startDate,
-      endDate,
-      timestamp: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    setToast({ message: "Backup exportado exitosamente.", type: "success" });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  const handleImportBackup = (e) => {
-    const file = e.target?.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-         const data = JSON.parse(event.target.result);
-         if (data.nominaRows) setNominaRows(data.nominaRows);
-         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
-         if (data.overrides) setOverrides(data.overrides);
-         if (data.startDate) setStartDate(data.startDate);
-         if (data.endDate) setEndDate(data.endDate);
-         
-         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
-      } catch (error) {
-         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
-      }
-      setTimeout(() => setToast(null), 4000);
-    };
-    reader.readAsText(file);
-    if (e.target) e.target.value = '';
-  };
-
-  return (
-                          <label key={col.key} className="flex items-center gap-2 hover:bg-slate-50 p-1.5 rounded-lg cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={!isHidden}
-                              onChange={() => setHiddenColumns(prev => ({
-                                ...prev,
-                                [col.key]: !prev[col.key]
-                              }))}
-                              className="accent-slate-900 cursor-pointer"
-                            />
-                            <span className="truncate" title={col.label}>{col.label}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
+        <ColumnVisibilityToggle 
+          hiddenColumns={hiddenColumns}
+          setHiddenColumns={setHiddenColumns}
+          showColumnManager={showColumnManager}
+          setShowColumnManager={setShowColumnManager}
+          PLANILLA_COLUMNS={PLANILLA_COLUMNS}
+        />
             </div>
-          </section>
+          </div>
+        </section>
 
 
           {/* Simple Worker List for Dashboard */}
@@ -2183,12 +998,12 @@ export default function NominaPage() {
                <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider">Directorio de Operarios</h4>
                <p className="text-xs font-bold text-slate-500">Selecciona un operario para liquidar</p>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto custom-scrollbar relative rounded-2xl border border-slate-200 bg-white shadow-sm">
                <table className="w-full text-left">
-                  <thead>
+                  <thead className="bg-slate-50/90 backdrop-blur-sm sticky top-0 z-20">
                      <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-200">
-                        <th className="px-6 py-3">Cédula</th>
-                        <th className="px-6 py-3">Nombre Completo</th>
+                        <th className="px-6 py-3 sticky left-0 z-30 bg-slate-50/90 backdrop-blur-sm shadow-[1px_0_0_#e2e8f0]">Cédula</th>
+                        <th className="px-6 py-3 sticky left-[100px] z-30 bg-slate-50/90 backdrop-blur-sm shadow-[1px_0_0_#e2e8f0]">Nombre Completo</th>
                         <th className="px-6 py-3">Cargo</th>
                         <th className="px-6 py-3 text-center">Días Liq.</th>
                         <th className="px-6 py-3 text-right">Neto a Pagar</th>
@@ -2248,9 +1063,9 @@ export default function NominaPage() {
   };
 
   return (
-                           <tr key={row.consecutivo} className="hover:bg-slate-50/50 transition-colors">
-                              <td className="px-6 py-4 text-slate-500">{row.cedula}</td>
-                              <td className="px-6 py-4 text-slate-900">{row.nombre}</td>
+                           <tr key={row.consecutivo} className="group hover:bg-slate-50/50 transition-colors">
+                              <td className="px-6 py-4 text-slate-500 sticky left-0 z-10 bg-white group-hover:bg-slate-50 shadow-[1px_0_0_#e2e8f0]">{row.cedula}</td>
+                              <td className="px-6 py-4 text-slate-900 sticky left-[100px] z-10 bg-white group-hover:bg-slate-50 shadow-[1px_0_0_#e2e8f0]">{row.nombre}</td>
                               <td className="px-6 py-4 text-slate-500 capitalize">{row.cargo.toLowerCase()}</td>
                               <td className="px-6 py-4 text-center text-slate-700">{row.dias_pagados}</td>
                               <td className="px-6 py-4 text-right text-yellow-600 font-black text-sm">${fmtCOP(row.neto_pagar)}</td>
@@ -2470,7 +1285,7 @@ export default function NominaPage() {
                     <div className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm overflow-x-auto">
                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-100 pb-3">Registro Diario (A - X)</h3>
                        <table className="w-full text-left table-auto">
-                          <thead>
+                          <thead className="bg-slate-50/90 backdrop-blur-sm sticky top-0 z-20">
                              <tr className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-200">
                                 <th className="px-2 py-2" title="Día/Fecha">A (Fecha)</th>
                                 <th className="px-2 py-2 text-blue-500" title="Reloj Hr Ent">B (R.Ent)</th>
@@ -2654,7 +1469,7 @@ export default function NominaPage() {
                        </div>
 
                        <table className="w-full text-left table-auto">
-                          <thead>
+                          <thead className="bg-slate-50/90 backdrop-blur-sm sticky top-0 z-20">
                              <tr className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase tracking-wider border-b border-slate-200">
                                 <th className="px-4 py-2">Concepto</th>
                                 <th className="px-4 py-2 text-right">Horas (D)</th>

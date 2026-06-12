@@ -91,3 +91,11 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #cbd5e1;
 }
+
+/* Scrollbar elegante para las tablas de nómina */
+.custom-scrollbar::-webkit-scrollbar { height: 10px; width: 10px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1; border-radius: 20px; border: 2px solid #ffffff;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: #94a3b8; }
