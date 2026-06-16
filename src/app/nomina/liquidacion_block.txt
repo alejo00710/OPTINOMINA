@@ -1,0 +1,346 @@
+      {activeTab === "liquidacion" && (
+        function() {
+          const selectedWorkerData = filteredPayrollData.find(d => d.masterRow.nombre === selectedWorkerName) || filteredPayrollData[0];
+          if (!selectedWorkerData) return (
+            <div className="p-12 text-center text-slate-500 font-bold bg-white rounded-3xl border border-slate-200 shadow-sm animate-stitch">
+              Selecciona un operario desde el Panel General para liquidar.
+            </div>
+          );
+          
+        
+  const handleExportBackup = () => {
+    const backupData = {
+      nominaRows,
+      attendanceLogs,
+      overrides,
+      startDate,
+      endDate,
+      timestamp: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setToast({ message: "Backup exportado exitosamente.", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleImportBackup = (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+         const data = JSON.parse(event.target.result);
+         if (data.nominaRows) setNominaRows(data.nominaRows);
+         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
+         if (data.overrides) setOverrides(data.overrides);
+         if (data.startDate) setStartDate(data.startDate);
+         if (data.endDate) setEndDate(data.endDate);
+         
+         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
+      } catch (error) {
+         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
+      }
+      setTimeout(() => setToast(null), 4000);
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = '';
+  };
+
+  return (
+            <div className="space-y-6 animate-stitch">
+              <div className="flex justify-between items-center bg-slate-900 p-6 rounded-3xl shadow-xl">
+                 <div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Asistencia y Liquidación Individual</span>
+                    <h2 className="text-2xl font-black text-white mt-1">{selectedWorkerData.masterRow.nombre}</h2>
+                    <div className="flex gap-2 text-xs font-bold text-slate-400 mt-1.5">
+                       <span className="bg-slate-800 px-2 py-0.5 rounded text-slate-300">C.C. {selectedWorkerData.masterRow.cedula}</span>
+                       <span className="capitalize">{selectedWorkerData.masterRow.cargo.toLowerCase()}</span>
+                    </div>
+                 </div>
+                 <button onClick={() => setActiveTab("colilla")} className="px-4 py-2 bg-white text-slate-900 hover:bg-emerald-400 hover:text-slate-900 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-colors">
+                   🖨️ Generar Colilla
+                 </button>
+              </div>
+              
+              <div className="space-y-6">
+                 {/* Editable Daily Log and Extas Matrix (Full Width) */}
+                 <div className="space-y-6">
+                    
+                    {/* Time Tracking (Registro Diario FULL A-X) */}
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm overflow-x-auto">
+                       <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-100 pb-3">Registro Diario (A - X)</h3>
+                       <table className="w-full text-left table-auto">
+                          <thead className="bg-slate-50/90 backdrop-blur-sm sticky top-0 z-20">
+                             <tr className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-200">
+                                <th className="px-2 py-2" title="Día/Fecha">A (Fecha)</th>
+                                <th className="px-2 py-2 text-blue-500" title="Reloj Hr Ent">B (R.Ent)</th>
+                                <th className="px-2 py-2 text-blue-500" title="Reloj Hr Sal">C (R.Sal)</th>
+                                <th className="px-2 py-2 text-rose-500" title="Descanso 1 Hr Ent">D (D1.E)</th>
+                                <th className="px-2 py-2 text-emerald-500" title="Descanso 1 Hr Sal">E (D1.S)</th>
+                                <th className="px-2 py-2" title="Descanso 1 Total">F (D1.Tot)</th>
+                                <th className="px-2 py-2 text-rose-500" title="Descanso 2 Hr Ent">G (D2.E)</th>
+                                <th className="px-2 py-2 text-emerald-500" title="Descanso 2 Hr Sal">H (D2.S)</th>
+                                <th className="px-2 py-2" title="Descanso 2 Total">I (D2.Tot)</th>
+                                <th className="px-2 py-2 text-purple-500" title="Pago Entrada">J (P.Ent)</th>
+                                <th className="px-2 py-2 text-purple-500" title="Pago Salida">K (P.Sal)</th>
+                                <th className="px-2 py-2" title="Horas Laboradas">L (H.Lab)</th>
+                                <th className="px-2 py-2" title="Descuento Almuerzo">M (D.Alm)</th>
+                                <th className="px-2 py-2" title="Horas Pagadas">N (H.Pag)</th>
+                                <th className="px-2 py-2 text-right" title="Ordinaria Diurna">O (Ord.D)</th>
+                                <th className="px-2 py-2 text-right" title="Ordinaria Nocturna">P (Ord.N)</th>
+                                <th className="px-2 py-2 text-right" title="Festiva Diurna">Q (Fes.D)</th>
+                                <th className="px-2 py-2 text-right" title="Festiva Nocturna">R (Fes.N)</th>
+                                <th className="px-2 py-2 text-right" title="Extra Diurna">S (Ext.D)</th>
+                                <th className="px-2 py-2 text-right" title="Extra Nocturna">T (Ext.N)</th>
+                                <th className="px-2 py-2 text-right" title="Extra Fest Diur">U (Ex.FD)</th>
+                                <th className="px-2 py-2 text-right" title="Extra Fest Noc">V (Ex.FN)</th>
+                                <th className="px-2 py-2 text-right text-rose-500" title="Llegada Tarde">W (Lleg.T)</th>
+                                <th className="px-2 py-2 text-right text-rose-500" title="Llegada Tarde Min">X (Lleg.Min)</th>
+                             </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-[10px] font-semibold text-slate-700">
+                             {selectedWorkerData.workerDays.map((day) => {
+                                const dateObj = new Date(day.dia + "T00:00:00");
+                                const dayName = dateObj.toLocaleDateString("es-CO", { weekday: "short" });
+                                const displayDate = day.dia;
+                                const prefix = `${selectedWorkerData.masterRow.cedula}_${displayDate}`;
+                              
+  const handleExportBackup = () => {
+    const backupData = {
+      nominaRows,
+      attendanceLogs,
+      overrides,
+      startDate,
+      endDate,
+      timestamp: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setToast({ message: "Backup exportado exitosamente.", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleImportBackup = (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+         const data = JSON.parse(event.target.result);
+         if (data.nominaRows) setNominaRows(data.nominaRows);
+         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
+         if (data.overrides) setOverrides(data.overrides);
+         if (data.startDate) setStartDate(data.startDate);
+         if (data.endDate) setEndDate(data.endDate);
+         
+         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
+      } catch (error) {
+         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
+      }
+      setTimeout(() => setToast(null), 4000);
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = '';
+  };
+
+  return (
+                                   <tr key={displayDate} className="hover:bg-slate-50">
+                                      <td className="px-2 py-2 whitespace-nowrap"><span className="text-slate-400 mr-1">{dayName}</span> {displayDate}</td>
+                                      <td className="px-2 py-2 text-blue-600 font-mono">{day.hr_ent || "-"}</td>
+                                      <td className="px-2 py-2 text-blue-600 font-mono">{day.hr_sal || "-"}</td>
+                                      <td className="px-1 py-1">
+                                         <input type="text" value={overrides[`${prefix}_hr_sal_desc1`] !== undefined ? overrides[`${prefix}_hr_sal_desc1`] : (day.hr_sal_desc1 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_desc1`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1">
+                                         <input type="text" value={overrides[`${prefix}_hr_ent_desc1`] !== undefined ? overrides[`${prefix}_hr_ent_desc1`] : (day.hr_ent_desc1 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_desc1`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-2 py-2 text-center text-slate-400 font-mono">{day.total_desc1 || "-"}</td>
+                                      <td className="px-1 py-1">
+                                         <input type="text" value={overrides[`${prefix}_hr_sal_desc2`] !== undefined ? overrides[`${prefix}_hr_sal_desc2`] : (day.hr_sal_desc2 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_desc2`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1">
+                                         <input type="text" value={overrides[`${prefix}_hr_ent_desc2`] !== undefined ? overrides[`${prefix}_hr_ent_desc2`] : (day.hr_ent_desc2 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_desc2`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-2 py-2 text-center text-slate-400 font-mono">{day.total_desc2 || "-"}</td>
+                                      
+                                      {/* Pago Entrada/Salida */}
+                                      <td className="px-1 py-1">
+                                         <input type="text" value={overrides[`${prefix}_hr_ent_pago`] !== undefined ? overrides[`${prefix}_hr_ent_pago`] : (day.hr_ent_pago || day.hr_ent || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_pago`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none text-purple-600" />
+                                      </td>
+                                      <td className="px-1 py-1">
+                                         <input type="text" value={overrides[`${prefix}_hr_sal_pago`] !== undefined ? overrides[`${prefix}_hr_sal_pago`] : (day.hr_sal_pago || day.hr_sal || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_pago`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none text-purple-600" />
+                                      </td>
+
+                                      <td className="px-2 py-2 text-center text-slate-400">{Number(day.hr_lab || 0).toFixed(2)}</td>
+                                      <td className="px-2 py-2 text-center text-slate-400">{Number(day.desc_lunch || 0).toFixed(2)}</td>
+                                      <td className="px-2 py-2 text-center font-bold text-slate-600">{Number(day.hr_pag || 0).toFixed(2)}</td>
+                                      
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_diurnas`] !== undefined ? overrides[`${prefix}_diurnas`] : Number(day.diurnas || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_diurnas`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_nocturnas`] !== undefined ? overrides[`${prefix}_nocturnas`] : Number(day.nocturnas || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_nocturnas`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_fes_diu`] !== undefined ? overrides[`${prefix}_fes_diu`] : Number(day.fes_diu || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_fes_diu`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_fes_noc`] !== undefined ? overrides[`${prefix}_fes_noc`] : Number(day.fes_noc || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_fes_noc`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_ext_diu`] !== undefined ? overrides[`${prefix}_ext_diu`] : Number(day.ext_diu || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_ext_diu`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_ext_noc`] !== undefined ? overrides[`${prefix}_ext_noc`] : Number(day.ext_noc || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_ext_noc`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_ext_fes_diu`] !== undefined ? overrides[`${prefix}_ext_fes_diu`] : Number(day.ext_fes_diu || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_ext_fes_diu`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_ext_fes_noc`] !== undefined ? overrides[`${prefix}_ext_fes_noc`] : Number(day.ext_fes_noc || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_ext_fes_noc`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_llegada_tarde`] !== undefined ? overrides[`${prefix}_llegada_tarde`] : Number(day.llegada_tarde || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_llegada_tarde`, e.target.value)} className="w-10 bg-rose-50 border border-slate-200 text-right rounded focus:ring-1 outline-none text-rose-700" />
+                                      </td>
+                                      <td className="px-1 py-1 text-right">
+                                         <input type="text" value={overrides[`${prefix}_llegada_tarde_min`] !== undefined ? overrides[`${prefix}_llegada_tarde_min`] : Number(day.llegada_tarde_min || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_llegada_tarde_min`, e.target.value)} className="w-10 bg-rose-50 border border-slate-200 text-right rounded focus:ring-1 outline-none text-rose-700" />
+                                      </td>
+                                   </tr>
+                                )
+                             })}
+                          </tbody>
+                       </table>
+                    </div>
+
+                    {/* Resumen de Horas (Filas 26-38) */}
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm overflow-x-auto">
+                       <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-100 pb-3">Liquidación de Horas (Matriz 26-38)</h3>
+                       
+                       <div className="flex gap-8 mb-6">
+                          <div className="space-y-1">
+                             <label className="text-[10px] font-black text-slate-400 uppercase">Horas que debe (B26)</label>
+                             <input
+                               type="text"
+                               value={overrides[`${selectedWorkerData.masterRow.cedula}_horas_que_debe`] !== undefined ? overrides[`${selectedWorkerData.masterRow.cedula}_horas_que_debe`] : (selectedWorkerData.masterRow.horas_que_debe || 0)}
+                               onChange={(e) => handleCellEdit(`${selectedWorkerData.masterRow.cedula}_horas_que_debe`, e.target.value)}
+                               className="w-32 bg-slate-50 border border-slate-200 text-sm font-bold text-rose-600 rounded-xl px-3 py-2 focus:ring-2 focus:ring-rose-400 outline-none"
+                             />
+                          </div>
+                          <div className="space-y-1">
+                             <label className="text-[10px] font-black text-slate-400 uppercase">Horas Pendientes (F26)</label>
+                             <div className="w-32 bg-slate-100 border border-slate-200 text-sm font-bold text-slate-600 rounded-xl px-3 py-2">
+                               {selectedWorkerData.masterRow.horas_pendientes || 0}
+                             </div>
+                          </div>
+                          <div className="space-y-1">
+                             <label className="text-[10px] font-black text-slate-400 uppercase">Salario Básico (B37)</label>
+                             <input
+                               type="text"
+                               value={overrides[`${selectedWorkerData.masterRow.cedula}_sueldo`] !== undefined ? overrides[`${selectedWorkerData.masterRow.cedula}_sueldo`] : (selectedWorkerData.masterRow.sueldo || 0)}
+                               onChange={(e) => handleCellEdit(`${selectedWorkerData.masterRow.cedula}_sueldo`, e.target.value)}
+                               className="w-40 bg-slate-50 border border-slate-200 text-sm font-bold text-slate-900 rounded-xl px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
+                             />
+                          </div>
+                       </div>
+
+                       <table className="w-full text-left table-auto">
+                          <thead className="bg-slate-50/90 backdrop-blur-sm sticky top-0 z-20">
+                             <tr className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                                <th className="px-4 py-2">Concepto</th>
+                                <th className="px-4 py-2 text-right">Horas (D)</th>
+                                <th className="px-4 py-2 text-right">Factor (E)</th>
+                                <th className="px-4 py-2 text-right">Valor (F)</th>
+                             </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                             <tr>
+                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">28. Diurnas</td>
+                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.horas_diurnas_ordinarias}</td>
+                                <td className="px-4 py-2 text-right">0.0</td>
+                                <td className="px-4 py-2 text-right text-slate-400">N/A</td>
+                             </tr>
+                             <tr>
+                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">29. Nocturnas</td>
+                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.horas_nocturnas_ordinarias}</td>
+                                <td className="px-4 py-2 text-right text-indigo-500">0.35</td>
+                                <td className="px-4 py-2 text-right text-indigo-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.recargo_nocturno)}</td>
+                             </tr>
+                             <tr>
+                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">30. Festiva Diurna</td>
+                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.horas_festivas_diurnas || 0}</td>
+                                <td className="px-4 py-2 text-right text-indigo-500">0.75</td>
+                                <td className="px-4 py-2 text-right text-indigo-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.recargo_festivo_diurno || 0)}</td>
+                             </tr>
+                             <tr>
+                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">31. Festiva Nocturna</td>
+                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.horas_festivas_nocturnas || 0}</td>
+                                <td className="px-4 py-2 text-right text-indigo-500">2.10</td>
+                                <td className="px-4 py-2 text-right text-indigo-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.recargo_festivo_nocturno || 0)}</td>
+                             </tr>
+                             <tr>
+                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">32. Extra Diurna</td>
+                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.extras_diurnas_horas}</td>
+                                <td className="px-4 py-2 text-right text-emerald-500">1.25</td>
+                                <td className="px-4 py-2 text-right text-emerald-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.val_extras_diurnas)}</td>
+                             </tr>
+                             <tr>
+                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">33. Extra Nocturna</td>
+                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.extras_nocturnas_horas}</td>
+                                <td className="px-4 py-2 text-right text-emerald-500">1.75</td>
+                                <td className="px-4 py-2 text-right text-emerald-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.val_extras_nocturnas)}</td>
+                             </tr>
+                             <tr>
+                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">34. Extra Festiva Diurna</td>
+                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.extras_festivas_horas}</td>
+                                <td className="px-4 py-2 text-right text-emerald-500">2.00</td>
+                                <td className="px-4 py-2 text-right text-emerald-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.val_extras_festivas)}</td>
+                             </tr>
+                             <tr>
+                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">35. Extra Festiva Nocturna</td>
+                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.extras_festivas_nocturnas_horas || 0}</td>
+                                <td className="px-4 py-2 text-right text-emerald-500">2.50</td>
+                                <td className="px-4 py-2 text-right text-emerald-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.val_extras_festivas_nocturnas || 0)}</td>
+                             </tr>
+                             <tr className="bg-slate-50">
+                                <td className="px-4 py-3 uppercase text-[10px] font-black text-slate-900">36. Totales</td>
+                                <td className="px-4 py-3 text-right font-black text-slate-900">{selectedWorkerData.masterRow.total_horas_extras_y_recargos || 0}</td>
+                                <td className="px-4 py-3 text-right"></td>
+                                <td className="px-4 py-3 text-right font-black text-slate-900">${fmtCOP(selectedWorkerData.masterRow.total_vr_pagar_extras || (selectedWorkerData.masterRow.val_extras_diurnas + selectedWorkerData.masterRow.val_extras_nocturnas + selectedWorkerData.masterRow.val_extras_festivas + selectedWorkerData.masterRow.recargo_nocturno))}</td>
+                             </tr>
+                          </tbody>
+                       </table>
+
+                       <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-3">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">44. Novedades:</span>
+                          <span className="text-sm font-bold text-slate-800">1. Recargo nocturno {selectedWorkerData.masterRow.horas_nocturnas_ordinarias} hrs</span>
+                       </div>
+                    </div>
+
+                 </div>
+
+
+              </div>
+            </div>
+          );
+        }()
+      )}

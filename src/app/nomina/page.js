@@ -807,6 +807,7 @@ export default function NominaPage() {
   };
 
   return (
+    <>
     <div className="w-full max-w-[98%] xl:max-w-[96%] mx-auto space-y-8 animate-stitch pb-12">
       
       {/* Header Banner - Sleek Glassmorphism */}
@@ -998,18 +999,20 @@ export default function NominaPage() {
                <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider">Directorio de Operarios</h4>
                <p className="text-xs font-bold text-slate-500">Selecciona un operario para liquidar</p>
             </div>
-            <div className="overflow-x-auto custom-scrollbar relative rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                <table className="w-full text-left">
                   <thead className="bg-slate-50/90 backdrop-blur-sm sticky top-0 z-20">
-                     <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-200">
-                        <th className="px-6 py-3 sticky left-0 z-30 bg-slate-50/90 backdrop-blur-sm shadow-[1px_0_0_#e2e8f0]">Cédula</th>
-                        <th className="px-6 py-3 sticky left-[100px] z-30 bg-slate-50/90 backdrop-blur-sm shadow-[1px_0_0_#e2e8f0]">Nombre Completo</th>
-                        <th className="px-6 py-3">Cargo</th>
-                        <th className="px-6 py-3 text-center">Días Liq.</th>
-                        <th className="px-6 py-3 text-right">Neto a Pagar</th>
-                        <th className="px-6 py-3 text-center">Acción</th>
-                     </tr>
-                  </thead>
+<tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-200">
+<th className="px-6 py-3">Cédula</th>
+<th className="px-6 py-3">Nombre Completo</th>
+<th className="px-6 py-3">Cargo</th>
+<th className="px-6 py-3 text-center">Días Pagados</th>
+<th className="px-6 py-3 text-right">Total Devengado</th>
+<th className="px-6 py-3 text-right">Total Deducciones</th>
+<th className="px-6 py-3 text-right">Neto a Pagar</th>
+<th className="px-6 py-3 text-center">Acción</th>
+</tr>
+</thead>
                   <tbody className="divide-y divide-slate-100 text-xs font-bold">
                      {filteredPayrollData.map((item) => {
                         const row = item.masterRow;
@@ -1064,12 +1067,14 @@ export default function NominaPage() {
 
   return (
                            <tr key={row.consecutivo} className="group hover:bg-slate-50/50 transition-colors">
-                              <td className="px-6 py-4 text-slate-500 sticky left-0 z-10 bg-white group-hover:bg-slate-50 shadow-[1px_0_0_#e2e8f0]">{row.cedula}</td>
-                              <td className="px-6 py-4 text-slate-900 sticky left-[100px] z-10 bg-white group-hover:bg-slate-50 shadow-[1px_0_0_#e2e8f0]">{row.nombre}</td>
-                              <td className="px-6 py-4 text-slate-500 capitalize">{row.cargo.toLowerCase()}</td>
-                              <td className="px-6 py-4 text-center text-slate-700">{row.dias_pagados}</td>
-                              <td className="px-6 py-4 text-right text-yellow-600 font-black text-sm">${fmtCOP(row.neto_pagar)}</td>
-                              <td className="px-6 py-4 text-center">
+                              <td className="px-6 py-4 text-slate-500">{row.cedula}</td>
+<td className="px-6 py-4 text-slate-900 font-bold">{row.nombre}</td>
+<td className="px-6 py-4 text-slate-500 capitalize">{row.cargo.toLowerCase()}</td>
+<td className="px-6 py-4 text-center text-slate-700">{row.dias_pagados}</td>
+<td className="px-6 py-4 text-right text-slate-700 font-medium">${fmtCOP(row.total_devengados)}</td>
+<td className="px-6 py-4 text-right text-rose-500 font-medium">-${fmtCOP(row.total_deducciones)}</td>
+<td className="px-6 py-4 text-right text-emerald-600 font-black text-sm">${fmtCOP(row.neto_pagar)}</td>
+<td className="px-6 py-4 text-center">
                                  <div className="flex justify-center gap-2">
                                     <button 
                                        onClick={() => { setDetailsWorkerName(row.nombre); setIsDetailsModalOpen(true); }}
@@ -1093,93 +1098,7 @@ export default function NominaPage() {
             </div>
           </section>
 
-          {/* --- DETALLES MODAL --- */}
-          {isDetailsModalOpen && (
-            <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden animate-stitch border border-slate-200">
-                <div className="p-5 sm:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                   <h3 className="font-black text-lg sm:text-xl text-slate-900">
-                      Expediente Completo: <span className="text-emerald-600">{detailsWorkerName}</span>
-                   </h3>
-                   <button onClick={() => setIsDetailsModalOpen(false)} className="w-8 h-8 flex items-center justify-center bg-slate-200 hover:bg-rose-100 hover:text-rose-600 rounded-full text-slate-500 transition-colors font-bold shadow-sm">
-                      ✕
-                   </button>
-                </div>
-                <div className="p-5 sm:p-6 overflow-y-auto max-h-[75vh]">
-                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                     {(() => {
-                        const workerData = filteredPayrollData.find(d => d.masterRow.nombre === detailsWorkerName) || filteredPayrollData[0];
-                        if (!workerData) return null;
-                        return PLANILLA_COLUMNS.map(col => {
-                           const cKey = `${workerData.masterRow.cedula}_${col.key}`;
-                           const val = overrides[cKey] !== undefined ? overrides[cKey] : (workerData.masterRow[col.key] !== undefined ? workerData.masterRow[col.key] : "");
-                         
-  const handleExportBackup = () => {
-    const backupData = {
-      nominaRows,
-      attendanceLogs,
-      overrides,
-      startDate,
-      endDate,
-      timestamp: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    setToast({ message: "Backup exportado exitosamente.", type: "success" });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  const handleImportBackup = (e) => {
-    const file = e.target?.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-         const data = JSON.parse(event.target.result);
-         if (data.nominaRows) setNominaRows(data.nominaRows);
-         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
-         if (data.overrides) setOverrides(data.overrides);
-         if (data.startDate) setStartDate(data.startDate);
-         if (data.endDate) setEndDate(data.endDate);
-         
-         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
-      } catch (error) {
-         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
-      }
-      setTimeout(() => setToast(null), 4000);
-    };
-    reader.readAsText(file);
-    if (e.target) e.target.value = '';
-  };
-
-  return (
-                             <div key={col.key} className="bg-white border border-slate-200 p-3 rounded-xl flex flex-col justify-center shadow-sm space-y-1">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex-1 truncate" title={col.label}>{col.label}</span>
-                                <input
-                                   type="text"
-                                   value={val}
-                                   onChange={(e) => handleCellEdit(cKey, e.target.value)}
-                                   className={`w-full text-right text-xs font-bold text-slate-800 bg-transparent border-b outline-none ${overrides[cKey] !== undefined ? 'border-yellow-400 bg-yellow-50/50' : 'border-slate-100 hover:border-slate-300'} transition-colors`}
-                                />
-                             </div>
-                           )
-                        });
-                     })()}
-                   </div>
-                </div>
-              </div>
-            </div>
-          )}
+          
 
           {/* Bank Transfer Summaries */}
           <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1204,90 +1123,55 @@ export default function NominaPage() {
 
             {/* --- TAB 2: FORMULARIO DE LIQUIDACIÓN --- */}
       {activeTab === "liquidacion" && (
-        function() {
-          const selectedWorkerData = filteredPayrollData.find(d => d.masterRow.nombre === selectedWorkerName) || filteredPayrollData[0];
-          if (!selectedWorkerData) return (
-            <div className="p-12 text-center text-slate-500 font-bold bg-white rounded-3xl border border-slate-200 shadow-sm animate-stitch">
-              Selecciona un operario desde el Panel General para liquidar.
-            </div>
-          );
-          
-        
-  const handleExportBackup = () => {
-    const backupData = {
-      nominaRows,
-      attendanceLogs,
-      overrides,
-      startDate,
-      endDate,
-      timestamp: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    setToast({ message: "Backup exportado exitosamente.", type: "success" });
-    setTimeout(() => setToast(null), 3000);
-  };
+  function() {
+     const selectedWorkerData = filteredPayrollData.find(d => d.masterRow.nombre === selectedWorkerName) || filteredPayrollData[0];
+     if (!selectedWorkerData) return (
+        <div className="p-12 text-center text-slate-500 font-bold bg-white rounded-3xl border border-slate-200 shadow-sm animate-stitch">
+           Selecciona un operario desde el Panel General para liquidar.
+        </div>
+     );
 
-  const handleImportBackup = (e) => {
-    const file = e.target?.files?.[0];
-    if (!file) return;
+     const handleCellEdit = (key, value) => {
+        setOverrides(prev => ({
+           ...prev,
+           [key]: value === "" ? undefined : (isNaN(Number(value)) ? value : Number(value))
+        }));
+     };
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-         const data = JSON.parse(event.target.result);
-         if (data.nominaRows) setNominaRows(data.nominaRows);
-         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
-         if (data.overrides) setOverrides(data.overrides);
-         if (data.startDate) setStartDate(data.startDate);
-         if (data.endDate) setEndDate(data.endDate);
-         
-         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
-      } catch (error) {
-         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
-      }
-      setTimeout(() => setToast(null), 4000);
-    };
-    reader.readAsText(file);
-    if (e.target) e.target.value = '';
-  };
-
-  return (
-            <div className="space-y-6 animate-stitch">
-              <div className="flex justify-between items-center bg-slate-900 p-6 rounded-3xl shadow-xl">
+     return (
+        <div className="space-y-6">
+           <div className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                 <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-black text-xl shadow-inner border border-indigo-100">
+                    {selectedWorkerData.masterRow.nombre.charAt(0)}
+                 </div>
                  <div>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Asistencia y Liquidación Individual</span>
-                    <h2 className="text-2xl font-black text-white mt-1">{selectedWorkerData.masterRow.nombre}</h2>
-                    <div className="flex gap-2 text-xs font-bold text-slate-400 mt-1.5">
-                       <span className="bg-slate-800 px-2 py-0.5 rounded text-slate-300">C.C. {selectedWorkerData.masterRow.cedula}</span>
-                       <span className="capitalize">{selectedWorkerData.masterRow.cargo.toLowerCase()}</span>
+                    <h2 className="text-xl font-black text-slate-800 tracking-tight">{selectedWorkerData.masterRow.nombre}</h2>
+                    <div className="flex items-center gap-3 mt-1 text-xs font-semibold text-slate-500 uppercase tracking-widest">
+                       <span className="flex items-center gap-1"><Info size={12} className="text-indigo-400"/> CC: {selectedWorkerData.masterRow.cedula}</span>
+                       <span className="flex items-center gap-1 text-slate-400">&bull; {selectedWorkerData.masterRow.cargo.toLowerCase()}</span>
                     </div>
                  </div>
-                 <button onClick={() => setActiveTab("colilla")} className="px-4 py-2 bg-white text-slate-900 hover:bg-emerald-400 hover:text-slate-900 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-colors">
-                   🖨️ Generar Colilla
-                 </button>
               </div>
-              
-              <div className="space-y-6">
-                 {/* Editable Daily Log and Extas Matrix (Full Width) */}
-                 <div className="space-y-6">
-                    
-                    {/* Time Tracking (Registro Diario FULL A-X) */}
-                    <div className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm overflow-x-auto">
-                       <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-100 pb-3">Registro Diario (A - X)</h3>
-                       <table className="w-full text-left table-auto">
+           </div>
+
+           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* LEFT PANEL */}
+              <div className="lg:col-span-8 bg-white rounded-3xl shadow-sm border border-slate-200 p-6 overflow-hidden">
+                 <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Registro Diario (A - X)</h3>
+                 <div className="overflow-x-auto custom-scrollbar">
+<table className="w-full text-left table-auto">
                           <thead className="bg-slate-50/90 backdrop-blur-sm sticky top-0 z-20">
+                             <tr className="border-b border-slate-200 text-center text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                   <th colSpan="1" className="py-2 border-b border-slate-200">Fecha</th>
+                                   <th colSpan="2" className="py-2 bg-blue-50/50 border-b border-blue-100 text-blue-600">Marcas Biomtrico</th>
+                                   <th colSpan="6" className="py-2 bg-slate-100 border-b border-slate-200">Control de Descansos</th>
+                                   <th colSpan="5" className="py-2 bg-indigo-50/50 border-b border-indigo-100 text-indigo-600">Liquidacin Base</th>
+                                   <th colSpan="8" className="py-2 bg-amber-50/50 border-b border-amber-100 text-amber-700">Clasificacin Extras/Recargos</th>
+                                   <th colSpan="2" className="py-2 bg-rose-50/50 border-b border-rose-100 text-rose-600">Novedades</th>
+                             </tr>
                              <tr className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-200">
-                                <th className="px-2 py-2" title="Día/Fecha">A (Fecha)</th>
+                                <th className="px-2 py-2" title="Da/Fecha">A (Fecha)</th>
                                 <th className="px-2 py-2 text-blue-500" title="Reloj Hr Ent">B (R.Ent)</th>
                                 <th className="px-2 py-2 text-blue-500" title="Reloj Hr Sal">C (R.Sal)</th>
                                 <th className="px-2 py-2 text-rose-500" title="Descanso 1 Hr Ent">D (D1.E)</th>
@@ -1435,120 +1319,119 @@ export default function NominaPage() {
                              })}
                           </tbody>
                        </table>
-                    </div>
+                 </div>
+              </div>
 
-                    {/* Resumen de Horas (Filas 26-38) */}
-                    <div className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm overflow-x-auto">
-                       <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-100 pb-3">Liquidación de Horas (Matriz 26-38)</h3>
+              {/* RIGHT PANEL */}
+              <div className="lg:col-span-4">
+                 <div className="sticky top-6 space-y-6">
+                    <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-xl">
+                       <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6">Liquidacin de Horas (26-38)</h3>
                        
-                       <div className="flex gap-8 mb-6">
-                          <div className="space-y-1">
-                             <label className="text-[10px] font-black text-slate-400 uppercase">Horas que debe (B26)</label>
-                             <input
-                               type="text"
-                               value={overrides[`${selectedWorkerData.masterRow.cedula}_horas_que_debe`] !== undefined ? overrides[`${selectedWorkerData.masterRow.cedula}_horas_que_debe`] : (selectedWorkerData.masterRow.horas_que_debe || 0)}
-                               onChange={(e) => handleCellEdit(`${selectedWorkerData.masterRow.cedula}_horas_que_debe`, e.target.value)}
-                               className="w-32 bg-slate-50 border border-slate-200 text-sm font-bold text-rose-600 rounded-xl px-3 py-2 focus:ring-2 focus:ring-rose-400 outline-none"
-                             />
-                          </div>
-                          <div className="space-y-1">
-                             <label className="text-[10px] font-black text-slate-400 uppercase">Horas Pendientes (F26)</label>
-                             <div className="w-32 bg-slate-100 border border-slate-200 text-sm font-bold text-slate-600 rounded-xl px-3 py-2">
-                               {selectedWorkerData.masterRow.horas_pendientes || 0}
+                       <div className="space-y-4 mb-6">
+                          <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
+                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">26. Horas que debe</span>
+                             <div className="w-24">
+                                <input
+                                   type="text"
+                                   value={overrides[`${selectedWorkerData.masterRow.cedula}_horas_que_debe`] !== undefined ? overrides[`${selectedWorkerData.masterRow.cedula}_horas_que_debe`] : (selectedWorkerData.masterRow.horas_debe || 0)}
+                                   onChange={(e) => handleCellEdit(`${selectedWorkerData.masterRow.cedula}_horas_que_debe`, e.target.value)}
+                                   className="w-full bg-slate-800 text-white border-slate-700 text-sm font-bold rounded-lg px-3 py-1.5 outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 text-right transition-all"
+                                />
                              </div>
                           </div>
-                          <div className="space-y-1">
-                             <label className="text-[10px] font-black text-slate-400 uppercase">Salario Básico (B37)</label>
-                             <input
-                               type="text"
-                               value={overrides[`${selectedWorkerData.masterRow.cedula}_sueldo`] !== undefined ? overrides[`${selectedWorkerData.masterRow.cedula}_sueldo`] : (selectedWorkerData.masterRow.sueldo || 0)}
-                               onChange={(e) => handleCellEdit(`${selectedWorkerData.masterRow.cedula}_sueldo`, e.target.value)}
-                               className="w-40 bg-slate-50 border border-slate-200 text-sm font-bold text-slate-900 rounded-xl px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
-                             />
+                          
+                          <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
+                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Horas Pendientes</span>
+                             <span className="text-sm font-bold text-slate-300 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700/50">
+                                {selectedWorkerData.masterRow.horas_pendientes || 0}
+                             </span>
+                          </div>
+
+                          <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
+                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Salario Bsico (B37)</span>
+                             <div className="w-28">
+                                <input
+                                   type="text"
+                                   value={overrides[`${selectedWorkerData.masterRow.cedula}_sueldo`] !== undefined ? overrides[`${selectedWorkerData.masterRow.cedula}_sueldo`] : (selectedWorkerData.masterRow.salario || 0)}
+                                   onChange={(e) => handleCellEdit(`${selectedWorkerData.masterRow.cedula}_sueldo`, e.target.value)}
+                                   className="w-full bg-slate-800 text-emerald-400 border-slate-700 text-sm font-bold rounded-lg px-3 py-1.5 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-right transition-all"
+                                />
+                             </div>
                           </div>
                        </div>
 
-                       <table className="w-full text-left table-auto">
-                          <thead className="bg-slate-50/90 backdrop-blur-sm sticky top-0 z-20">
-                             <tr className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                                <th className="px-4 py-2">Concepto</th>
-                                <th className="px-4 py-2 text-right">Horas (D)</th>
-                                <th className="px-4 py-2 text-right">Factor (E)</th>
-                                <th className="px-4 py-2 text-right">Valor (F)</th>
-                             </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
-                             <tr>
-                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">28. Diurnas</td>
-                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.horas_diurnas_ordinarias}</td>
-                                <td className="px-4 py-2 text-right">0.0</td>
-                                <td className="px-4 py-2 text-right text-slate-400">N/A</td>
-                             </tr>
-                             <tr>
-                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">29. Nocturnas</td>
-                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.horas_nocturnas_ordinarias}</td>
-                                <td className="px-4 py-2 text-right text-indigo-500">0.35</td>
-                                <td className="px-4 py-2 text-right text-indigo-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.recargo_nocturno)}</td>
-                             </tr>
-                             <tr>
-                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">30. Festiva Diurna</td>
-                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.horas_festivas_diurnas || 0}</td>
-                                <td className="px-4 py-2 text-right text-indigo-500">0.75</td>
-                                <td className="px-4 py-2 text-right text-indigo-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.recargo_festivo_diurno || 0)}</td>
-                             </tr>
-                             <tr>
-                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">31. Festiva Nocturna</td>
-                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.horas_festivas_nocturnas || 0}</td>
-                                <td className="px-4 py-2 text-right text-indigo-500">2.10</td>
-                                <td className="px-4 py-2 text-right text-indigo-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.recargo_festivo_nocturno || 0)}</td>
-                             </tr>
-                             <tr>
-                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">32. Extra Diurna</td>
-                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.extras_diurnas_horas}</td>
-                                <td className="px-4 py-2 text-right text-emerald-500">1.25</td>
-                                <td className="px-4 py-2 text-right text-emerald-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.val_extras_diurnas)}</td>
-                             </tr>
-                             <tr>
-                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">33. Extra Nocturna</td>
-                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.extras_nocturnas_horas}</td>
-                                <td className="px-4 py-2 text-right text-emerald-500">1.75</td>
-                                <td className="px-4 py-2 text-right text-emerald-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.val_extras_nocturnas)}</td>
-                             </tr>
-                             <tr>
-                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">34. Extra Festiva Diurna</td>
-                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.extras_festivas_horas}</td>
-                                <td className="px-4 py-2 text-right text-emerald-500">2.00</td>
-                                <td className="px-4 py-2 text-right text-emerald-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.val_extras_festivas)}</td>
-                             </tr>
-                             <tr>
-                                <td className="px-4 py-2 uppercase text-[10px] font-black text-slate-500">35. Extra Festiva Nocturna</td>
-                                <td className="px-4 py-2 text-right">{selectedWorkerData.masterRow.extras_festivas_nocturnas_horas || 0}</td>
-                                <td className="px-4 py-2 text-right text-emerald-500">2.50</td>
-                                <td className="px-4 py-2 text-right text-emerald-600 font-bold">${fmtCOP(selectedWorkerData.masterRow.val_extras_festivas_nocturnas || 0)}</td>
-                             </tr>
-                             <tr className="bg-slate-50">
-                                <td className="px-4 py-3 uppercase text-[10px] font-black text-slate-900">36. Totales</td>
-                                <td className="px-4 py-3 text-right font-black text-slate-900">{selectedWorkerData.masterRow.total_horas_extras_y_recargos || 0}</td>
-                                <td className="px-4 py-3 text-right"></td>
-                                <td className="px-4 py-3 text-right font-black text-slate-900">${fmtCOP(selectedWorkerData.masterRow.total_vr_pagar_extras || (selectedWorkerData.masterRow.val_extras_diurnas + selectedWorkerData.masterRow.val_extras_nocturnas + selectedWorkerData.masterRow.val_extras_festivas + selectedWorkerData.masterRow.recargo_nocturno))}</td>
-                             </tr>
-                          </tbody>
-                       </table>
+                       <div className="border-t border-slate-800 pt-4 space-y-1">
+                          <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
+                             <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold uppercase tracking-wide text-slate-300">28. Diurnas</span>
+                                <span className="bg-slate-800 text-slate-400 text-[9px] px-2 py-0.5 rounded-full border border-slate-700">x 0.0</span>
+                             </div>
+                             <div className="text-sm font-bold text-slate-500">N/A</div>
+                          </div>
+                          <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
+                             <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold uppercase tracking-wide text-slate-300">29. Nocturnas</span>
+                                <span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800">x 0.35</span>
+                             </div>
+                             <div className="text-sm font-bold text-indigo-400">${fmtCOP(selectedWorkerData.masterRow.recargo_nocturno)}</div>
+                          </div>
+                          <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
+                             <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold uppercase tracking-wide text-slate-300">30. Festiva Diurna</span>
+                                <span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800">x 0.75</span>
+                             </div>
+                             <div className="text-sm font-bold text-indigo-400">${fmtCOP(selectedWorkerData.masterRow.val_extras_festivas || 0)}</div>
+                          </div>
+                          <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
+                             <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold uppercase tracking-wide text-slate-300">31. Fest Noc</span>
+                                <span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800">x 2.10</span>
+                             </div>
+                             <div className="text-sm font-bold text-indigo-400">${fmtCOP(selectedWorkerData.masterRow.val_extras_festivas_nocturnas || 0)}</div>
+                          </div>
+                          <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
+                             <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold uppercase tracking-wide text-slate-300">32. Extra Diurna</span>
+                                <span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800">x 1.25</span>
+                             </div>
+                             <div className="text-sm font-bold text-emerald-400">${fmtCOP(selectedWorkerData.masterRow.val_extras_diurnas)}</div>
+                          </div>
+                          <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
+                             <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold uppercase tracking-wide text-slate-300">33. Extra Noc</span>
+                                <span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800">x 1.75</span>
+                             </div>
+                             <div className="text-sm font-bold text-emerald-400">${fmtCOP(selectedWorkerData.masterRow.val_extras_nocturnas)}</div>
+                          </div>
+                          <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
+                             <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold uppercase tracking-wide text-slate-300">34. Ext Fes Diu</span>
+                                <span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800">x 2.00</span>
+                             </div>
+                             <div className="text-sm font-bold text-emerald-400">${fmtCOP(selectedWorkerData.masterRow.val_extras_festivas)}</div>
+                          </div>
+                          <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
+                             <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold uppercase tracking-wide text-slate-300">35. Ext Fes Noc</span>
+                                <span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800">x 2.50</span>
+                             </div>
+                             <div className="text-sm font-bold text-emerald-400">${fmtCOP(selectedWorkerData.masterRow.val_extras_festivas_nocturnas || 0)}</div>
+                          </div>
+                       </div>
 
-                       <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-3">
-                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">44. Novedades:</span>
-                          <span className="text-sm font-bold text-slate-800">1. Recargo nocturno {selectedWorkerData.masterRow.horas_nocturnas_ordinarias} hrs</span>
+                       <div className="mt-8 pt-6 border-t border-slate-700 text-center">
+                          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">36. Totales Extras/Recargos</div>
+                          <div className="text-4xl font-black text-emerald-400 tracking-tight">${fmtCOP(selectedWorkerData.liquidation.total_extra_val)}</div>
                        </div>
                     </div>
-
                  </div>
-
-
               </div>
-            </div>
-          );
-        }()
-      )}
+           </div>
+        </div>
+     );
+  }()
+)}
 
       {/* --- TAB 3: COLILLAS DE PAGO --- */}
       {activeTab === "colilla" && (
@@ -1861,5 +1744,63 @@ export default function NominaPage() {
       </div>
 
     </div>
-  );
+  
+    {/* --- DETALLES MODAL FLOTANTE PREMIUM --- */}
+{isDetailsModalOpen && (
+  <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-sm transition-opacity">
+    
+    {/* Capa invisible para cerrar al hacer clic afuera */}
+    <div className="absolute inset-0 cursor-pointer" onClick={() => setIsDetailsModalOpen(false)}></div>
+
+    {/* Cuadro Flotante */}
+    <div className="relative w-full max-w-6xl bg-white rounded-[2rem] shadow-2xl flex flex-col overflow-hidden max-h-[85vh] animate-stitch border border-slate-200/50">
+      
+      {/* Header del Modal */}
+      <div className="px-8 py-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center z-10">
+        <div>
+          <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500 bg-emerald-100 px-3 py-1 rounded-lg">Auditora de Liquidacin</span>
+          <h3 className="font-black text-2xl text-slate-900 mt-2">{detailsWorkerName}</h3>
+        </div>
+        <button 
+          onClick={() => setIsDetailsModalOpen(false)} 
+          className="w-10 h-10 flex items-center justify-center bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 hover:text-rose-600 rounded-full text-slate-400 transition-all shadow-sm"
+        >
+          
+        </button>
+      </div>
+      
+      {/* Cuerpo Scrollable con Grid de 40 columnas */}
+      <div className="flex-1 overflow-y-auto p-6 sm:p-8 custom-scrollbar bg-slate-50/50">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {(() => {
+             const workerData = filteredPayrollData.find(d => d.masterRow.nombre === detailsWorkerName) || filteredPayrollData[0];
+             if (!workerData) return null;
+             
+             return PLANILLA_COLUMNS.map(col => {
+                const cKey = `${workerData.masterRow.cedula}_${col.key}`;
+                const val = overrides[cKey] !== undefined ? overrides[cKey] : (workerData.masterRow[col.key] !== undefined ? workerData.masterRow[col.key] : "");
+                
+                return (
+                  <div key={col.key} className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
+                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-emerald-600 transition-colors" title={col.label}>
+                       {col.label}
+                     </span>
+                     <EditableCell
+                        value={val}
+                        onChange={(newVal) => handleCellEdit(cKey, newVal)}
+                        isOverridden={overrides[cKey] !== undefined}
+                        isCurrency={col.type === 'currency'}
+                        isDecimal={col.type === 'decimal'}
+                     />
+                  </div>
+                )
+             });
+          })()}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+  </>
+);
 }
