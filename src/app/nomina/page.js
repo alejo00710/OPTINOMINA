@@ -1,4 +1,5 @@
 "use client";
+import { MOCK_NOMINA_ROWS } from "./excel_data";
 import EditableCell from "@/components/Nomina/EditableCell";
 import NominaSummaryCards from "@/components/Nomina/NominaSummaryCards";
 import ColumnVisibilityToggle from "@/components/Nomina/ColumnVisibilityToggle";
@@ -31,7 +32,6 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
-import { MOCK_NOMINA_ROWS, MOCK_ATTENDANCE_MAP, MOCK_RATES_MAP } from "./excel_data";
 
 
 import { 
@@ -69,14 +69,9 @@ export default function NominaPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterPosition, setFilterPosition] = useState("all");
 
-  const [nominaRows, setNominaRows] = useState(() => 
-    MOCK_NOMINA_ROWS.map(row => ({
-      ...row,
-      categoria: row.categoria || getDefaultCategoryForCargo(row.cargo)
-    }))
-  );
-  const [attendanceLogs, setAttendanceLogs] = useState(() => MOCK_ATTENDANCE_MAP);
-  const [ratesMap] = useState(() => MOCK_RATES_MAP);
+  const [nominaRows, setNominaRows] = useState(() => MOCK_NOMINA_ROWS.map(row => ({...row, categoria: row.categoria || getDefaultCategoryForCargo(row.cargo)})));
+  const [attendanceLogs, setAttendanceLogs] = useState({});
+  const [ratesMap] = useState({});
   const [overrides, setOverrides] = useState({});
   const [hiddenColumns, setHiddenColumns] = useState({});
   const [showColumnManager, setShowColumnManager] = useState(false);
@@ -107,15 +102,22 @@ export default function NominaPage() {
       try {
         const cloudData = await loadPayrollFromCloud();
         if (cloudData) {
-          if (cloudData.nominaRows) setNominaRows(cloudData.nominaRows);
+          if (cloudData.nominaRows && cloudData.nominaRows.length > 0) {
+            setNominaRows(cloudData.nominaRows);
+          } else {
+            setNominaRows(MOCK_NOMINA_ROWS);
+          }
           if (cloudData.attendanceLogs) setAttendanceLogs(cloudData.attendanceLogs);
           if (cloudData.overrides) setOverrides(cloudData.overrides);
           if (cloudData.hiddenColumns) setHiddenColumns(cloudData.hiddenColumns);
           if (cloudData.startDate) setStartDate(cloudData.startDate);
           if (cloudData.endDate) setEndDate(cloudData.endDate);
+        } else {
+          setNominaRows(MOCK_NOMINA_ROWS);
         }
       } catch (e) {
         console.error("Error loading persisted payroll data from cloud:", e);
+        setNominaRows(MOCK_NOMINA_ROWS);
       } finally {
         setIsDbLoading(false);
       }
@@ -169,17 +171,17 @@ export default function NominaPage() {
 
       // 1. Resolve daily attendance sheet rows for this period
       const workerDays = dates.map(dateStr => {
-        const loggedDay = (attendanceLogs[workerName] || []).find(d => d.dia === dateStr) || emptyAttendanceDay(dateStr);
+        const loggedDay = (attendanceLogs[cedula] || attendanceLogs[workerName] || []).find(d => d.dia === dateStr) || emptyAttendanceDay(dateStr);
         const prefix = `${workerName}_day_${dateStr}`;
 
         const hr_ent = resolveValue(overrides, `${prefix}_hr_ent`, () => loggedDay.hr_ent);
         const hr_sal = resolveValue(overrides, `${prefix}_hr_sal`, () => loggedDay.hr_sal);
         const hr_ent_desc1 = resolveValue(overrides, `${prefix}_hr_ent_desc1`, () => loggedDay.hr_ent_desc1);
         const hr_sal_desc1 = resolveValue(overrides, `${prefix}_hr_sal_desc1`, () => loggedDay.hr_sal_desc1);
-        const total_desc1 = resolveValue(overrides, `${prefix}_total_desc1`, () => diffTimeStr(hr_ent_desc1, hr_sal_desc1));
+        const total_desc1 = resolveValue(overrides, `${prefix}_total_desc1`, () => diffTimeStr(hr_sal_desc1, hr_ent_desc1));
         const hr_ent_desc2 = resolveValue(overrides, `${prefix}_hr_ent_desc2`, () => loggedDay.hr_ent_desc2);
         const hr_sal_desc2 = resolveValue(overrides, `${prefix}_hr_sal_desc2`, () => loggedDay.hr_sal_desc2);
-        const total_desc2 = resolveValue(overrides, `${prefix}_total_desc2`, () => diffTimeStr(hr_ent_desc2, hr_sal_desc2));
+        const total_desc2 = resolveValue(overrides, `${prefix}_total_desc2`, () => diffTimeStr(hr_sal_desc2, hr_ent_desc2));
 
         const hr_ent_pago = resolveValue(overrides, `${prefix}_hr_ent_pago`, () => {
           if (!hr_ent || !hr_sal) return loggedDay.hr_ent_pago || null;
@@ -196,7 +198,7 @@ export default function NominaPage() {
         });
 
         const hr_lab = resolveValue(overrides, `${prefix}_hr_lab`, () => getDecimalHours(hr_ent_pago, hr_sal_pago));
-        const desc_lunch = resolveValue(overrides, `${prefix}_desc_lunch`, () => (hr_lab > 8.9 ? 0.5 : 0));
+        const desc_lunch = resolveValue(overrides, `${prefix}_desc_lunch`, () => (hr_lab > 8.9 ? 0.5 : getDecimalHours(hr_sal_desc1, hr_ent_desc1) + getDecimalHours(hr_sal_desc2, hr_ent_desc2)));
         const hr_pag = resolveValue(overrides, `${prefix}_hr_pag`, () => Math.max(0, hr_lab - desc_lunch));
 
         const dateObj = new Date(dateStr + "T00:00:00");
@@ -587,7 +589,19 @@ export default function NominaPage() {
     }
   };
 
-  const handleSaveToCloud = async () => {
+  
+  const handleClearAll = () => {
+    if (window.confirm("¿Estás seguro de que deseas borrar todos los datos y empezar una nueva quincena?")) {
+      setNominaRows(MOCK_NOMINA_ROWS); // ¡Mantiene vivos a los empleados!
+      setAttendanceLogs({});
+      setOverrides({});
+      setStartDate("");
+      setEndDate("");
+      handleSaveToCloud();
+    }
+  };
+
+const handleSaveToCloud = async () => {
     setToast({ message: "Guardando en la nube...", type: "info" });
     try {
       await savePayrollToCloud({ startDate, endDate, nominaRows, attendanceLogs, overrides, hiddenColumns });
@@ -609,33 +623,22 @@ export default function NominaPage() {
   const isCellOverridden = (key) => overrides[key] !== undefined;
 
   // --- Clock-ins Excel Uploader ---
-  const matchEmployeeName = (clockInName) => {
-    const norm = (s) => s.toUpperCase()
-      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^A-Z\s]/g, "")
-      .replace(/\s+/g, " ").trim();
-      
-    const cleanClockIn = norm(clockInName);
-    let matched = null;
-    const workerNames = nominaRows.map(r => r.nombre);
+  const normalizeString = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+  
+  const findRealEmployee = (bioName, masterRows) => {
+    if (!bioName) return null;
+    const normBio = normalizeString(bioName).split(" ").filter(w => w.length > 2);
     
-    for (const wName of workerNames) {
-      const cleanW = norm(wName);
-      if (cleanClockIn === cleanW || cleanW.includes(cleanClockIn) || cleanClockIn.includes(cleanW)) {
-        matched = wName;
-        break;
+    for (const row of masterRows) {
+      const normReal = normalizeString(row.nombre);
+      if (normReal.includes(normalizeString(bioName)) || normalizeString(bioName).includes(normReal)) {
+        return row;
       }
-      
-      const wParts = cleanW.split(" ");
-      const cParts = cleanClockIn.split(" ");
-      if (wParts.length >= 2 && cParts.length >= 2) {
-        if (wParts[0] === cParts[0] && wParts[1] === cParts[1]) {
-          matched = wName;
-          break;
-        }
-      }
+      let matchCount = 0;
+      normBio.forEach(word => { if (normReal.includes(word)) matchCount++; });
+      if (matchCount >= 2) return row;
     }
-    return matched;
+    return null;
   };
 
   const handleFileUpload = async (e) => {
@@ -671,25 +674,28 @@ export default function NominaPage() {
       // Group punches by employee
       const punchesByEmployee = {};
       cleanData.forEach(row => {
-         if (!punchesByEmployee[row.nombre]) {
-            punchesByEmployee[row.nombre] = [];
+         const realEmp = findRealEmployee(row.nombre, nominaRows);
+         const key = realEmp ? realEmp.cedula : "No Encontrados";
+         
+         if (!punchesByEmployee[key]) {
+            punchesByEmployee[key] = [];
          }
-         punchesByEmployee[row.nombre].push(row);
+         punchesByEmployee[key].push(row);
       });
 
-      for (const [employeeName, punches] of Object.entries(punchesByEmployee)) {
-         const matchedName = matchEmployeeName(employeeName);
-         if (!matchedName) {
-            stats.unmatched.push(employeeName);
+      for (const [groupKey, punches] of Object.entries(punchesByEmployee)) {
+         if (groupKey === "No Encontrados") {
+            const uniqueUnmatched = punches.map(p => p.nombre).filter((v, i, a) => a.indexOf(v) === i);
+            stats.unmatched.push(...uniqueUnmatched);
             continue;
          }
 
          const cleaned = cleanWorkerPunches(punches, startDate, endDate);
-         if (!newAttendance[matchedName]) {
-            newAttendance[matchedName] = [];
+         if (!newAttendance[groupKey]) {
+            newAttendance[groupKey] = [];
          }
 
-         const existing = newAttendance[matchedName];
+         const existing = newAttendance[groupKey];
          const byDate = new Map(existing.map(d => [d.dia, d]));
 
          Object.keys(cleaned).forEach(dateStr => {
@@ -699,9 +705,9 @@ export default function NominaPage() {
             }
          });
 
-         newAttendance[matchedName] = Array.from(byDate.values());
+         newAttendance[groupKey] = Array.from(byDate.values());
          stats.parsedCount++;
-         stats.matchedNames.push(matchedName);
+         stats.matchedNames.push(groupKey);
          stats.filledDays += Object.keys(cleaned).length;
       }
 
