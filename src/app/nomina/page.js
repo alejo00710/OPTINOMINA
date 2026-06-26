@@ -3,6 +3,7 @@ import { MOCK_NOMINA_ROWS } from "./excel_data";
 import EditableCell from "@/components/Nomina/EditableCell";
 import NominaSummaryCards from "@/components/Nomina/NominaSummaryCards";
 import ColumnVisibilityToggle from "@/components/Nomina/ColumnVisibilityToggle";
+import EmployeeDirectory from "@/components/Nomina/EmployeeDirectory";
 
 import { 
   Coins, 
@@ -42,7 +43,7 @@ import {
   NOMINA_DATE_RANGE_KEY, loadPersistedDateRange, PLANILLA_COLUMNS, DAILY_COLUMNS, LIQUIDATION_CONCEPTS 
 } from "@/utils/constants";
 import { timeStrToDecimal, decimalToTimeStr, diffTimeStr, getDecimalHours, getHourDist, fmtCOP, fmtDec } from "@/utils/mathNomina";
-import { savePayrollToCloud, loadPayrollFromCloud } from "@/utils/supabase";
+import { savePayrollToCloud, loadPayrollFromCloud, loadEmployeesFromCloud, uploadEmployeesBulk } from "@/utils/supabase";
 import { detectShiftTemplate, emptyAttendanceDay, cleanWorkerPunches, parseBiometricExcel } from "@/utils/biometricCore";
 
 // Helper to look up overridden state values
@@ -69,7 +70,7 @@ export default function NominaPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterPosition, setFilterPosition] = useState("all");
 
-  const [nominaRows, setNominaRows] = useState(() => MOCK_NOMINA_ROWS.map(row => ({...row, categoria: row.categoria || getDefaultCategoryForCargo(row.cargo)})));
+  const [nominaRows, setNominaRows] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState({});
   const [ratesMap] = useState({});
   const [overrides, setOverrides] = useState({});
@@ -100,24 +101,39 @@ export default function NominaPage() {
 
     const loadCloudData = async () => {
       try {
-        const cloudData = await loadPayrollFromCloud();
-        if (cloudData) {
-          if (cloudData.nominaRows && cloudData.nominaRows.length > 0) {
-            setNominaRows(cloudData.nominaRows);
+        let masterEmployees = [];
+        const empRes = await loadEmployeesFromCloud();
+        if (empRes.success && empRes.data) {
+          masterEmployees = empRes.data.map((emp, index) => ({
+            consecutivo: index + 1,
+            cedula: emp.cedula,
+            nombre: emp.nombre,
+            cargo: emp.cargo,
+            categoria: emp.categoria,
+            salario: Number(emp.salario_base),
+            aux_transporte: Number(emp.aux_transporte || 0), rodamiento: Number(emp.rodamiento || 0), comisiones: 0,
+            poliza_bolivar: Number(emp.poliza_bolivar || 0), poliza_sura: Number(emp.poliza_sura || 0), optica: Number(emp.optica || 0), prestamos: Number(emp.prestamos || 0)
+          }));
+        }
+
+        const cloudRes = await loadPayrollFromCloud();
+        if (cloudRes && cloudRes.success && cloudRes.data) {
+          const dbData = cloudRes.data;
+          if (dbData.nomina_rows && dbData.nomina_rows.length > 0) {
+            setNominaRows(dbData.nomina_rows);
           } else {
-            setNominaRows(MOCK_NOMINA_ROWS);
+            setNominaRows(masterEmployees);
           }
-          if (cloudData.attendanceLogs) setAttendanceLogs(cloudData.attendanceLogs);
-          if (cloudData.overrides) setOverrides(cloudData.overrides);
-          if (cloudData.hiddenColumns) setHiddenColumns(cloudData.hiddenColumns);
-          if (cloudData.startDate) setStartDate(cloudData.startDate);
-          if (cloudData.endDate) setEndDate(cloudData.endDate);
+          if (dbData.attendance_logs) setAttendanceLogs(dbData.attendance_logs);
+          if (dbData.overrides) setOverrides(dbData.overrides);
+          if (dbData.hidden_columns) setHiddenColumns(dbData.hidden_columns);
+          if (dbData.start_date) setStartDate(dbData.start_date);
+          if (dbData.end_date) setEndDate(dbData.end_date);
         } else {
-          setNominaRows(MOCK_NOMINA_ROWS);
+          setNominaRows(masterEmployees);
         }
       } catch (e) {
         console.error("Error loading persisted payroll data from cloud:", e);
-        setNominaRows(MOCK_NOMINA_ROWS);
       } finally {
         setIsDbLoading(false);
       }
@@ -562,42 +578,40 @@ export default function NominaPage() {
       [cellKey]: val
     }));
   };
-
-  const handleResetOverrides = () => {
-    if (confirm("¿Estás seguro de restablecer todas las celdas a sus fórmulas por defecto? Se perderán las modificaciones manuales.")) {
-      setOverrides({});
-      setUploadStatus({
-        state: "idle",
-        fileName: "",
-        progress: 0,
-        detail: "",
-      });
-      try {
-        localStorage.removeItem("optimoldes_nomina_rows_v2");
-        localStorage.removeItem("optimoldes_attendance_logs_v2");
-        localStorage.removeItem("optimoldes_overrides_v2");
-        localStorage.removeItem("optimoldes_hidden_columns_v2");
-      } catch (e) {
-        /* ignore */
-      }
-      setHiddenColumns({});
-      setToast({
-        message: "Se han restablecido todas las fórmulas de Excel.",
-        type: "success"
-      });
-      setTimeout(() => setToast(null), 3000);
-    }
-  };
-
   
-  const handleClearAll = () => {
-    if (window.confirm("¿Estás seguro de que deseas borrar todos los datos y empezar una nueva quincena?")) {
-      setNominaRows(MOCK_NOMINA_ROWS); // ¡Mantiene vivos a los empleados!
+  const handleClearAll = async () => {
+    if (window.confirm("¿Estás seguro de que deseas borrar los datos transaccionales y empezar una nueva quincena limpia? (Se conservarán salarios y deducciones fijas).")) {
       setAttendanceLogs({});
       setOverrides({});
       setStartDate("");
       setEndDate("");
-      handleSaveToCloud();
+      
+      // Recargar empleados maestros para traer los valores fijos limpios
+      const empRes = await loadEmployeesFromCloud();
+      if (empRes.success && empRes.data) {
+        const cleanRows = empRes.data.map((emp, index) => ({
+          consecutivo: index + 1,
+          cedula: emp.cedula,
+          nombre: emp.nombre,
+          cargo: emp.cargo,
+          categoria: emp.categoria,
+          salario: Number(emp.salario_base || 0),
+          aux_transporte: Number(emp.aux_transporte || 0),
+          rodamiento: Number(emp.rodamiento || 0),
+          comisiones: 0, // Transaccional: siempre nace en 0
+          poliza_bolivar: Number(emp.poliza_bolivar || 0),
+          poliza_sura: Number(emp.poliza_sura || 0),
+          optica: Number(emp.optica || 0),
+          prestamos: Number(emp.prestamos || 0)
+        }));
+        setNominaRows(cleanRows);
+        
+        savePayrollToCloud({
+          startDate: "", endDate: "",
+          nominaRows: cleanRows,
+          attendanceLogs: {}, overrides: {}, hiddenColumns
+        });
+      }
     }
   };
 
@@ -619,6 +633,19 @@ const handleSaveToCloud = async () => {
       setTimeout(() => setToast(null), 3000);
     }
   };
+
+  const handleMigrateEmployees = async () => {
+     if (window.confirm("Esto subirá todos los empleados de excel_data.js a la base de datos Supabase. ¿Continuar?")) {
+        const res = await uploadEmployeesBulk(MOCK_NOMINA_ROWS);
+        if (res.success) {
+           alert("✅ Empleados migrados con éxito a la nube. Ya puedes borrar este botón del código.");
+           window.location.reload();
+        } else {
+           alert("❌ Error subiendo empleados. Revisa la consola.");
+        }
+     }
+  };
+
 
   const isCellOverridden = (key) => overrides[key] !== undefined;
 
@@ -762,32 +789,6 @@ const handleSaveToCloud = async () => {
     });
     setTimeout(() => setToast(null), 4000);
   };
-
-
-  const handleExportBackup = () => {
-    const backupData = {
-      nominaRows,
-      attendanceLogs,
-      overrides,
-      startDate,
-      endDate,
-      timestamp: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    setToast({ message: "Backup exportado exitosamente.", type: "success" });
-    setTimeout(() => setToast(null), 3000);
-  };
-
   const handleImportBackup = (e) => {
     const file = e.target?.files?.[0];
     if (!file) return;
@@ -842,26 +843,19 @@ const handleSaveToCloud = async () => {
             <CheckCircle2 size={14} />
             Guardar Cambios
           </button>
+
+            <button
+              onClick={handleMigrateEmployees}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black transition-all shadow-md active:scale-95 duration-200"
+            >
+              ⚠️ Migrar Empleados a BD
+            </button>
+
           <label className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all shadow-md active:scale-95 duration-200 cursor-pointer">
             <RotateCcw size={14} className="rotate-180" />
             Cargar Backup
             <input type="file" accept=".json" onChange={handleImportBackup} className="hidden" />
           </label>
-          <button
-            onClick={handleExportBackup}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 border border-indigo-200/80 rounded-xl text-xs font-black transition-all shadow-sm active:scale-95 duration-200"
-          >
-            <RotateCcw size={14} />
-            Descargar Backup
-          </button>
-
-          <button
-            onClick={handleResetOverrides}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200/80 rounded-xl text-xs font-black transition-all shadow-sm active:scale-95 duration-200"
-          >
-            <RotateCcw size={14} />
-            Restablecer Fórmulas Excel
-          </button>
         </div>
       </div>
 
@@ -925,6 +919,12 @@ const handleSaveToCloud = async () => {
             📝 Liquidación
           </button>
           <button
+            onClick={() => setActiveTab("directorio")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all ${activeTab === "directorio" ? "bg-slate-900 text-white shadow-md" : "text-slate-500 hover:bg-slate-200/50"}`}
+          >
+            Directorio HR
+          </button>
+          <button
             onClick={() => setActiveTab("colilla")}
             className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === "colilla" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
           >
@@ -945,7 +945,12 @@ const handleSaveToCloud = async () => {
         </div>
       ) : (
         <>
-          {activeTab === "dashboard" && (
+      {activeTab === "directorio" && (
+        <EmployeeDirectory employees={nominaRows} onRefresh={() => window.location.reload()} />
+      )}
+      
+      {activeTab === "dashboard" && (
+
           <>
             {/* --- TAB 1: PLANILLA GENERAL GENERAL DE NOMINA --- */}
             <div className="space-y-6 animate-stitch">
@@ -1022,31 +1027,6 @@ const handleSaveToCloud = async () => {
                   <tbody className="divide-y divide-slate-100 text-xs font-bold">
                      {filteredPayrollData.map((item) => {
                         const row = item.masterRow;
-                      
-  const handleExportBackup = () => {
-    const backupData = {
-      nominaRows,
-      attendanceLogs,
-      overrides,
-      startDate,
-      endDate,
-      timestamp: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    setToast({ message: "Backup exportado exitosamente.", type: "success" });
-    setTimeout(() => setToast(null), 3000);
-  };
-
   const handleImportBackup = (e) => {
     const file = e.target?.files?.[0];
     if (!file) return;
@@ -1209,31 +1189,6 @@ const handleSaveToCloud = async () => {
                                 const dayName = dateObj.toLocaleDateString("es-CO", { weekday: "short" });
                                 const displayDate = day.dia;
                                 const prefix = `${selectedWorkerData.masterRow.cedula}_${displayDate}`;
-                              
-  const handleExportBackup = () => {
-    const backupData = {
-      nominaRows,
-      attendanceLogs,
-      overrides,
-      startDate,
-      endDate,
-      timestamp: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    setToast({ message: "Backup exportado exitosamente.", type: "success" });
-    setTimeout(() => setToast(null), 3000);
-  };
-
   const handleImportBackup = (e) => {
     const file = e.target?.files?.[0];
     if (!file) return;
@@ -1478,31 +1433,6 @@ const handleSaveToCloud = async () => {
            {function() {
               const selectedWorkerData = filteredPayrollData.find(d => d.masterRow.nombre === selectedWorkerName) || filteredPayrollData[0];
               if (!selectedWorkerData) return null;
-            
-  const handleExportBackup = () => {
-    const backupData = {
-      nominaRows,
-      attendanceLogs,
-      overrides,
-      startDate,
-      endDate,
-      timestamp: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Nomina_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    setToast({ message: "Backup exportado exitosamente.", type: "success" });
-    setTimeout(() => setToast(null), 3000);
-  };
-
   const handleImportBackup = (e) => {
     const file = e.target?.files?.[0];
     if (!file) return;

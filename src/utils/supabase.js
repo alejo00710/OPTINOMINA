@@ -36,6 +36,22 @@ export const savePayrollToCloud = async (payrollData) => {
   }
 };
 
+export const loadEmployeesFromCloud = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('optimoldes_employees')
+      .select('cedula, nombre, cargo, categoria, salario_base, aux_transporte, rodamiento, poliza_bolivar, poliza_sura, optica, prestamos')
+      .eq('is_active', true)
+      .order('nombre', { ascending: true });
+
+    if (error) throw error;
+    return { success: true, data };
+  } catch (error) {
+    console.error("Error cargando empleados:", error);
+    return { success: false, data: [] };
+  }
+};
+
 // Función para cargar el estado desde la nube al iniciar la app
 export const loadPayrollFromCloud = async () => {
   try {
@@ -50,6 +66,46 @@ export const loadPayrollFromCloud = async () => {
     return { success: true, data };
   } catch (error) {
     console.error("Error cargando desde Supabase:", error);
+    return { success: false, error };
+  }
+};
+export const uploadEmployeesBulk = async (employees) => {
+  try {
+    const mappedData = employees.map(emp => ({
+      cedula: String(emp.cedula),
+      nombre: emp.nombre,
+      cargo: emp.cargo || 'OPERARIO',
+      categoria: emp.categoria || 'OTROS',
+      salario_base: emp.salario || emp.salario_base || 0,
+      is_active: true
+    }));
+    const { error } = await supabase.from('optimoldes_employees').upsert(mappedData, { onConflict: 'cedula' });
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    console.error("Error subiendo empleados:", error);
+    return { success: false, error };
+  }
+};
+
+export const upsertEmployeeRecord = async (empData) => {
+  try {
+    const { error } = await supabase.from('optimoldes_employees').upsert([empData], { onConflict: 'cedula' });
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    console.error("Error upserting employee:", error);
+    return { success: false, error };
+  }
+};
+
+export const toggleEmployeeStatus = async (cedula, currentStatus) => {
+  try {
+    const { error } = await supabase.from('optimoldes_employees').update({ is_active: !currentStatus }).eq('cedula', cedula);
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    console.error("Error toggling status:", error);
     return { success: false, error };
   }
 };
