@@ -52,7 +52,8 @@ export const getHourDist = (h1, h2) => {
  * server and the browser, preventing React hydration mismatches.
  */
 export const fmtCOP = (n) => {
-  if (n === null || n === undefined || isNaN(n)) return "-";
+  if (n === null || n === undefined || isNaN(n)) return "0";
+  // Redondeamos al entero más cercano antes de formatear
   const rounded = Math.round(Number(n));
   return rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 };
@@ -70,4 +71,17 @@ export const fmtDec = (n, min = 1, max = 2) => {
   while (dec.length > min && dec.endsWith("0")) dec = dec.slice(0, -1);
   const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   return `${intPart},${dec}`;
+};
+
+export const parseLocalNumber = (val) => {
+  if (val === null || val === undefined || val === "") return 0;
+  if (typeof val === "number") return Number(val.toFixed(2));
+  // Convertimos a string, quitamos símbolos de moneda y espacios
+  let s = String(val).replace(/\$|\s/g, '').trim();
+  // Quitamos los puntos (separador de miles colombiano)
+  s = s.replace(/\./g, '');
+  // Reemplazamos coma por punto (para que JS entienda el decimal)
+  s = s.replace(/,/g, '.');
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : Number(n.toFixed(2)); // Redondeo estricto a 2 decimales
 };

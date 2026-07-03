@@ -1,48 +1,12 @@
 "use client";
-import { MOCK_NOMINA_ROWS } from "./excel_data";
-import EditableCell from "@/components/Nomina/EditableCell";
-import NominaSummaryCards from "@/components/Nomina/NominaSummaryCards";
-import ColumnVisibilityToggle from "@/components/Nomina/ColumnVisibilityToggle";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { Search, Filter, Coins, Info, SlidersHorizontal, Download, RotateCcw, AlertTriangle, Briefcase, FileSpreadsheet, CheckCircle2, ChevronDown, ChevronRight, Calculator, Plus, Trash2, Calendar as CalendarIcon, UploadCloud, Users, ChevronLeft, CalendarRange } from "lucide-react";
 import EmployeeDirectory from "@/components/Nomina/EmployeeDirectory";
-
-import { 
-  Coins, 
-  Users, 
-  Clock, 
-  Search, 
-  SlidersHorizontal, 
-  Download,
-  Info,
-  ChevronRight,
-  X,
-  FileText,
-  UserCheck,
-  Printer,
-  Calendar,
-  DollarSign,
-  TrendingUp,
-  RotateCcw,
-  Plus,
-  ArrowRight,
-  AlertCircle,
-  Upload,
-  CheckCircle2,
-  Trash2,
-  FileSpreadsheet,
-  Loader2
-} from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
-import * as XLSX from "xlsx";
-
-
-import { 
-  SMLV, AUX_TRANSPORTE, MINIMO_DIARIO_INCAPACIDAD, 
-  DIVISOR_HORAS_EXTRAS, DIVISOR_RECARGOS_NOCTURNOS, 
-  FACTOR_EXTRA_DIURNA, FACTOR_EXTRA_NOCTURNA, FACTOR_EXTRA_FESTIVA, FACTOR_RECARGO_NOCTURNO,
-  PERFILES_TURNOS, getDefaultCategoryForCargo, getProfileForCategory, getTemplatesForCategory, 
-  NOMINA_DATE_RANGE_KEY, loadPersistedDateRange, PLANILLA_COLUMNS, DAILY_COLUMNS, LIQUIDATION_CONCEPTS 
-} from "@/utils/constants";
-import { timeStrToDecimal, decimalToTimeStr, diffTimeStr, getDecimalHours, getHourDist, fmtCOP, fmtDec } from "@/utils/mathNomina";
+import ColumnVisibilityToggle from "@/components/Nomina/ColumnVisibilityToggle";
+import NominaSummaryCards from "@/components/Nomina/NominaSummaryCards";
+import EditableCell from "@/components/Nomina/EditableCell";
+import { NOMINA_DATE_RANGE_KEY, loadPersistedDateRange, savePersistedDateRange, PLANILLA_COLUMNS, DAILY_COLUMNS, LIQUIDATION_CONCEPTS, SMLV, AUX_TRANSPORTE, DIVISOR_RECARGOS_NOCTURNOS, DIVISOR_HORAS_EXTRAS, FACTOR_RECARGO_NOCTURNO, FACTOR_EXTRA_DIURNA, FACTOR_EXTRA_NOCTURNA, FACTOR_EXTRA_FESTIVA } from "@/utils/constants";
+import { timeStrToDecimal, decimalToTimeStr, diffTimeStr, getDecimalHours, getHourDist, fmtCOP, fmtDec, parseLocalNumber } from "@/utils/mathNomina";
 import { savePayrollToCloud, loadPayrollFromCloud, loadEmployeesFromCloud, uploadEmployeesBulk } from "@/utils/supabase";
 import { detectShiftTemplate, emptyAttendanceDay, cleanWorkerPunches, parseBiometricExcel } from "@/utils/biometricCore";
 
@@ -110,9 +74,24 @@ export default function NominaPage() {
             nombre: emp.nombre,
             cargo: emp.cargo,
             categoria: emp.categoria,
-            salario: Number(emp.salario_base),
-            aux_transporte: Number(emp.aux_transporte || 0), rodamiento: Number(emp.rodamiento || 0), comisiones: 0,
-            poliza_bolivar: Number(emp.poliza_bolivar || 0), poliza_sura: Number(emp.poliza_sura || 0), optica: Number(emp.optica || 0), prestamos: Number(emp.prestamos || 0)
+            salario: Number(emp.salario_base || emp.salario || 0),
+            aux_transporte: Number(emp.aux_transporte || 0),
+            rodamiento: Number(emp.rodamiento || 0),
+            comisiones: 0,
+            poliza_bolivar: Number(emp.poliza_bolivar || 0),
+            poliza_sura: Number(emp.poliza_sura || 0),
+            optica: Number(emp.optica || 0),
+            prestamos: Number(emp.prestamos || 0),
+            // Transaccionales inicializados en 0
+            dias_pagados: 0,
+            horas_diurnas: 0,
+            horas_nocturnas: 0,
+            extras_diurnas: 0,
+            extras_nocturnas: 0,
+            extras_festivas: 0,
+            total_devengados: 0,
+            total_deducciones: 0,
+            neto_pagar: 0
           }));
         }
 
@@ -176,324 +155,121 @@ export default function NominaPage() {
 
   // --- Central Payroll Calculation Engine ---
   const payrollData = useMemo(() => {
-    const dates = getDatesInRange(startDate, endDate);
+    return nominaRows.map(emp => {
+      const cedula = emp.cedula;
+      const logs = attendanceLogs[cedula] || [];
+      
+      // 1. Sumatorias del Biométrico (Equivalente a Fila 24 de hojas individuales)
+      let sumDiurnas = 0, sumNocturnas = 0, sumFesDiu = 0, sumFesNoc = 0;
+      let sumExtDiu = 0, sumExtNoc = 0, sumExtFesDiu = 0, sumExtFesNoc = 0;
+      let diasLaborados = 0;
 
-    return nominaRows.map((registryRow) => {
-      const workerName = registryRow.nombre;
-      const mastPrefix = `${workerName}_master`;
-      const cedula = resolveValue(overrides, `${mastPrefix}_cedula`, () => registryRow.cedula);
-      const cargo = resolveValue(overrides, `${mastPrefix}_cargo`, () => registryRow.cargo);
-      const categoria = resolveValue(overrides, `${mastPrefix}_categoria`, () => registryRow.categoria || getDefaultCategoryForCargo(cargo));
-
-      // 1. Resolve daily attendance sheet rows for this period
-      const workerDays = dates.map(dateStr => {
-        const loggedDay = (attendanceLogs[cedula] || attendanceLogs[workerName] || []).find(d => d.dia === dateStr) || emptyAttendanceDay(dateStr);
-        const prefix = `${workerName}_day_${dateStr}`;
-
-        const hr_ent = resolveValue(overrides, `${prefix}_hr_ent`, () => loggedDay.hr_ent);
-        const hr_sal = resolveValue(overrides, `${prefix}_hr_sal`, () => loggedDay.hr_sal);
-        const hr_ent_desc1 = resolveValue(overrides, `${prefix}_hr_ent_desc1`, () => loggedDay.hr_ent_desc1);
-        const hr_sal_desc1 = resolveValue(overrides, `${prefix}_hr_sal_desc1`, () => loggedDay.hr_sal_desc1);
-        const total_desc1 = resolveValue(overrides, `${prefix}_total_desc1`, () => diffTimeStr(hr_sal_desc1, hr_ent_desc1));
-        const hr_ent_desc2 = resolveValue(overrides, `${prefix}_hr_ent_desc2`, () => loggedDay.hr_ent_desc2);
-        const hr_sal_desc2 = resolveValue(overrides, `${prefix}_hr_sal_desc2`, () => loggedDay.hr_sal_desc2);
-        const total_desc2 = resolveValue(overrides, `${prefix}_total_desc2`, () => diffTimeStr(hr_sal_desc2, hr_ent_desc2));
-
-        const hr_ent_pago = resolveValue(overrides, `${prefix}_hr_ent_pago`, () => {
-          if (!hr_ent || !hr_sal) return loggedDay.hr_ent_pago || null;
-          const durationDecimal = getDecimalHours(hr_ent, hr_sal);
-          const bestTpl = detectShiftTemplate(hr_ent, hr_sal, durationDecimal, categoria);
-          return decimalToTimeStr(bestTpl.entPago);
-        });
-
-        const hr_sal_pago = resolveValue(overrides, `${prefix}_hr_sal_pago`, () => {
-          if (!hr_ent || !hr_sal) return loggedDay.hr_sal_pago || null;
-          const durationDecimal = getDecimalHours(hr_ent, hr_sal);
-          const bestTpl = detectShiftTemplate(hr_ent, hr_sal, durationDecimal, categoria);
-          return decimalToTimeStr(bestTpl.salPago);
-        });
-
-        const hr_lab = resolveValue(overrides, `${prefix}_hr_lab`, () => getDecimalHours(hr_ent_pago, hr_sal_pago));
-        const desc_lunch = resolveValue(overrides, `${prefix}_desc_lunch`, () => (hr_lab > 8.9 ? 0.5 : getDecimalHours(hr_sal_desc1, hr_ent_desc1) + getDecimalHours(hr_sal_desc2, hr_ent_desc2)));
-        const hr_pag = resolveValue(overrides, `${prefix}_hr_pag`, () => Math.max(0, hr_lab - desc_lunch));
-
-        const dateObj = new Date(dateStr + "T00:00:00");
-        const isSunday = dateObj.getDay() === 0;
-
-        const jDec = timeStrToDecimal(hr_ent_pago);
-        const c41 = 4.8333; // 04:50
-        const d41 = 18.0;   // 18:00
-
-        let defaultO = 0;
-        let defaultP = 0;
-        let defaultQ = 0;
-        let defaultR = 0;
-        let defaultS = 0;
-        let defaultT = 0;
-        let defaultU = 0;
-        let defaultV = 0;
-
-        if (hr_ent_pago && hr_sal_pago) {
-          if (isSunday) {
-            const rVal = jDec > d41 ? (44 / 6) : 0;
-            defaultR = Math.min(rVal, hr_pag);
-            const qVal = (jDec >= c41 && jDec <= d41) ? (44 / 6) : 0;
-            defaultQ = Math.min(qVal, Math.max(0, hr_pag - defaultR));
-            
-            if (jDec > d41) {
-              defaultV = Math.max(0, hr_pag - defaultR);
-            } else {
-              defaultU = Math.max(0, hr_pag - defaultQ);
-            }
-          } else {
-            const pVal = jDec > d41 ? (44 / 6) : 0;
-            defaultP = Math.min(pVal, hr_pag);
-            const oVal = (jDec >= c41 && jDec <= d41) ? ((44 / 6) - defaultP) : 0;
-            defaultO = Math.min(oVal, Math.max(0, hr_pag - defaultP));
-            
-            if (jDec > d41) {
-              defaultT = Math.max(0, hr_pag - defaultP);
-            } else {
-              defaultS = Math.max(0, hr_pag - defaultO);
-            }
-          }
-        }
-
-        const diurnas = resolveValue(overrides, `${prefix}_diurnas`, () => defaultO);
-        const nocturnas = resolveValue(overrides, `${prefix}_nocturnas`, () => defaultP);
-        const fes_diu = resolveValue(overrides, `${prefix}_fes_diu`, () => defaultQ);
-        const fes_noc = resolveValue(overrides, `${prefix}_fes_noc`, () => defaultR);
-        const ext_diu = resolveValue(overrides, `${prefix}_ext_diu`, () => defaultS);
-        const ext_noc = resolveValue(overrides, `${prefix}_ext_noc`, () => defaultT);
-        const ext_fes_diu = resolveValue(overrides, `${prefix}_ext_fes_diu`, () => defaultU);
-        const ext_fes_noc = resolveValue(overrides, `${prefix}_ext_fes_noc`, () => defaultV);
-
-        let defaultW = 0;
-        let defaultX = 0;
-        if (hr_ent && hr_ent_pago) {
-          const entDec = timeStrToDecimal(hr_ent);
-          const entPagoDec = timeStrToDecimal(hr_ent_pago);
-          const diffMin = (entDec - entPagoDec) * 60;
-          if (diffMin > 0) {
-            defaultX = Math.round(diffMin);
-            defaultW = 1;
-          }
-        }
-
-        const llegada_tarde = resolveValue(overrides, `${prefix}_llegada_tarde`, () => defaultW);
-        const llegada_tarde_min = resolveValue(overrides, `${prefix}_llegada_tarde_min`, () => defaultX);
-
-        return {
-          dia: dateStr,
-          hr_ent,
-          hr_sal,
-          hr_ent_desc1,
-          hr_sal_desc1,
-          total_desc1,
-          hr_ent_desc2,
-          hr_sal_desc2,
-          total_desc2,
-          hr_ent_pago,
-          hr_sal_pago,
-          hr_lab,
-          desc_lunch,
-          hr_pag,
-          diurnas,
-          nocturnas,
-          fes_diu,
-          fes_noc,
-          ext_diu,
-          ext_noc,
-          ext_fes_diu,
-          ext_fes_noc,
-          llegada_tarde,
-          llegada_tarde_min
-        };
+      logs.forEach(day => {
+        if (day.hr_lab > 0) diasLaborados++;
+        sumDiurnas += Number(day.diurnas || 0);
+        sumNocturnas += Number(day.nocturnas || 0);
+        sumFesDiu += Number(day.fes_diu || 0);
+        sumFesNoc += Number(day.fes_noc || 0);
+        sumExtDiu += Number(day.ext_diu || 0);
+        sumExtNoc += Number(day.ext_noc || 0);
+        sumExtFesDiu += Number(day.ext_fes_diu || 0);
+        sumExtFesNoc += Number(day.ext_fes_noc || 0);
       });
 
-      // 2. Resolve Worker Liquidation Summary (B26, B37, D28-D36, F28-F36)
-      const liqPrefix = `${workerName}_liq`;
-      const salario_base = resolveValue(overrides, `${liqPrefix}_salario_base`, () => registryRow.salario || 0);
-      const horas_debe = resolveValue(overrides, `${liqPrefix}_horas_debe`, () => {
-        const mockRate = ratesMap[workerName];
-        return mockRate ? mockRate.horas_debe : 0;
-      });
+      // Sobreescribir días pagados si el usuario lo editó manualmente (overrides) o usar los calculados
+      const diasPagados = resolveValue(overrides, `${cedula}_dias_pagados`, () => (diasLaborados > 0 ? diasLaborados : 15));
+      const salarioBase = Number(emp.salario_base || emp.salario || 0);
+      const valDia = salarioBase / 30;
+      const sueldoBasico = resolveValue(overrides, `${cedula}_sueldo`, () => parseLocalNumber(valDia * diasPagados));
 
-      const sumDiu = workerDays.reduce((sum, d) => sum + (d.diurnas || 0), 0);
-      const sumNoc = workerDays.reduce((sum, d) => sum + (d.nocturnas || 0), 0);
-      const sumFesDiu = workerDays.reduce((sum, d) => sum + (d.fes_diu || 0), 0);
-      const sumFesNoc = workerDays.reduce((sum, d) => sum + (d.fes_noc || 0), 0);
-      const sumExtDiu = workerDays.reduce((sum, d) => sum + (d.ext_diu || 0), 0);
-      const sumExtNoc = workerDays.reduce((sum, d) => sum + (d.ext_noc || 0), 0);
-      const sumExtFesDiu = workerDays.reduce((sum, d) => sum + (d.ext_fes_diu || 0), 0);
-      const sumExtFesNoc = workerDays.reduce((sum, d) => sum + (d.ext_fes_noc || 0), 0);
+      // 2. Cálculo de Valores (Fórmulas Excel Columnas N a R)
+      // Nota: Usamos las variables de DIVISOR y FACTOR importadas de constants.js
+      const valRecargoNocturno = resolveValue(overrides, `${cedula}_recargo_nocturno`, () => parseLocalNumber((salarioBase / DIVISOR_RECARGOS_NOCTURNOS) * FACTOR_RECARGO_NOCTURNO * sumNocturnas));
+      const valExtDiurna = resolveValue(overrides, `${cedula}_val_extras_diurnas`, () => parseLocalNumber((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_DIURNA * sumExtDiu));
+      const valExtNocturna = resolveValue(overrides, `${cedula}_val_extras_nocturnas`, () => parseLocalNumber((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_NOCTURNA * sumExtNoc));
+      const valExtFesDiuRaw = (salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_FESTIVA * sumExtFesDiu;
+      const valExtFesNocRaw = (salarioBase / DIVISOR_HORAS_EXTRAS) * 2.5 * sumExtFesNoc; // Asumiendo 2.5 para Extra Festiva Nocturna
+      const valExtFesTotal = resolveValue(overrides, `${cedula}_val_extras_festivas`, () => parseLocalNumber(valExtFesDiuRaw + valExtFesNocRaw));
 
-      const h_diurna_hr = resolveValue(overrides, `${liqPrefix}_h_diurna_hr`, () => sumDiu);
-      const h_nocturna_hr = resolveValue(overrides, `${liqPrefix}_h_nocturna_hr`, () => sumNoc);
-      const h_festiva_diurna_hr = resolveValue(overrides, `${liqPrefix}_h_festiva_diurna_hr`, () => sumFesDiu);
-      const h_festiva_nocturna_hr = resolveValue(overrides, `${liqPrefix}_h_festiva_nocturna_hr`, () => sumFesNoc);
-      const h_extra_diurna_hr = resolveValue(overrides, `${liqPrefix}_h_extra_diurna_hr`, () => sumExtDiu - horas_debe);
-      const h_extra_nocturna_hr = resolveValue(overrides, `${liqPrefix}_h_extra_nocturna_hr`, () => sumExtNoc);
-      const h_extra_festiva_diurna_hr = resolveValue(overrides, `${liqPrefix}_h_extra_festiva_diurna_hr`, () => sumExtFesDiu);
-      const h_extra_festiva_nocturna_hr = resolveValue(overrides, `${liqPrefix}_h_extra_festiva_nocturna_hr`, () => sumExtFesNoc);
+      const comisiones = resolveValue(overrides, `${cedula}_comisiones`, () => 0);
+      
+      // Auxilio de Transporte (Columna S: =SI(F<=(SMLV*2);(AUX_TRANSPORTE/30)*G;0))
+      let auxTransporteCalculado = 0;
+      if (salarioBase <= (SMLV * 2)) {
+         auxTransporteCalculado = (AUX_TRANSPORTE / 30) * diasPagados;
+      }
+      // Respetar si hay un aux_transporte fijo en el perfil (para excepciones)
+      const auxTransporteFinal = resolveValue(overrides, `${cedula}_transporte`, () => parseLocalNumber(Number(emp.aux_transporte) > 0 ? Number(emp.aux_transporte) : auxTransporteCalculado));
+      
+      const rodamiento = resolveValue(overrides, `${cedula}_rodamiento`, () => parseLocalNumber(Number(emp.rodamiento || 0)));
+      const incapacidad = resolveValue(overrides, `${cedula}_incapacidad`, () => 0);
+      const bonificacion = resolveValue(overrides, `${cedula}_bonificacion`, () => 0);
 
-      const h_diurna_pct = resolveValue(overrides, `${liqPrefix}_h_diurna_pct`, () => 0.0);
-      const h_nocturna_pct = resolveValue(overrides, `${liqPrefix}_h_nocturna_pct`, () => 0.35);
-      const h_festiva_diurna_pct = resolveValue(overrides, `${liqPrefix}_h_festiva_diurna_pct`, () => 0.75);
-      const h_festiva_nocturna_pct = resolveValue(overrides, `${liqPrefix}_h_festiva_nocturna_pct`, () => 2.1);
-      const h_extra_diurna_pct = resolveValue(overrides, `${liqPrefix}_h_extra_diurna_pct`, () => 1.5);
-      const h_extra_nocturna_pct = resolveValue(overrides, `${liqPrefix}_h_extra_nocturna_pct`, () => 1.75);
-      const h_extra_festiva_diurna_pct = resolveValue(overrides, `${liqPrefix}_h_extra_festiva_diurna_pct`, () => 2.0);
-      const h_extra_festiva_nocturna_pct = resolveValue(overrides, `${liqPrefix}_h_extra_festiva_nocturna_pct`, () => 2.5);
+      // 3. Total Devengado (Columna W)
+      const totalDevengado = resolveValue(overrides, `${cedula}_total_devengados`, () => parseLocalNumber(sueldoBasico + valRecargoNocturno + valExtDiurna + valExtNocturna + valExtFesTotal + comisiones + auxTransporteFinal + rodamiento + incapacidad));
 
-      const rateHour = salario_base / DIVISOR_HORAS_EXTRAS;
-      const h_diurna_val = resolveValue(overrides, `${liqPrefix}_h_diurna_val`, () => rateHour * h_diurna_pct * h_diurna_hr);
-      const h_nocturna_val = resolveValue(overrides, `${liqPrefix}_h_nocturna_val`, () => rateHour * h_nocturna_pct * h_nocturna_hr);
-      const h_festiva_diurna_val = resolveValue(overrides, `${liqPrefix}_h_festiva_diurna_val`, () => rateHour * h_festiva_diurna_pct * h_festiva_diurna_hr);
-      const h_festiva_nocturna_val = resolveValue(overrides, `${liqPrefix}_h_festiva_nocturna_val`, () => rateHour * h_festiva_nocturna_pct * h_festiva_nocturna_hr);
-      const h_extra_diurna_val = resolveValue(overrides, `${liqPrefix}_h_extra_diurna_val`, () => rateHour * h_extra_diurna_pct * h_extra_diurna_hr);
-      const h_extra_nocturna_val = resolveValue(overrides, `${liqPrefix}_h_extra_nocturna_val`, () => rateHour * h_extra_nocturna_pct * h_extra_nocturna_hr);
-      const h_extra_festiva_diurna_val = resolveValue(overrides, `${liqPrefix}_h_extra_festiva_diurna_val`, () => rateHour * h_extra_festiva_diurna_pct * h_extra_festiva_diurna_hr);
-      const h_extra_festiva_nocturna_val = resolveValue(overrides, `${liqPrefix}_h_extra_festiva_nocturna_val`, () => rateHour * h_extra_festiva_nocturna_pct * h_extra_festiva_nocturna_hr);
+      // 4. Deducciones Base (Columnas X, Y, Z)
+      // Base para seguridad social (no incluye transporte ni rodamiento)
+      const baseSeguridadSocial = totalDevengado - auxTransporteFinal - rodamiento; 
+      const salud = resolveValue(overrides, `${cedula}_salud`, () => parseLocalNumber(baseSeguridadSocial * 0.04));
+      const pension = resolveValue(overrides, `${cedula}_pension`, () => parseLocalNumber(baseSeguridadSocial * 0.04));
+      const solidaridad = resolveValue(overrides, `${cedula}_solidaridad`, () => parseLocalNumber(salarioBase >= (SMLV * 4) ? (baseSeguridadSocial * 0.01) : 0));
 
-      const horas_pendientes = resolveValue(overrides, `${liqPrefix}_horas_pendientes`, () => h_extra_diurna_hr + h_extra_nocturna_hr + h_extra_festiva_diurna_hr + h_extra_festiva_nocturna_hr);
-      const total_extra_hrs = resolveValue(overrides, `${liqPrefix}_total_extra_hrs`, () => h_diurna_hr + h_nocturna_hr + h_festiva_diurna_hr + h_festiva_nocturna_hr + h_extra_diurna_hr + h_extra_nocturna_hr + h_extra_festiva_diurna_hr + h_extra_festiva_nocturna_hr);
-      const total_extra_val = resolveValue(overrides, `${liqPrefix}_total_extra_val`, () => {
-        const s = h_diurna_val + h_nocturna_val + h_festiva_diurna_val + h_festiva_nocturna_val + h_extra_diurna_val + h_extra_nocturna_val + h_extra_festiva_diurna_val + h_extra_festiva_nocturna_val;
-        return s < 0 ? 0 : s;
-      });
+      // 5. Deducciones Fijas de la BD (Columnas AA a AH)
+      const prestamos = resolveValue(overrides, `${cedula}_prestamos`, () => parseLocalNumber(Number(emp.prestamos || 0)));
+      const polizaBolivar = resolveValue(overrides, `${cedula}_poliza_bolivar`, () => parseLocalNumber(Number(emp.poliza_bolivar || 0)));
+      const polizaSura = resolveValue(overrides, `${cedula}_poliza_sura`, () => parseLocalNumber(Number(emp.poliza_sura || 0)));
+      const optica = resolveValue(overrides, `${cedula}_optica`, () => parseLocalNumber(Number(emp.optica || 0)));
+      const retencion = resolveValue(overrides, `${cedula}_retencion`, () => 0);
 
-      const novedadesStr = `1. Recargo nocturno ${h_nocturna_hr.toFixed(2)} hrs`;
-
-      // 3. Resolve Master General Planilla row data (A to AO)
-      const dias_pagados = resolveValue(overrides, `${mastPrefix}_dias_pagados`, () => Math.min(15, dates.length));
-
-      const horas_diurnas = resolveValue(overrides, `${mastPrefix}_horas_diurnas`, () => h_diurna_hr);
-      const horas_nocturnas = resolveValue(overrides, `${mastPrefix}_horas_nocturnas`, () => h_nocturna_hr);
-      const extras_diurnas = resolveValue(overrides, `${mastPrefix}_extras_diurnas`, () => h_extra_diurna_hr);
-      const extras_nocturnas = resolveValue(overrides, `${mastPrefix}_extras_nocturnas`, () => h_extra_nocturna_hr);
-      const extras_festivas = resolveValue(overrides, `${mastPrefix}_extras_festivas`, () => h_extra_festiva_diurna_hr);
-
-      const sueldo = resolveValue(overrides, `${mastPrefix}_sueldo`, () => (salario_base / 30) * dias_pagados);
-      const recargo_nocturno = resolveValue(overrides, `${mastPrefix}_recargo_nocturno`, () => ((salario_base / DIVISOR_RECARGOS_NOCTURNOS) * FACTOR_RECARGO_NOCTURNO) * horas_nocturnas);
-      const val_extras_diurnas = resolveValue(overrides, `${mastPrefix}_val_extras_diurnas`, () => ((salario_base / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_DIURNA) * extras_diurnas);
-      const val_extras_nocturnas = resolveValue(overrides, `${mastPrefix}_val_extras_nocturnas`, () => ((salario_base / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_NOCTURNA) * extras_nocturnas);
-      const val_extras_festivas = resolveValue(overrides, `${mastPrefix}_val_extras_festivas`, () => ((salario_base / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_FESTIVA) * extras_festivas);
-
-      const comisiones = resolveValue(overrides, `${mastPrefix}_comisiones`, () => registryRow.comisiones || 0);
-      const minWage = SMLV;
-      const transportBase = AUX_TRANSPORTE;
-      const transporte = resolveValue(overrides, `${mastPrefix}_transporte`, () => (salario_base <= 2 * minWage ? (transportBase / 30) * dias_pagados : 0));
-      const rodamiento = resolveValue(overrides, `${mastPrefix}_rodamiento`, () => registryRow.rodamiento || 0);
-
-      const dias_incapacidad = resolveValue(overrides, `${mastPrefix}_dias_incapacidad`, () => registryRow.dias_incapacidad || 0);
-      const incapacidad = resolveValue(overrides, `${mastPrefix}_incapacidad`, () => {
-        const dailyMinBase = minWage / 30; // 58363.5
-        const standardDailyBase = (salario_base / 30) * (2 / 3);
-        const dailyIncapRate = standardDailyBase > dailyMinBase ? standardDailyBase : dailyMinBase;
-        return dailyIncapRate * dias_incapacidad;
-      });
-
-      const total_devengados = resolveValue(overrides, `${mastPrefix}_total_devengados`, () => sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + comisiones + transporte + rodamiento + incapacidad);
-
-      const healthPensionBase = sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + comisiones + incapacidad;
-      const salud = resolveValue(overrides, `${mastPrefix}_salud`, () => healthPensionBase * 0.04);
-      const pension = resolveValue(overrides, `${mastPrefix}_pension`, () => healthPensionBase * 0.04);
-      const solidaridad = resolveValue(overrides, `${mastPrefix}_solidaridad`, () => (salario_base >= 4 * minWage ? (sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + incapacidad) * 0.01 : 0));
-
-      const prestamos = resolveValue(overrides, `${mastPrefix}_prestamos`, () => registryRow.prestamos || 0);
-      const poliza_bolivar = resolveValue(overrides, `${mastPrefix}_poliza_bolivar`, () => registryRow.poliza_bolivar || 0);
-      const poliza_plenitud = resolveValue(overrides, `${mastPrefix}_poliza_plenitud`, () => registryRow.poliza_plenitud || 0);
-      const libranza_comfama = resolveValue(overrides, `${mastPrefix}_libranza_comfama`, () => registryRow.libranza_comfama || 0);
-      const poliza_sura = resolveValue(overrides, `${mastPrefix}_poliza_sura`, () => registryRow.poliza_sura || 0);
-      const optica = resolveValue(overrides, `${mastPrefix}_optica`, () => registryRow.optica || 0);
-      const celular = resolveValue(overrides, `${mastPrefix}_celular`, () => registryRow.celular || 0);
-      const retencion = resolveValue(overrides, `${mastPrefix}_retencion`, () => registryRow.retencion || 0);
-
-      const total_deducciones = resolveValue(overrides, `${mastPrefix}_total_deducciones`, () => salud + pension + solidaridad + prestamos + poliza_bolivar + poliza_plenitud + libranza_comfama + poliza_sura + optica + celular + retencion);
-
-      const total_pagar = resolveValue(overrides, `${mastPrefix}_total_pagar`, () => total_devengados - total_deducciones);
-      const bonificacion = resolveValue(overrides, `${mastPrefix}_bonificacion`, () => registryRow.bonificacion || 0);
-      const neto_pagar = resolveValue(overrides, `${mastPrefix}_neto_pagar`, () => total_pagar + bonificacion);
-      const saldo_prestamo = resolveValue(overrides, `${mastPrefix}_saldo_prestamo`, () => registryRow.saldo_prestamo || 0);
-      const verificacion = resolveValue(overrides, `${mastPrefix}_verificacion`, () => (total_devengados + bonificacion) * 0.40);
-
-      const banco = resolveValue(overrides, `${mastPrefix}_banco`, () => registryRow.banco || "BANCOLOMBIA");
-      const contract_type = registryRow.contract_type || "blue";
+      // 6. Total Deducido y Neto (Columnas AI, AJ)
+      const totalDeducciones = resolveValue(overrides, `${cedula}_total_deducciones`, () => parseLocalNumber(salud + pension + solidaridad + prestamos + polizaBolivar + polizaSura + optica + retencion));
+      const netoPagar = resolveValue(overrides, `${cedula}_neto_pagar`, () => parseLocalNumber(totalDevengado - totalDeducciones + bonificacion)); // bonificacion no salarial
 
       return {
-        name: workerName,
-        registryRow,
-        workerDays,
+        masterRow: emp,
+        ...emp,
+        dias_pagados: diasPagados,
+        horas_diurnas: sumDiurnas,
+        horas_nocturnas: sumNocturnas,
+        extras_diurnas: sumExtDiu,
+        extras_nocturnas: sumExtNoc,
+        extras_festivas: sumExtFesDiu + sumExtFesNoc,
+        sueldo: sueldoBasico,
+        recargo_nocturno: valRecargoNocturno,
+        val_extras_diurnas: valExtDiurna,
+        val_extras_nocturnas: valExtNocturna,
+        val_extras_festivas: valExtFesTotal,
+        comisiones,
+        transporte: auxTransporteFinal,
+        rodamiento,
+        incapacidad,
+        total_devengados: totalDevengado,
+        salud,
+        pension,
+        solidaridad,
+        prestamos,
+        poliza_bolivar: polizaBolivar,
+        poliza_sura: polizaSura,
+        optica,
+        retencion,
+        total_deducciones: totalDeducciones,
+        bonificacion,
+        neto_pagar: netoPagar,
+        workerDays: logs,
         liquidation: {
-          salario_base,
-          horas_debe,
-          horas_pendientes,
-          h_diurna_hr, h_diurna_pct, h_diurna_val,
-          h_nocturna_hr, h_nocturna_pct, h_nocturna_val,
-          h_festiva_diurna_hr, h_festiva_diurna_pct, h_festiva_diurna_val,
-          h_festiva_nocturna_hr, h_festiva_nocturna_pct, h_festiva_nocturna_val,
-          h_extra_diurna_hr, h_extra_diurna_pct, h_extra_diurna_val,
-          h_extra_nocturna_hr, h_extra_nocturna_pct, h_extra_nocturna_val,
-          h_extra_festiva_diurna_hr, h_extra_festiva_diurna_pct, h_extra_festiva_diurna_val,
-          h_extra_festiva_nocturna_hr, h_extra_festiva_nocturna_pct, h_extra_festiva_nocturna_val,
-          total_extra_hrs,
-          total_extra_val,
-          novedadesStr,
-        },
-        masterRow: {
-          consecutivo: registryRow.consecutivo,
-          nombre: workerName,
-          cedula,
-          cargo,
-          categoria,
-          salario: salario_base,
-          dias_pagados,
-          horas_diurnas,
-          horas_nocturnas,
-          extras_diurnas,
-          extras_nocturnas,
-          extras_festivas,
-          sueldo,
-          recargo_nocturno,
-          val_extras_diurnas,
-          val_extras_nocturnas,
-          val_extras_festivas,
-          comisiones,
-          transporte,
-          rodamiento,
-          dias_incapacidad,
-          incapacidad,
-          total_devengados,
-          salud,
-          pension,
-          solidaridad,
-          prestamos,
-          poliza_bolivar,
-          poliza_plenitud,
-          libranza_comfama,
-          poliza_sura,
-          optica,
-          celular,
-          retencion,
-          total_deducciones,
-          total_pagar,
-          bonificacion,
-          neto_pagar,
-          saldo_prestamo,
-          verificacion,
-          banco,
-          contract_type
+            total_extra_val: valRecargoNocturno + valExtDiurna + valExtNocturna + valExtFesTotal
         }
       };
     });
-  }, [nominaRows, attendanceLogs, overrides, startDate, endDate, ratesMap]);
+  }, [nominaRows, attendanceLogs, overrides]);
 
   // Filtering based on SearchTerm and Position selector
   const filteredPayrollData = useMemo(() => {
     return payrollData.filter(item => {
-      const nameMatch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || String(item.masterRow.cedula).includes(searchTerm);
-      const posMatch = filterPosition === "all" || item.masterRow.cargo === filterPosition;
+      const itemName = item.nombre || item.name || "";
+      const nameMatch = itemName.toLowerCase().includes(searchTerm.toLowerCase()) || String(item.masterRow?.cedula || "").includes(searchTerm);
+      const posMatch = filterPosition === "all" || item.masterRow?.cargo === filterPosition;
       return nameMatch && posMatch;
     });
   }, [payrollData, searchTerm, filterPosition]);
@@ -569,49 +345,48 @@ export default function NominaPage() {
 
   // Active selected worker data object
   const selectedWorkerData = useMemo(() => {
-    return payrollData.find(item => item.name === selectedWorkerName) || payrollData[0];
+    return payrollData.find(item => (item.nombre || item.name) === selectedWorkerName) || payrollData[0];
   }, [payrollData, selectedWorkerName]);
 
   const handleCellEdit = (cellKey, val) => {
     setOverrides(prev => ({
       ...prev,
-      [cellKey]: val
+      [cellKey]: parseLocalNumber(val)
     }));
   };
   
-  const handleClearAll = async () => {
-    if (window.confirm("¿Estás seguro de que deseas borrar los datos transaccionales y empezar una nueva quincena limpia? (Se conservarán salarios y deducciones fijas).")) {
+  const handleClearAll = () => {
+    if (window.confirm("¿Seguro de iniciar una nueva quincena? (Se conservarán datos fijos y se borrarán horas/extras).")) {
+      const freshRows = nominaRows.map(emp => ({
+        ...emp,
+        // Mantenemos los datos fijos que vienen del Directorio HR o de la base actual
+        consecutivo: emp.consecutivo,
+        cedula: emp.cedula,
+        nombre: emp.nombre,
+        cargo: emp.cargo,
+        categoria: emp.categoria,
+        salario: Number(emp.salario_base || emp.salario || 0),
+        aux_transporte: Number(emp.aux_transporte || 0),
+        rodamiento: Number(emp.rodamiento || 0),
+        prestamos: Number(emp.prestamos || 0),
+        poliza_bolivar: Number(emp.poliza_bolivar || 0),
+        poliza_sura: Number(emp.poliza_sura || 0),
+        optica: Number(emp.optica || 0),
+        // Reseteamos valores transaccionales a cero
+        dias_pagados: 0,
+        horas_diurnas: 0,
+        horas_nocturnas: 0,
+        extras_diurnas: 0,
+        extras_nocturnas: 0,
+        extras_festivas: 0,
+        total_devengados: 0,
+        total_deducciones: 0,
+        neto_pagar: 0
+      }));
+      setNominaRows(freshRows);
       setAttendanceLogs({});
       setOverrides({});
-      setStartDate("");
-      setEndDate("");
-      
-      // Recargar empleados maestros para traer los valores fijos limpios
-      const empRes = await loadEmployeesFromCloud();
-      if (empRes.success && empRes.data) {
-        const cleanRows = empRes.data.map((emp, index) => ({
-          consecutivo: index + 1,
-          cedula: emp.cedula,
-          nombre: emp.nombre,
-          cargo: emp.cargo,
-          categoria: emp.categoria,
-          salario: Number(emp.salario_base || 0),
-          aux_transporte: Number(emp.aux_transporte || 0),
-          rodamiento: Number(emp.rodamiento || 0),
-          comisiones: 0, // Transaccional: siempre nace en 0
-          poliza_bolivar: Number(emp.poliza_bolivar || 0),
-          poliza_sura: Number(emp.poliza_sura || 0),
-          optica: Number(emp.optica || 0),
-          prestamos: Number(emp.prestamos || 0)
-        }));
-        setNominaRows(cleanRows);
-        
-        savePayrollToCloud({
-          startDate: "", endDate: "",
-          nominaRows: cleanRows,
-          attendanceLogs: {}, overrides: {}, hiddenColumns
-        });
-      }
+      alert("Planilla reseteada. Datos fijos conservados.");
     }
   };
 
@@ -634,19 +409,7 @@ const handleSaveToCloud = async () => {
     }
   };
 
-  const handleMigrateEmployees = async () => {
-     if (window.confirm("Esto subirá todos los empleados de excel_data.js a la base de datos Supabase. ¿Continuar?")) {
-        const res = await uploadEmployeesBulk(MOCK_NOMINA_ROWS);
-        if (res.success) {
-           alert("✅ Empleados migrados con éxito a la nube. Ya puedes borrar este botón del código.");
-           window.location.reload();
-        } else {
-           alert("❌ Error subiendo empleados. Revisa la consola.");
-        }
-     }
-  };
-
-
+  
   const isCellOverridden = (key) => overrides[key] !== undefined;
 
   // --- Clock-ins Excel Uploader ---
@@ -844,12 +607,7 @@ const handleSaveToCloud = async () => {
             Guardar Cambios
           </button>
 
-            <button
-              onClick={handleMigrateEmployees}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black transition-all shadow-md active:scale-95 duration-200"
-            >
-              ⚠️ Migrar Empleados a BD
-            </button>
+            
 
           <label className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all shadow-md active:scale-95 duration-200 cursor-pointer">
             <RotateCcw size={14} className="rotate-180" />
@@ -884,6 +642,14 @@ const handleSaveToCloud = async () => {
               className="bg-rose-100 hover:bg-rose-600 text-rose-600 hover:text-white text-xs font-black uppercase tracking-wider px-4 py-2 rounded-lg transition-colors shadow-sm"
             >
                Limpiar Biométrico
+            </button>
+
+            <button
+              onClick={handleClearAll}
+              className="px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-2xl text-sm shadow-lg shadow-rose-200 transition-all active:scale-95 flex items-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              Limpiar Quincena
             </button>
          </div>
          
@@ -1714,7 +1480,8 @@ const handleSaveToCloud = async () => {
              
              return PLANILLA_COLUMNS.map(col => {
                 const cKey = `${workerData.masterRow.cedula}_${col.key}`;
-                const val = overrides[cKey] !== undefined ? overrides[cKey] : (workerData.masterRow[col.key] !== undefined ? workerData.masterRow[col.key] : "");
+                let val = overrides[cKey] !== undefined ? overrides[cKey] : (workerData[col.key] !== undefined ? workerData[col.key] : "");
+                if (col.isCurrency && val !== "") val = Math.round(Number(val));
                 
                 return (
                   <div key={col.key} className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
@@ -1725,8 +1492,8 @@ const handleSaveToCloud = async () => {
                         value={val}
                         onChange={(newVal) => handleCellEdit(cKey, newVal)}
                         isOverridden={overrides[cKey] !== undefined}
-                        isCurrency={col.type === 'currency'}
-                        isDecimal={col.type === 'decimal'}
+                        isCurrency={col.isCurrency}
+                        isDecimal={col.isDecimal}
                      />
                   </div>
                 )

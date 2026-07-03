@@ -1,15 +1,24 @@
 "use client";
-import { useState } from "react";
-import { fmtCOP } from "@/utils/mathNomina";
+import { useState, useEffect } from "react";
+import { fmtCOP, parseLocalNumber } from "@/utils/mathNomina";
 
 export default function EditableCell({ value, onChange, isOverridden, isCurrency = false, isDecimal = false }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [localVal, setLocalVal] = useState(value);
+
+  useEffect(() => { setLocalVal(value); }, [value]);
 
   let displayValue = value;
   if (!isEditing) {
     if (isCurrency) displayValue = `$ ${fmtCOP(value)}`;
     else if (isDecimal) displayValue = Number(value).toFixed(2);
   }
+
+  const handleBlur = () => {
+    setIsEditing(false);
+    const cleanNum = parseLocalNumber(localVal);
+    onChange(cleanNum);
+  };
 
   return (
     <div
@@ -18,16 +27,16 @@ export default function EditableCell({ value, onChange, isOverridden, isCurrency
       onClick={() => setIsEditing(true)}
     >
       {isOverridden && (
-        <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_4px_rgba(251,191,36,0.8)]" title="Valor congelado"></span>
+        <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-400" title="Valor congelado"></span>
       )}
-
       {isEditing ? (
         <input
           type="text"
           autoFocus
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={() => setIsEditing(false)}
+          value={localVal}
+          onChange={(e) => setLocalVal(e.target.value)}
+          onBlur={handleBlur}
+          onKeyDown={(e) => e.key === 'Enter' && handleBlur()}
           className="w-full bg-transparent border-none p-0 m-0 text-sm font-semibold text-slate-900 focus:ring-0 outline-none text-right"
         />
       ) : (

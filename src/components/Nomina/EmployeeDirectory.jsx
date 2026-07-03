@@ -1,54 +1,15 @@
 import React, { useState } from 'react';
 import { Plus, Edit2, Power, PowerOff, X, CheckCircle2 } from 'lucide-react';
 import { upsertEmployeeRecord, toggleEmployeeStatus } from '@/utils/supabase';
+import EmployeeEditorModal from './EmployeeEditorModal';
+import { fmtCOP, parseLocalNumber } from "@/utils/mathNomina";
 
 export default function EmployeeDirectory({ employees, onRefresh }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    cedula: '',
-    nombre: '',
-    cargo: '',
-    categoria: 'OTROS',
-    salario_base: '',
-    aux_transporte: '',
-    rodamiento: '',
-    poliza_bolivar: '',
-    poliza_sura: '',
-    optica: '',
-    prestamos: ''
-  });
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
 
   const handleOpenModal = (emp = null) => {
-    if (emp) {
-      setFormData({
-        cedula: emp.cedula,
-        nombre: emp.nombre,
-        cargo: emp.cargo,
-        categoria: emp.categoria,
-        salario_base: emp.salario_base || emp.salario,
-        aux_transporte: emp.aux_transporte || 0,
-        rodamiento: emp.rodamiento || 0,
-        poliza_bolivar: emp.poliza_bolivar || 0,
-        poliza_sura: emp.poliza_sura || 0,
-        optica: emp.optica || 0,
-        prestamos: emp.prestamos || 0
-      });
-    } else {
-      setFormData({
-        cedula: '',
-        nombre: '',
-        cargo: '',
-        categoria: 'OTROS',
-        salario_base: '',
-        aux_transporte: '',
-        rodamiento: '',
-        poliza_bolivar: '',
-        poliza_sura: '',
-        optica: '',
-        prestamos: ''
-      });
-    }
+    setSelectedEmployee(emp);
     setIsModalOpen(true);
   };
 
@@ -56,27 +17,8 @@ export default function EmployeeDirectory({ employees, onRefresh }) {
     setIsModalOpen(false);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    const empData = {
-      cedula: formData.cedula,
-      nombre: formData.nombre.toUpperCase(),
-      cargo: formData.cargo.toUpperCase(),
-      categoria: formData.categoria.toUpperCase(),
-      salario_base: Number(formData.salario_base),
-      aux_transporte: Number(formData.aux_transporte),
-      rodamiento: Number(formData.rodamiento),
-      poliza_bolivar: Number(formData.poliza_bolivar),
-      poliza_sura: Number(formData.poliza_sura),
-      optica: Number(formData.optica),
-      prestamos: Number(formData.prestamos),
-      is_active: true
-    };
-    
+  const handleSave = async (empData) => {
     const res = await upsertEmployeeRecord(empData);
-    setIsLoading(false);
-    
     if (res.success) {
       setIsModalOpen(false);
       if (onRefresh) onRefresh();
@@ -94,9 +36,7 @@ export default function EmployeeDirectory({ employees, onRefresh }) {
     }
   };
 
-  // formatting helper
-  const fmtCOP = (val) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(val || 0);
-
+  
   return (
     <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8">
       <div className="flex justify-between items-center mb-8">
@@ -122,6 +62,8 @@ export default function EmployeeDirectory({ employees, onRefresh }) {
               <th className="py-4 px-6">Cargo</th>
               <th className="py-4 px-6">Categoría</th>
               <th className="py-4 px-6">Salario Base</th>
+              <th className="py-4 px-6">Rodamiento</th>
+              <th className="py-4 px-6">Préstamos</th>
               <th className="py-4 px-6 text-center">Estado</th>
               <th className="py-4 px-6 text-center">Acciones</th>
             </tr>
@@ -138,6 +80,8 @@ export default function EmployeeDirectory({ employees, onRefresh }) {
                   </span>
                 </td>
                 <td className="py-3 px-6 text-sm text-slate-900 font-bold">{fmtCOP(emp.salario_base || emp.salario)}</td>
+                <td className="py-3 px-6 text-sm text-slate-600">{fmtCOP(emp.rodamiento)}</td>
+                <td className="py-3 px-6 text-sm text-slate-600">{fmtCOP(emp.prestamos)}</td>
                 <td className="py-3 px-6 text-center">
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${emp.is_active !== false ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
                     {emp.is_active !== false ? 'Activo' : 'Inactivo'}
@@ -165,174 +109,19 @@ export default function EmployeeDirectory({ employees, onRefresh }) {
             ))}
             {employees.length === 0 && (
               <tr>
-                <td colSpan="7" className="py-12 text-center text-slate-500">No hay empleados registrados.</td>
+                <td colSpan="9" className="py-12 text-center text-slate-500">No hay empleados registrados.</td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden animate-stitch">
-            <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/50">
-              <h3 className="text-xl font-black text-slate-800">
-                {formData.cedula && employees.some(e => e.cedula === formData.cedula) ? 'Editar Empleado' : 'Nuevo Empleado'}
-              </h3>
-              <button onClick={handleCloseModal} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Cédula</label>
-                <input
-                  required
-                  type="text"
-                  value={formData.cedula}
-                  onChange={(e) => setFormData({...formData, cedula: e.target.value})}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                  placeholder="Ej: 10203040"
-                  readOnly={employees.some(e => e.cedula === formData.cedula)}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Nombre Completo</label>
-                <input
-                  required
-                  type="text"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData({...formData, nombre: e.target.value})}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all uppercase"
-                  placeholder="Nombres y Apellidos"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Cargo</label>
-                  <input
-                    required
-                    type="text"
-                    value={formData.cargo}
-                    onChange={(e) => setFormData({...formData, cargo: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all uppercase"
-                    placeholder="Ej: OPERARIO"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Categoría</label>
-                  <select
-                    value={formData.categoria}
-                    onChange={(e) => setFormData({...formData, categoria: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                  >
-                    <option value="INYECCIÓN">INYECCIÓN</option>
-                    <option value="TALLER">TALLER</option>
-                    <option value="OTROS">OTROS</option>
-                    <option value="NUEVOS">NUEVOS</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Salario Base</label>
-                <input
-                  required
-                  type="number"
-                  value={formData.salario_base}
-                  onChange={(e) => setFormData({...formData, salario_base: e.target.value})}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                  placeholder="Ej: 1300000"
-                />
-              </div>
-              
-
-              <div className="pt-4 border-t border-slate-100">
-                <h4 className="text-sm font-black text-slate-800 mb-4">Valores Recurrentes Fijos</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Aux. Transporte</label>
-                    <input
-                      type="number"
-                      value={formData.aux_transporte}
-                      onChange={(e) => setFormData({...formData, aux_transporte: e.target.value})}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Rodamiento</label>
-                    <input
-                      type="number"
-                      value={formData.rodamiento}
-                      onChange={(e) => setFormData({...formData, rodamiento: e.target.value})}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Póliza Bolívar</label>
-                    <input
-                      type="number"
-                      value={formData.poliza_bolivar}
-                      onChange={(e) => setFormData({...formData, poliza_bolivar: e.target.value})}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Póliza Sura</label>
-                    <input
-                      type="number"
-                      value={formData.poliza_sura}
-                      onChange={(e) => setFormData({...formData, poliza_sura: e.target.value})}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Óptica</label>
-                    <input
-                      type="number"
-                      value={formData.optica}
-                      onChange={(e) => setFormData({...formData, optica: e.target.value})}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Préstamos</label>
-                    <input
-                      type="number"
-                      value={formData.prestamos}
-                      onChange={(e) => setFormData({...formData, prestamos: e.target.value})}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                      placeholder="0"
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
-
-                <button
-                  type="button"
-                  onClick={handleCloseModal}
-                  className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-95"
-                >
-                  {isLoading ? 'Guardando...' : <><CheckCircle2 className="w-4 h-4" /> Guardar Empleado</>}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <EmployeeEditorModal 
+        isOpen={isModalOpen} 
+        onClose={handleCloseModal} 
+        employee={selectedEmployee} 
+        onSave={handleSave} 
+      />
     </div>
   );
 }
