@@ -76,12 +76,120 @@ export const fmtDec = (n, min = 1, max = 2) => {
 export const parseLocalNumber = (val) => {
   if (val === null || val === undefined || val === "") return 0;
   if (typeof val === "number") return Number(val.toFixed(2));
-  // Convertimos a string, quitamos símbolos de moneda y espacios
   let s = String(val).replace(/\$|\s/g, '').trim();
-  // Quitamos los puntos (separador de miles colombiano)
   s = s.replace(/\./g, '');
-  // Reemplazamos coma por punto (para que JS entienda el decimal)
   s = s.replace(/,/g, '.');
   const n = parseFloat(s);
-  return isNaN(n) ? 0 : Number(n.toFixed(2)); // Redondeo estricto a 2 decimales
+  return isNaN(n) ? 0 : Number(n.toFixed(2));
+};
+
+export const getTimeDifference = (start, end) => {
+  const sStr = String(start).trim();
+  const eStr = String(end).trim();
+  if (!sStr || sStr === "-" || sStr === "00:00" || !eStr || eStr === "-" || eStr === "00:00") return 0;
+  
+  const parseMin = (str) => {
+    const parts = str.split(":");
+    if (parts.length < 2) {
+      const v = parseFloat(str);
+      return isNaN(v) ? 0 : v * 60;
+    }
+    const h = parseInt(parts[0], 10) || 0;
+    const m = parseInt(parts[1], 10) || 0;
+    return (h * 60) + m;
+  };
+
+  const startMin = parseMin(sStr);
+  const endMin = parseMin(eStr);
+  
+  let diff = endMin - startMin;
+  if (diff < 0) {
+    diff += 1440; // 24 hours in minutes
+  }
+  
+  return Number((diff / 60).toFixed(4));
+};
+
+export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, horaFinDiurna) => {
+  const isTime = (t) => t && String(t).trim() !== "" && String(t).trim() !== "-" && String(t).trim() !== "00:00";
+
+  // Descansos (F y I)
+  const hrEntDesc1 = overrides[`${prefix}_hr_ent_desc1`] !== undefined ? String(overrides[`${prefix}_hr_ent_desc1`]) : (day.hr_ent_desc1 || "-");
+  const hrSalDesc1 = overrides[`${prefix}_hr_sal_desc1`] !== undefined ? String(overrides[`${prefix}_hr_sal_desc1`]) : (day.hr_sal_desc1 || "-");
+  const hrEntDesc2 = overrides[`${prefix}_hr_ent_desc2`] !== undefined ? String(overrides[`${prefix}_hr_ent_desc2`]) : (day.hr_ent_desc2 || "-");
+  const hrSalDesc2 = overrides[`${prefix}_hr_sal_desc2`] !== undefined ? String(overrides[`${prefix}_hr_sal_desc2`]) : (day.hr_sal_desc2 || "-");
+
+  const desc1 = getTimeDifference(hrEntDesc1, hrSalDesc1);
+  const desc2 = getTimeDifference(hrEntDesc2, hrSalDesc2);
+
+  // Pago Ent (J) y Pago Sal (K)
+  // J debe ser B (hr_ent), K debe ser C (hr_sal)
+  const hrEntPago = overrides[`${prefix}_hr_ent_pago`] !== undefined ? String(overrides[`${prefix}_hr_ent_pago`]) : (day.hr_ent || "-");
+  const hrSalPago = overrides[`${prefix}_hr_sal_pago`] !== undefined ? String(overrides[`${prefix}_hr_sal_pago`]) : (day.hr_sal || "-");
+  
+  // Col L: Hr. Lab = Diferencia entre J y K, menos los descansos
+  let hrLab = 0;
+  if (isTime(hrEntPago) && isTime(hrSalPago)) {
+     hrLab = getTimeDifference(hrEntPago, hrSalPago) - desc1 - desc2;
+     if (hrLab < 0) hrLab = 0; // Prevenir horas negativas si los descansos superan el turno
+  }
+  
+  // Col M: Des = SI(L3>8.9; 0.5; 0)
+  const des = hrLab > 8.9 ? 0.5 : 0;
+  
+  // Col N: Hr. Pag = L3 - M3
+  const hrPag = hrLab > 0 ? hrLab - des : 0;
+  
+  const J3 = isTime(hrEntPago) ? timeStrToDecimal(hrEntPago) : 0;
+  const C41 = timeStrToDecimal(horaInicioDiurna);
+  const D41 = timeStrToDecimal(horaFinDiurna);
+  
+  // Col P: Noct = SI(J3>D41; 44/6; 0)
+  const noct = (hrPag > 0 && J3 > D41) ? (44 / 6) : 0;
+  
+  // Col O: Diurn = SI(Y(J3>=C41; J3<=D41); (44/6)-P3; 0)
+  const diurn = (hrPag > 0 && J3 >= C41 && J3 <= D41) ? (44 / 6) - noct : 0;
+  
+  // Manuals overriding or defaults to 0
+  const fesDiu = overrides[`${prefix}_fes_diu`] !== undefined ? Number(overrides[`${prefix}_fes_diu`]) : Number(day.fes_diu || 0);
+  const fesNoc = overrides[`${prefix}_fes_noc`] !== undefined ? Number(overrides[`${prefix}_fes_noc`]) : Number(day.fes_noc || 0);
+  const extNoc = overrides[`${prefix}_ext_noc`] !== undefined ? Number(overrides[`${prefix}_ext_noc`]) : Number(day.ext_noc || 0);
+  const extFesDiu = overrides[`${prefix}_ext_fes_diu`] !== undefined ? Number(overrides[`${prefix}_ext_fes_diu`]) : Number(day.ext_fes_diu || 0);
+  const extFesNoc = overrides[`${prefix}_ext_fes_noc`] !== undefined ? Number(overrides[`${prefix}_ext_fes_noc`]) : Number(day.ext_fes_noc || 0);
+  const llegadaTarde = overrides[`${prefix}_llegada_tarde`] !== undefined ? Number(overrides[`${prefix}_llegada_tarde`]) : Number(day.llegada_tarde || 0);
+  const llegadaTardeMin = overrides[`${prefix}_llegada_tarde_min`] !== undefined ? Number(overrides[`${prefix}_llegada_tarde_min`]) : Number(day.llegada_tarde_min || 0);
+  
+  // Col S: Ext. Diu = N3 - O3 - P3 - Q3 - R3 - T3 - U3 - V3
+  const extDiuCalc = hrPag - diurn - noct - fesDiu - fesNoc - extNoc - extFesDiu - extFesNoc;
+  const extDiu = extDiuCalc > 0 ? extDiuCalc : 0;
+
+  // Let overrides take precedence on final values if the user edited them manually
+  const finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : diurn;
+  const finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : noct;
+  const finalExtDiu = overrides[`${prefix}_ext_diu`] !== undefined ? Number(overrides[`${prefix}_ext_diu`]) : extDiu;
+
+  return {
+    ...day,
+    hr_ent_desc1: hrEntDesc1,
+    hr_sal_desc1: hrSalDesc1,
+    total_desc1: desc1,
+    hr_ent_desc2: hrEntDesc2,
+    hr_sal_desc2: hrSalDesc2,
+    total_desc2: desc2,
+    hr_ent_pago: hrEntPago,
+    hr_sal_pago: hrSalPago,
+    hr_lab: hrLab,
+    desc_lunch: des,
+    hr_pag: hrPag,
+    diurnas: finalDiurnas,
+    nocturnas: finalNocturnas,
+    fes_diu: fesDiu,
+    fes_noc: fesNoc,
+    ext_diu: finalExtDiu,
+    ext_noc: extNoc,
+    ext_fes_diu: extFesDiu,
+    ext_fes_noc: extFesNoc,
+    llegada_tarde: llegadaTarde,
+    llegada_tarde_min: llegadaTardeMin
+  };
 };

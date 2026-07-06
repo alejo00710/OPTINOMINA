@@ -10,6 +10,7 @@ export default function TabPanelGeneral({
   handleLiquidar,
   handleDetalles,
   handleCellEdit,
+  handleClearAll,
   overrides,
   fmtCOP
 }) {
@@ -25,9 +26,18 @@ export default function TabPanelGeneral({
 
   return (
     <section className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl overflow-hidden rounded-3xl animate-stitch">
-      <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-         <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider">Planilla General de Nómina</h4>
-         <p className="text-xs font-bold text-slate-500">Selecciona un operario para liquidar o edita sus valores</p>
+      <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-4">
+         <div>
+            <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider">Planilla General de Nómina</h4>
+            <p className="text-xs font-bold text-slate-500 mt-1">Selecciona un operario para liquidar o edita sus valores</p>
+         </div>
+         <button
+            onClick={handleClearAll}
+            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs shadow-md shadow-rose-200 transition-all active:scale-95 flex items-center gap-2"
+         >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Limpiar Quincena
+         </button>
       </div>
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-x-auto custom-scrollbar">
          <table className="w-full text-left table-auto">

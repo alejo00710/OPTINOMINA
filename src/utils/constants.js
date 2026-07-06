@@ -3,11 +3,14 @@ import { timeStrToDecimal, getDecimalHours } from "./mathNomina";
 export const SMLV = 1750905;
 export const AUX_TRANSPORTE = 249095;
 export const MINIMO_DIARIO_INCAPACIDAD = 58363.5;
-export const DIVISOR_HORAS_EXTRAS = 230;
-export const DIVISOR_RECARGOS_NOCTURNOS = 230;
+export const DIVISOR_HORAS_EXTRAS = 240;
+export const DIVISOR_RECARGOS_NOCTURNOS = 240;
+export const HORA_INICIO_DIURNA = "04:00";
+export const HORA_FIN_DIURNA = "18:00";
 export const FACTOR_EXTRA_DIURNA = 1.25;
 export const FACTOR_EXTRA_NOCTURNA = 1.75;
 export const FACTOR_EXTRA_FESTIVA = 2.0;
+export const FACTOR_EXTRA_FESTIVA_NOCTURNA = 2.5;
 export const FACTOR_RECARGO_NOCTURNO = 0.35;
 
 // --- Config Parameters ---

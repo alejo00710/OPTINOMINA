@@ -25,6 +25,35 @@ export const detectShiftTemplate = (hrEnt, hrSal, durationHrs, category = "OTROS
   return best;
 };
 
+// Utils and Constants
+const shiftTemplates = {
+  diurno: { in: "05:00", out: "14:00" },
+  tarde: { in: "14:00", out: "21:00" },
+  nocturno: { in: "21:00", out: "05:00" },
+  oficina: { in: "08:00", out: "18:00" }
+};
+
+export const findEmployeeMatch = (biometricName, directoryEmployees) => {
+  if (!biometricName || !directoryEmployees) return null;
+  
+  const cleanStr = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, "");
+  const bioCleaned = cleanStr(biometricName);
+  
+  for (const emp of directoryEmployees) {
+    if (!emp.nombre) continue;
+    const dirCleaned = cleanStr(emp.nombre);
+    
+    if (bioCleaned === dirCleaned) {
+       return { cedula: emp.cedula, isExact: true, dirName: emp.nombre };
+    }
+    
+    if (dirCleaned.includes(bioCleaned) || bioCleaned.includes(dirCleaned)) {
+       return { cedula: emp.cedula, isExact: false, dirName: emp.nombre };
+    }
+  }
+  return null;
+};
+
 export const emptyAttendanceDay = (dateStr) => ({
   dia: dateStr,
   hr_ent: "",

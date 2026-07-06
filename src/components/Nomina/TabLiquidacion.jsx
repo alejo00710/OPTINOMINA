@@ -8,7 +8,16 @@ const fmtCOP = (num) => {
 export default function TabLiquidacion({ 
   selectedWorkerData, 
   overrides, 
-  handleCellEdit 
+  handleCellEdit,
+  startDate,
+  setStartDate,
+  endDate,
+  setEndDate,
+  handleFileUpload,
+  handleClearAttendanceData,
+  selectedWorkerName,
+  setSelectedWorkerName,
+  nominaRows
 }) {
   if (!selectedWorkerData) {
     return (
@@ -20,6 +29,44 @@ export default function TabLiquidacion({
 
   return (
     <div className="space-y-6">
+       {/* LOCAL TOOLBAR */}
+       <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-end justify-between animate-stitch">
+          <div className="flex gap-4 items-center flex-wrap">
+             <div>
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Fecha Inicio</label>
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50 border border-slate-200 text-sm font-bold text-slate-700 px-3 py-1.5 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" />
+             </div>
+             <div>
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Fecha Fin</label>
+                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50 border border-slate-200 text-sm font-bold text-slate-700 px-3 py-1.5 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" />
+             </div>
+             <div className="flex gap-2">
+                <label className="cursor-pointer bg-slate-900 hover:bg-emerald-600 text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-lg transition-colors flex items-center shadow-sm">
+                   <span>📂 Importar Biométrico</span>
+                   <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUpload} className="hidden" />
+                </label>
+                <button 
+                  onClick={() => handleClearAttendanceData('worker')}
+                  className="bg-rose-100 hover:bg-rose-600 text-rose-600 hover:text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-lg transition-colors shadow-sm"
+                >
+                   Limpiar Biométrico
+                </button>
+             </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+             <label className="block text-[10px] font-black uppercase text-slate-400">Operario Actual:</label>
+             <select 
+                value={selectedWorkerName} 
+                onChange={(e) => setSelectedWorkerName(e.target.value)}
+                className="bg-emerald-50 border-2 border-emerald-500 text-emerald-900 text-sm font-bold px-3 py-1.5 rounded-lg outline-none min-w-[200px]"
+             >
+               {nominaRows && nominaRows.map(member => (
+                  <option key={member.nombre} value={member.nombre}>{member.nombre}</option>
+               ))}
+             </select>
+          </div>
+       </div>
        <div className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
              <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-black text-xl shadow-inner border border-indigo-100">
@@ -35,9 +82,9 @@ export default function TabLiquidacion({
           </div>
        </div>
 
-       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+       <div className="flex flex-col gap-6">
           {/* LEFT PANEL */}
-          <div className="lg:col-span-8 bg-white rounded-3xl shadow-sm border border-slate-200 p-6 overflow-hidden">
+          <div className="w-full bg-white rounded-3xl shadow-sm border border-slate-200 p-6 overflow-hidden">
              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Registro Diario (A - X)</h3>
              <div className="overflow-x-auto custom-scrollbar">
                 <table className="w-full text-left table-auto">
@@ -90,26 +137,26 @@ export default function TabLiquidacion({
                                <td className="px-2 py-2 text-blue-600 font-mono">{day.hr_ent || "-"}</td>
                                <td className="px-2 py-2 text-blue-600 font-mono">{day.hr_sal || "-"}</td>
                                <td className="px-1 py-1">
-                                  <input type="text" value={overrides[`${prefix}_hr_sal_desc1`] !== undefined ? overrides[`${prefix}_hr_sal_desc1`] : (day.hr_sal_desc1 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_desc1`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
-                               </td>
-                               <td className="px-1 py-1">
                                   <input type="text" value={overrides[`${prefix}_hr_ent_desc1`] !== undefined ? overrides[`${prefix}_hr_ent_desc1`] : (day.hr_ent_desc1 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_desc1`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
                                </td>
-                               <td className="px-2 py-2 text-center text-slate-400 font-mono">{day.total_desc1 || "-"}</td>
                                <td className="px-1 py-1">
-                                  <input type="text" value={overrides[`${prefix}_hr_sal_desc2`] !== undefined ? overrides[`${prefix}_hr_sal_desc2`] : (day.hr_sal_desc2 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_desc2`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
+                                  <input type="text" value={overrides[`${prefix}_hr_sal_desc1`] !== undefined ? overrides[`${prefix}_hr_sal_desc1`] : (day.hr_sal_desc1 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_desc1`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
                                </td>
+                               <td className="px-2 py-2 text-center text-slate-400 font-mono">{day.total_desc1 ? Number(day.total_desc1).toFixed(2) : "0.00"}</td>
                                <td className="px-1 py-1">
                                   <input type="text" value={overrides[`${prefix}_hr_ent_desc2`] !== undefined ? overrides[`${prefix}_hr_ent_desc2`] : (day.hr_ent_desc2 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_desc2`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
                                </td>
-                               <td className="px-2 py-2 text-center text-slate-400 font-mono">{day.total_desc2 || "-"}</td>
+                               <td className="px-1 py-1">
+                                  <input type="text" value={overrides[`${prefix}_hr_sal_desc2`] !== undefined ? overrides[`${prefix}_hr_sal_desc2`] : (day.hr_sal_desc2 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_desc2`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
+                               </td>
+                               <td className="px-2 py-2 text-center text-slate-400 font-mono">{day.total_desc2 ? Number(day.total_desc2).toFixed(2) : "0.00"}</td>
                                
                                {/* Pago Entrada/Salida */}
                                <td className="px-1 py-1">
-                                  <input type="text" value={overrides[`${prefix}_hr_ent_pago`] !== undefined ? overrides[`${prefix}_hr_ent_pago`] : (day.hr_ent_pago || day.hr_ent || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_pago`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none text-purple-600" />
+                                  <input type="text" value={overrides[`${prefix}_hr_ent_pago`] !== undefined ? overrides[`${prefix}_hr_ent_pago`] : (day.hr_ent_pago || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_pago`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none text-purple-600" />
                                </td>
                                <td className="px-1 py-1">
-                                  <input type="text" value={overrides[`${prefix}_hr_sal_pago`] !== undefined ? overrides[`${prefix}_hr_sal_pago`] : (day.hr_sal_pago || day.hr_sal || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_pago`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none text-purple-600" />
+                                  <input type="text" value={overrides[`${prefix}_hr_sal_pago`] !== undefined ? overrides[`${prefix}_hr_sal_pago`] : (day.hr_sal_pago || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_pago`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none text-purple-600" />
                                </td>
 
                                <td className="px-2 py-2 text-center text-slate-400">{Number(day.hr_lab || 0).toFixed(2)}</td>
@@ -154,9 +201,9 @@ export default function TabLiquidacion({
              </div>
           </div>
 
-          {/* RIGHT PANEL */}
-          <div className="lg:col-span-4">
-             <div className="sticky top-6 space-y-6">
+          {/* BOTTOM PANEL */}
+          <div className="w-full max-w-md mx-auto mt-6 mb-12">
+             <div className="space-y-6">
                 <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-xl">
                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6">Liquidación de Horas (26-38)</h3>
                    
