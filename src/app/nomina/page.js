@@ -1,13 +1,17 @@
 "use client";
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Search, Filter, Coins, Info, SlidersHorizontal, Download, RotateCcw, AlertTriangle, Briefcase, FileSpreadsheet, CheckCircle2, ChevronDown, ChevronRight, Calculator, Plus, Trash2, Calendar as CalendarIcon, UploadCloud, Users, ChevronLeft, CalendarRange } from "lucide-react";
-import EmployeeDirectory from "@/components/Nomina/EmployeeDirectory";
+import TabDirectorio from "@/components/Nomina/TabDirectorio";
+import TabReportes from "@/components/Nomina/TabReportes";
 import ColumnVisibilityToggle from "@/components/Nomina/ColumnVisibilityToggle";
 import NominaSummaryCards from "@/components/Nomina/NominaSummaryCards";
 import EditableCell from "@/components/Nomina/EditableCell";
+import TabPanelGeneral from "@/components/Nomina/TabPanelGeneral";
+import TabColillas from "@/components/Nomina/TabColillas";
+import TabLiquidacion from "@/components/Nomina/TabLiquidacion";
 import { NOMINA_DATE_RANGE_KEY, loadPersistedDateRange, savePersistedDateRange, PLANILLA_COLUMNS, DAILY_COLUMNS, LIQUIDATION_CONCEPTS, SMLV, AUX_TRANSPORTE, DIVISOR_RECARGOS_NOCTURNOS, DIVISOR_HORAS_EXTRAS, FACTOR_RECARGO_NOCTURNO, FACTOR_EXTRA_DIURNA, FACTOR_EXTRA_NOCTURNA, FACTOR_EXTRA_FESTIVA } from "@/utils/constants";
 import { timeStrToDecimal, decimalToTimeStr, diffTimeStr, getDecimalHours, getHourDist, fmtCOP, fmtDec, parseLocalNumber } from "@/utils/mathNomina";
-import { savePayrollToCloud, loadPayrollFromCloud, loadEmployeesFromCloud, uploadEmployeesBulk } from "@/utils/supabase";
+import { supabase, savePayrollToCloud, loadPayrollFromCloud, loadEmployeesFromCloud, uploadEmployeesBulk } from "@/utils/supabase";
 import { detectShiftTemplate, emptyAttendanceDay, cleanWorkerPunches, parseBiometricExcel } from "@/utils/biometricCore";
 
 // Helper to look up overridden state values
@@ -41,7 +45,7 @@ export default function NominaPage() {
   const [hiddenColumns, setHiddenColumns] = useState({});
   const [showColumnManager, setShowColumnManager] = useState(false);
 
-  const [selectedWorkerName, setSelectedWorkerName] = useState("ENODIS POLO MARTINEZ");
+  const [selectedWorkerName, setSelectedWorkerName] = useState("");
 
   // Toast notification state
   const [toast, setToast] = useState(null);
@@ -58,12 +62,7 @@ export default function NominaPage() {
   const [startDate, setStartDate] = useState("2026-05-01");
   const [endDate, setEndDate] = useState("2026-05-15");
 
-  useEffect(() => {
-    const range = loadPersistedDateRange();
-    setStartDate(range.start);
-    setEndDate(range.end);
-
-    const loadCloudData = async () => {
+  const loadEmployees = async () => {
       try {
         let masterEmployees = [];
         const empRes = await loadEmployeesFromCloud();
@@ -95,29 +94,34 @@ export default function NominaPage() {
           }));
         }
 
-        const cloudRes = await loadPayrollFromCloud();
-        if (cloudRes && cloudRes.success && cloudRes.data) {
-          const dbData = cloudRes.data;
-          if (dbData.nomina_rows && dbData.nomina_rows.length > 0) {
-            setNominaRows(dbData.nomina_rows);
-          } else {
-            setNominaRows(masterEmployees);
-          }
-          if (dbData.attendance_logs) setAttendanceLogs(dbData.attendance_logs);
-          if (dbData.overrides) setOverrides(dbData.overrides);
-          if (dbData.hidden_columns) setHiddenColumns(dbData.hidden_columns);
-          if (dbData.start_date) setStartDate(dbData.start_date);
-          if (dbData.end_date) setEndDate(dbData.end_date);
-        } else {
-          setNominaRows(masterEmployees);
-        }
+        // TAREA 3: Iniciar en blanco (solo cargar masterEmployees y estados vacíos)
+        setNominaRows(masterEmployees);
+        setAttendanceLogs({});
+        setOverrides({});
       } catch (e) {
         console.error("Error loading persisted payroll data from cloud:", e);
       } finally {
         setIsDbLoading(false);
       }
     };
-    loadCloudData();
+
+
+
+  useEffect(() => {
+
+
+    const range = loadPersistedDateRange();
+
+
+    setStartDate(range.start);
+
+
+    setEndDate(range.end);
+
+
+    loadEmployees();
+
+
   }, []);
 
   useEffect(() => {
@@ -155,6 +159,7 @@ export default function NominaPage() {
 
   // --- Central Payroll Calculation Engine ---
   const payrollData = useMemo(() => {
+    console.log("RECALCULATING PAYROLL DATA. Attendance logs:", Object.keys(attendanceLogs).length, "employees");
     return nominaRows.map(emp => {
       const cedula = emp.cedula;
       const logs = attendanceLogs[cedula] || [];
@@ -188,8 +193,7 @@ export default function NominaPage() {
       const valExtDiurna = resolveValue(overrides, `${cedula}_val_extras_diurnas`, () => parseLocalNumber((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_DIURNA * sumExtDiu));
       const valExtNocturna = resolveValue(overrides, `${cedula}_val_extras_nocturnas`, () => parseLocalNumber((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_NOCTURNA * sumExtNoc));
       const valExtFesDiuRaw = (salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_FESTIVA * sumExtFesDiu;
-      const valExtFesNocRaw = (salarioBase / DIVISOR_HORAS_EXTRAS) * 2.5 * sumExtFesNoc; // Asumiendo 2.5 para Extra Festiva Nocturna
-      const valExtFesTotal = resolveValue(overrides, `${cedula}_val_extras_festivas`, () => parseLocalNumber(valExtFesDiuRaw + valExtFesNocRaw));
+      const valExtFesTotal = resolveValue(overrides, `${cedula}_val_extras_festivas`, () => parseLocalNumber(valExtFesDiuRaw));
 
       const comisiones = resolveValue(overrides, `${cedula}_comisiones`, () => 0);
       
@@ -202,7 +206,11 @@ export default function NominaPage() {
       const auxTransporteFinal = resolveValue(overrides, `${cedula}_transporte`, () => parseLocalNumber(Number(emp.aux_transporte) > 0 ? Number(emp.aux_transporte) : auxTransporteCalculado));
       
       const rodamiento = resolveValue(overrides, `${cedula}_rodamiento`, () => parseLocalNumber(Number(emp.rodamiento || 0)));
-      const incapacidad = resolveValue(overrides, `${cedula}_incapacidad`, () => 0);
+      const diasIncapacidad = resolveValue(overrides, `${cedula}_dias_incapacidad`, () => parseLocalNumber(Number(emp.dias_incapacidad || 0)));
+      const valDiarioIncap = ((salarioBase / 30) / 3) * 2;
+      const minDiario = SMLV / 30;
+      const calcIncap = diasIncapacidad > 0 ? diasIncapacidad * (valDiarioIncap > minDiario ? valDiarioIncap : minDiario) : 0;
+      const incapacidad = resolveValue(overrides, `${cedula}_incapacidad`, () => parseLocalNumber(calcIncap));
       const bonificacion = resolveValue(overrides, `${cedula}_bonificacion`, () => 0);
 
       // 3. Total Devengado (Columna W)
@@ -218,12 +226,15 @@ export default function NominaPage() {
       // 5. Deducciones Fijas de la BD (Columnas AA a AH)
       const prestamos = resolveValue(overrides, `${cedula}_prestamos`, () => parseLocalNumber(Number(emp.prestamos || 0)));
       const polizaBolivar = resolveValue(overrides, `${cedula}_poliza_bolivar`, () => parseLocalNumber(Number(emp.poliza_bolivar || 0)));
+      const polizaPlenitud = resolveValue(overrides, `${cedula}_poliza_plenitud`, () => parseLocalNumber(Number(emp.poliza_plenitud || 0)));
+      const libranzaComfama = resolveValue(overrides, `${cedula}_libranza_comfama`, () => parseLocalNumber(Number(emp.libranza_comfama || 0)));
       const polizaSura = resolveValue(overrides, `${cedula}_poliza_sura`, () => parseLocalNumber(Number(emp.poliza_sura || 0)));
       const optica = resolveValue(overrides, `${cedula}_optica`, () => parseLocalNumber(Number(emp.optica || 0)));
-      const retencion = resolveValue(overrides, `${cedula}_retencion`, () => 0);
+      const celular = resolveValue(overrides, `${cedula}_celular`, () => parseLocalNumber(Number(emp.celular || 0)));
+      const retencion = resolveValue(overrides, `${cedula}_retencion`, () => parseLocalNumber(Number(emp.retencion || 0)));
 
       // 6. Total Deducido y Neto (Columnas AI, AJ)
-      const totalDeducciones = resolveValue(overrides, `${cedula}_total_deducciones`, () => parseLocalNumber(salud + pension + solidaridad + prestamos + polizaBolivar + polizaSura + optica + retencion));
+      const totalDeducciones = resolveValue(overrides, `${cedula}_total_deducciones`, () => parseLocalNumber(salud + pension + solidaridad + prestamos + polizaBolivar + polizaPlenitud + libranzaComfama + polizaSura + optica + celular + retencion));
       const netoPagar = resolveValue(overrides, `${cedula}_neto_pagar`, () => parseLocalNumber(totalDevengado - totalDeducciones + bonificacion)); // bonificacion no salarial
 
       return {
@@ -234,7 +245,7 @@ export default function NominaPage() {
         horas_nocturnas: sumNocturnas,
         extras_diurnas: sumExtDiu,
         extras_nocturnas: sumExtNoc,
-        extras_festivas: sumExtFesDiu + sumExtFesNoc,
+        extras_festivas: sumExtFesDiu,
         sueldo: sueldoBasico,
         recargo_nocturno: valRecargoNocturno,
         val_extras_diurnas: valExtDiurna,
@@ -243,6 +254,7 @@ export default function NominaPage() {
         comisiones,
         transporte: auxTransporteFinal,
         rodamiento,
+        dias_incapacidad: diasIncapacidad,
         incapacidad,
         total_devengados: totalDevengado,
         salud,
@@ -250,8 +262,11 @@ export default function NominaPage() {
         solidaridad,
         prestamos,
         poliza_bolivar: polizaBolivar,
+        poliza_plenitud: polizaPlenitud,
+        libranza_comfama: libranzaComfama,
         poliza_sura: polizaSura,
         optica,
+        celular,
         retencion,
         total_deducciones: totalDeducciones,
         bonificacion,
@@ -290,10 +305,10 @@ export default function NominaPage() {
 
       if (segments[normalizedCat]) {
         segments[normalizedCat].count += 1;
-        segments[normalizedCat].salarioBase += (item.masterRow.salario || 0);
-        segments[normalizedCat].devengado += (item.masterRow.total_devengados || 0);
-        segments[normalizedCat].deducciones += (item.masterRow.total_deducciones || 0);
-        segments[normalizedCat].neto += (item.masterRow.neto_pagar || 0);
+        segments[normalizedCat].salarioBase += (item.salario || 0);
+        segments[normalizedCat].devengado += (item.total_devengados || 0);
+        segments[normalizedCat].deducciones += (item.total_deducciones || 0);
+        segments[normalizedCat].neto += (item.neto_pagar || 0);
         segments[normalizedCat].extras += (item.liquidation.total_extra_val || 0);
       }
     });
@@ -316,7 +331,7 @@ export default function NominaPage() {
     filteredPayrollData.forEach(item => {
       PLANILLA_COLUMNS.forEach(col => {
         if (col.type === "number") {
-          const val = item.masterRow[col.key];
+          const val = item[col.key];
           t[col.key] += (typeof val === "number" && !isNaN(val) ? val : 0);
         }
       });
@@ -330,8 +345,8 @@ export default function NominaPage() {
     let bancolombia = 0;
     let cajaSocial = 0;
     filteredPayrollData.forEach(item => {
-      const bank = String(item.masterRow.banco).toUpperCase();
-      const val = item.masterRow.neto_pagar || 0;
+      const bank = String(item.banco || item.masterRow?.banco || "").toUpperCase();
+      const val = item.neto_pagar || 0;
       if (!isNaN(val)) {
         if (bank.includes("BANCOLOMBIA")) {
           bancolombia += val;
@@ -345,7 +360,7 @@ export default function NominaPage() {
 
   // Active selected worker data object
   const selectedWorkerData = useMemo(() => {
-    return payrollData.find(item => (item.nombre || item.name) === selectedWorkerName) || payrollData[0];
+    return payrollData.find(item => (item.nombre || item.name) === selectedWorkerName) || null;
   }, [payrollData, selectedWorkerName]);
 
   const handleCellEdit = (cellKey, val) => {
@@ -355,11 +370,10 @@ export default function NominaPage() {
     }));
   };
   
-  const handleClearAll = () => {
+  const handleClearAll = async () => {
     if (window.confirm("¿Seguro de iniciar una nueva quincena? (Se conservarán datos fijos y se borrarán horas/extras).")) {
       const freshRows = nominaRows.map(emp => ({
         ...emp,
-        // Mantenemos los datos fijos que vienen del Directorio HR o de la base actual
         consecutivo: emp.consecutivo,
         cedula: emp.cedula,
         nombre: emp.nombre,
@@ -372,7 +386,6 @@ export default function NominaPage() {
         poliza_bolivar: Number(emp.poliza_bolivar || 0),
         poliza_sura: Number(emp.poliza_sura || 0),
         optica: Number(emp.optica || 0),
-        // Reseteamos valores transaccionales a cero
         dias_pagados: 0,
         horas_diurnas: 0,
         horas_nocturnas: 0,
@@ -386,7 +399,25 @@ export default function NominaPage() {
       setNominaRows(freshRows);
       setAttendanceLogs({});
       setOverrides({});
-      alert("Planilla reseteada. Datos fijos conservados.");
+      
+      try {
+        await supabase
+          .from('optimoldes_payroll')
+          .upsert({
+            id: 'quincena_activa',
+            start_date: startDate,
+            end_date: endDate,
+            nomina_rows: freshRows,
+            attendance_logs: {},
+            overrides: {},
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
+          
+        alert("Planilla reseteada en la nube. Lista para nuevo biométrico.");
+      } catch (err) {
+        console.error("Error limpiando quincena en la nube:", err);
+        alert("Error al limpiar en la nube. Revisa tu conexión.");
+      }
     }
   };
 
@@ -501,6 +532,7 @@ const handleSaveToCloud = async () => {
          stats.filledDays += Object.keys(cleaned).length;
       }
 
+      console.log("Updating attendanceLogs from file upload. Matched employees:", stats.matchedNames.length);
       setAttendanceLogs(newAttendance);
       
       setToast({
@@ -533,19 +565,19 @@ const handleSaveToCloud = async () => {
 
     if (!confirm(confirmMsg)) return;
 
-    const newLogs = { ...attendanceLogs };
-    const targets = scope === "all" ? nominaRows.map(r => r.nombre) : [selectedWorkerName];
+    const nuevosLogs = { ...attendanceLogs };
+    const targets = scope === "all" ? nominaRows.map(r => r.cedula) : [nominaRows.find(r => (r.nombre || r.name) === selectedWorkerName)?.cedula].filter(Boolean);
 
-    targets.forEach(name => {
-      const existing = newLogs[name] || [];
+    targets.forEach(targetKey => {
+      const existing = nuevosLogs[targetKey] || [];
       const byDate = new Map(existing.map(d => [d.dia, d]));
       dates.forEach(dateStr => {
         byDate.set(dateStr, emptyAttendanceDay(dateStr));
       });
-      newLogs[name] = Array.from(byDate.values()).sort((a, b) => a.dia.localeCompare(b.dia));
+      nuevosLogs[targetKey] = Array.from(byDate.values()).sort((a, b) => a.dia.localeCompare(b.dia));
     });
 
-    setAttendanceLogs(newLogs);
+    setAttendanceLogs(nuevosLogs);
     setToast({
       message: scope === "all" ? "Marcaciones borradas para todos en el rango." : `Marcaciones borradas para ${selectedWorkerName}.`,
       type: "success",
@@ -696,6 +728,12 @@ const handleSaveToCloud = async () => {
           >
             🖨️ Colillas
           </button>
+          <button
+            onClick={() => setActiveTab("reportes")}
+            className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === "reportes" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+          >
+            📈 Reportes
+          </button>
         </div>
       )}
       
@@ -712,7 +750,10 @@ const handleSaveToCloud = async () => {
       ) : (
         <>
       {activeTab === "directorio" && (
-        <EmployeeDirectory employees={nominaRows} onRefresh={() => window.location.reload()} />
+        <TabDirectorio 
+          employees={nominaRows} 
+          onRefresh={loadEmployees} 
+        />
       )}
       
       {activeTab === "dashboard" && (
@@ -722,11 +763,7 @@ const handleSaveToCloud = async () => {
             <div className="space-y-6 animate-stitch">
           
 
-        <NominaSummaryCards 
-          totals={totals} 
-          filteredPayrollData={filteredPayrollData} 
-          categorySegmentedData={categorySegmentedData} 
-        />
+        
 
           {/* Action Bar */}
           <section className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-4 md:p-6 mb-8 mt-4">
@@ -770,105 +807,22 @@ const handleSaveToCloud = async () => {
         </section>
 
 
-          {/* Simple Worker List for Dashboard */}
-          <section className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl overflow-hidden rounded-3xl">
-            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-               <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider">Directorio de Operarios</h4>
-               <p className="text-xs font-bold text-slate-500">Selecciona un operario para liquidar</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-               <table className="w-full text-left">
-                  <thead className="bg-slate-50/90 backdrop-blur-sm sticky top-0 z-20">
-<tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-200">
-<th className="px-6 py-3">Cédula</th>
-<th className="px-6 py-3">Nombre Completo</th>
-<th className="px-6 py-3">Cargo</th>
-<th className="px-6 py-3 text-center">Días Pagados</th>
-<th className="px-6 py-3 text-right">Total Devengado</th>
-<th className="px-6 py-3 text-right">Total Deducciones</th>
-<th className="px-6 py-3 text-right">Neto a Pagar</th>
-<th className="px-6 py-3 text-center">Acción</th>
-</tr>
-</thead>
-                  <tbody className="divide-y divide-slate-100 text-xs font-bold">
-                     {filteredPayrollData.map((item) => {
-                        const row = item.masterRow;
-  const handleImportBackup = (e) => {
-    const file = e.target?.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-         const data = JSON.parse(event.target.result);
-         if (data.nominaRows) setNominaRows(data.nominaRows);
-         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
-         if (data.overrides) setOverrides(data.overrides);
-         if (data.startDate) setStartDate(data.startDate);
-         if (data.endDate) setEndDate(data.endDate);
-         
-         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
-      } catch (error) {
-         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
-      }
-      setTimeout(() => setToast(null), 4000);
-    };
-    reader.readAsText(file);
-    if (e.target) e.target.value = '';
-  };
-
-  return (
-                           <tr key={row.consecutivo} className="group hover:bg-slate-50/50 transition-colors">
-                              <td className="px-6 py-4 text-slate-500">{row.cedula}</td>
-<td className="px-6 py-4 text-slate-900 font-bold">{row.nombre}</td>
-<td className="px-6 py-4 text-slate-500 capitalize">{row.cargo.toLowerCase()}</td>
-<td className="px-6 py-4 text-center text-slate-700">{row.dias_pagados}</td>
-<td className="px-6 py-4 text-right text-slate-700 font-medium">${fmtCOP(row.total_devengados)}</td>
-<td className="px-6 py-4 text-right text-rose-500 font-medium">-${fmtCOP(row.total_deducciones)}</td>
-<td className="px-6 py-4 text-right text-emerald-600 font-black text-sm">${fmtCOP(row.neto_pagar)}</td>
-<td className="px-6 py-4 text-center">
-                                 <div className="flex justify-center gap-2">
-                                    <button 
-                                       onClick={() => { setDetailsWorkerName(row.nombre); setIsDetailsModalOpen(true); }}
-                                       className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors shadow-sm"
-                                    >
-                                       Detalles
-                                    </button>
-                                    <button 
-                                       onClick={() => { setSelectedWorkerName(row.nombre); setActiveTab("liquidacion"); }}
-                                       className="px-3 py-1.5 bg-slate-900 hover:bg-emerald-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors shadow-sm"
-                                    >
-                                       Liquidar
-                                    </button>
-                                 </div>
-                              </td>
-                           </tr>
-                        );
-                     })}
-                  </tbody>
-               </table>
-            </div>
-          </section>
+          {/* --- TAB 1: PLANILLA GENERAL (MODULARIZADA) --- */}
+          <TabPanelGeneral 
+             nominaRows={nominaRows}
+             setNominaRows={setNominaRows}
+             filteredPayrollData={filteredPayrollData}
+             hiddenColumns={hiddenColumns}
+             handleLiquidar={(nombre) => { setSelectedWorkerName(nombre); setActiveTab("liquidacion"); }}
+             handleDetalles={(nombre) => { setDetailsWorkerName(nombre); setIsDetailsModalOpen(true); }}
+             handleCellEdit={handleCellEdit}
+             overrides={overrides}
+             fmtCOP={fmtCOP}
+          />
 
           
 
-          {/* Bank Transfer Summaries */}
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="stitch-card p-6 bg-gradient-to-br from-yellow-50/50 to-white border border-yellow-200/50 shadow-md flex justify-between items-center">
-              <div>
-                <p className="text-[10px] font-black text-yellow-800 uppercase tracking-widest mb-1">TOTAL TRANSFERENCIAS BANCOLOMBIA</p>
-                <p className="text-xs text-slate-500 font-bold">Colaboradores inscritos en Bancolombia</p>
-              </div>
-              <h3 className="text-2xl font-black text-slate-900">${fmtCOP(bankTotals.bancolombia)}</h3>
-            </div>
-            <div className="stitch-card p-6 bg-gradient-to-br from-blue-50/50 to-white border border-blue-200/50 shadow-md flex justify-between items-center">
-              <div>
-                <p className="text-[10px] font-black text-blue-800 uppercase tracking-widest mb-1">TOTAL TRANSFERENCIAS CAJA SOCIAL</p>
-                <p className="text-xs text-slate-500 font-bold">Colaboradores inscritos en Caja Social</p>
-              </div>
-              <h3 className="text-2xl font-black text-slate-900">${fmtCOP(bankTotals.cajaSocial)}</h3>
-            </div>
-          </section>
+          
         </div>
         </>
       )}
@@ -876,7 +830,7 @@ const handleSaveToCloud = async () => {
             {/* --- TAB 2: FORMULARIO DE LIQUIDACIÓN --- */}
       {activeTab === "liquidacion" && (
   function() {
-     const selectedWorkerData = filteredPayrollData.find(d => d.masterRow.nombre === selectedWorkerName) || filteredPayrollData[0];
+     const selectedWorkerData = filteredPayrollData.find(d => d.masterRow.nombre === selectedWorkerName) || null;
      if (!selectedWorkerData) return (
         <div className="p-12 text-center text-slate-500 font-bold bg-white rounded-3xl border border-slate-200 shadow-sm animate-stitch">
            Selecciona un operario desde el Panel General para liquidar.
@@ -895,13 +849,13 @@ const handleSaveToCloud = async () => {
            <div className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                  <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-black text-xl shadow-inner border border-indigo-100">
-                    {selectedWorkerData.masterRow.nombre.charAt(0)}
+                    {selectedWorkerData.nombre.charAt(0)}
                  </div>
                  <div>
-                    <h2 className="text-xl font-black text-slate-800 tracking-tight">{selectedWorkerData.masterRow.nombre}</h2>
+                    <h2 className="text-xl font-black text-slate-800 tracking-tight">{selectedWorkerData.nombre}</h2>
                     <div className="flex items-center gap-3 mt-1 text-xs font-semibold text-slate-500 uppercase tracking-widest">
-                       <span className="flex items-center gap-1"><Info size={12} className="text-indigo-400"/> CC: {selectedWorkerData.masterRow.cedula}</span>
-                       <span className="flex items-center gap-1 text-slate-400">&bull; {selectedWorkerData.masterRow.cargo.toLowerCase()}</span>
+                       <span className="flex items-center gap-1"><Info size={12} className="text-indigo-400"/> CC: {selectedWorkerData.cedula}</span>
+                       <span className="flex items-center gap-1 text-slate-400">&bull; {selectedWorkerData.cargo.toLowerCase()}</span>
                     </div>
                  </div>
               </div>
@@ -954,7 +908,7 @@ const handleSaveToCloud = async () => {
                                 const dateObj = new Date(day.dia + "T00:00:00");
                                 const dayName = dateObj.toLocaleDateString("es-CO", { weekday: "short" });
                                 const displayDate = day.dia;
-                                const prefix = `${selectedWorkerData.masterRow.cedula}_${displayDate}`;
+                                const prefix = `${selectedWorkerData.cedula}_${displayDate}`;
   const handleImportBackup = (e) => {
     const file = e.target?.files?.[0];
     if (!file) return;
@@ -1061,8 +1015,8 @@ const handleSaveToCloud = async () => {
                              <div className="w-24">
                                 <input
                                    type="text"
-                                   value={overrides[`${selectedWorkerData.masterRow.cedula}_horas_que_debe`] !== undefined ? overrides[`${selectedWorkerData.masterRow.cedula}_horas_que_debe`] : (selectedWorkerData.masterRow.horas_debe || 0)}
-                                   onChange={(e) => handleCellEdit(`${selectedWorkerData.masterRow.cedula}_horas_que_debe`, e.target.value)}
+                                   value={overrides[`${selectedWorkerData.cedula}_horas_que_debe`] !== undefined ? overrides[`${selectedWorkerData.cedula}_horas_que_debe`] : (selectedWorkerData.horas_debe || 0)}
+                                   onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_horas_que_debe`, e.target.value)}
                                    className="w-full bg-slate-800 text-white border-slate-700 text-sm font-bold rounded-lg px-3 py-1.5 outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 text-right transition-all"
                                 />
                              </div>
@@ -1071,7 +1025,7 @@ const handleSaveToCloud = async () => {
                           <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Horas Pendientes</span>
                              <span className="text-sm font-bold text-slate-300 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700/50">
-                                {selectedWorkerData.masterRow.horas_pendientes || 0}
+                                {selectedWorkerData.horas_pendientes || 0}
                              </span>
                           </div>
 
@@ -1080,8 +1034,8 @@ const handleSaveToCloud = async () => {
                              <div className="w-28">
                                 <input
                                    type="text"
-                                   value={overrides[`${selectedWorkerData.masterRow.cedula}_sueldo`] !== undefined ? overrides[`${selectedWorkerData.masterRow.cedula}_sueldo`] : (selectedWorkerData.masterRow.salario || 0)}
-                                   onChange={(e) => handleCellEdit(`${selectedWorkerData.masterRow.cedula}_sueldo`, e.target.value)}
+                                   value={overrides[`${selectedWorkerData.cedula}_sueldo`] !== undefined ? overrides[`${selectedWorkerData.cedula}_sueldo`] : (selectedWorkerData.salario || 0)}
+                                   onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_sueldo`, e.target.value)}
                                    className="w-full bg-slate-800 text-emerald-400 border-slate-700 text-sm font-bold rounded-lg px-3 py-1.5 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-right transition-all"
                                 />
                              </div>
@@ -1101,49 +1055,49 @@ const handleSaveToCloud = async () => {
                                 <span className="text-xs font-bold uppercase tracking-wide text-slate-300">29. Nocturnas</span>
                                 <span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800">x 0.35</span>
                              </div>
-                             <div className="text-sm font-bold text-indigo-400">${fmtCOP(selectedWorkerData.masterRow.recargo_nocturno)}</div>
+                             <div className="text-sm font-bold text-indigo-400">${fmtCOP(selectedWorkerData.recargo_nocturno)}</div>
                           </div>
                           <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
                              <div className="flex items-center gap-2">
                                 <span className="text-xs font-bold uppercase tracking-wide text-slate-300">30. Festiva Diurna</span>
                                 <span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800">x 0.75</span>
                              </div>
-                             <div className="text-sm font-bold text-indigo-400">${fmtCOP(selectedWorkerData.masterRow.val_extras_festivas || 0)}</div>
+                             <div className="text-sm font-bold text-indigo-400">${fmtCOP(selectedWorkerData.val_extras_festivas || 0)}</div>
                           </div>
                           <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
                              <div className="flex items-center gap-2">
                                 <span className="text-xs font-bold uppercase tracking-wide text-slate-300">31. Fest Noc</span>
                                 <span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800">x 2.10</span>
                              </div>
-                             <div className="text-sm font-bold text-indigo-400">${fmtCOP(selectedWorkerData.masterRow.val_extras_festivas_nocturnas || 0)}</div>
+                             <div className="text-sm font-bold text-indigo-400">${fmtCOP(selectedWorkerData.val_extras_festivas_nocturnas || 0)}</div>
                           </div>
                           <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
                              <div className="flex items-center gap-2">
                                 <span className="text-xs font-bold uppercase tracking-wide text-slate-300">32. Extra Diurna</span>
                                 <span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800">x 1.25</span>
                              </div>
-                             <div className="text-sm font-bold text-emerald-400">${fmtCOP(selectedWorkerData.masterRow.val_extras_diurnas)}</div>
+                             <div className="text-sm font-bold text-emerald-400">${fmtCOP(selectedWorkerData.val_extras_diurnas)}</div>
                           </div>
                           <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
                              <div className="flex items-center gap-2">
                                 <span className="text-xs font-bold uppercase tracking-wide text-slate-300">33. Extra Noc</span>
                                 <span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800">x 1.75</span>
                              </div>
-                             <div className="text-sm font-bold text-emerald-400">${fmtCOP(selectedWorkerData.masterRow.val_extras_nocturnas)}</div>
+                             <div className="text-sm font-bold text-emerald-400">${fmtCOP(selectedWorkerData.val_extras_nocturnas)}</div>
                           </div>
                           <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
                              <div className="flex items-center gap-2">
                                 <span className="text-xs font-bold uppercase tracking-wide text-slate-300">34. Ext Fes Diu</span>
                                 <span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800">x 2.00</span>
                              </div>
-                             <div className="text-sm font-bold text-emerald-400">${fmtCOP(selectedWorkerData.masterRow.val_extras_festivas)}</div>
+                             <div className="text-sm font-bold text-emerald-400">${fmtCOP(selectedWorkerData.val_extras_festivas)}</div>
                           </div>
                           <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
                              <div className="flex items-center gap-2">
                                 <span className="text-xs font-bold uppercase tracking-wide text-slate-300">35. Ext Fes Noc</span>
                                 <span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800">x 2.50</span>
                              </div>
-                             <div className="text-sm font-bold text-emerald-400">${fmtCOP(selectedWorkerData.masterRow.val_extras_festivas_nocturnas || 0)}</div>
+                             <div className="text-sm font-bold text-emerald-400">${fmtCOP(selectedWorkerData.val_extras_festivas_nocturnas || 0)}</div>
                           </div>
                        </div>
 
@@ -1160,278 +1114,16 @@ const handleSaveToCloud = async () => {
   }()
 )}
 
-      {/* --- TAB 3: COLILLAS DE PAGO --- */}
+      {/* --- TAB 3: COLILLAS DE PAGO (MODULARIZADA) --- */}
       {activeTab === "colilla" && (
-        <div className="space-y-6 animate-stitch">
-           <section className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/60 shadow-md">
-             <div className="flex items-center gap-3">
-               <div className="w-10 h-10 bg-emerald-100 text-emerald-600 flex items-center justify-center rounded-xl">
-                 🖨️
-               </div>
-               <div>
-                 <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider">Desprendibles de Pago (Colillas)</h4>
-                 <p className="text-slate-500 text-xs font-semibold">Generación de desprendibles listos para imprimir o exportar digitalmente.</p>
-               </div>
-             </div>
-             <div className="flex items-center gap-3">
-               <span className="text-xs font-black text-slate-400 uppercase tracking-wider">Seleccionar Operario:</span>
-               <select
-                 value={selectedWorkerName}
-                 onChange={(e) => setSelectedWorkerName(e.target.value)}
-                 className="bg-slate-50 border border-slate-200 text-sm font-black text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
-               >
-                 {nominaRows.map(member => (
-                   <option key={member.nombre} value={member.nombre}>
-                     {member.nombre}
-                   </option>
-                 ))}
-               </select>
-               <button 
-                 onClick={() => window.print()}
-                 className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-emerald-600 text-white rounded-xl text-xs font-black transition-all shadow-md active:scale-95"
-               >
-                 Imprimir Colilla
-               </button>
-             </div>
-           </section>
-
-           {/* Colilla Form */}
-           {function() {
-              const selectedWorkerData = filteredPayrollData.find(d => d.masterRow.nombre === selectedWorkerName) || filteredPayrollData[0];
-              if (!selectedWorkerData) return null;
-  const handleImportBackup = (e) => {
-    const file = e.target?.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-         const data = JSON.parse(event.target.result);
-         if (data.nominaRows) setNominaRows(data.nominaRows);
-         if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
-         if (data.overrides) setOverrides(data.overrides);
-         if (data.startDate) setStartDate(data.startDate);
-         if (data.endDate) setEndDate(data.endDate);
-         
-         setToast({ message: "Backup restaurado exitosamente.", type: "success" });
-      } catch (error) {
-         setToast({ message: "Error al leer el backup: archivo no válido.", type: "error" });
-      }
-      setTimeout(() => setToast(null), 4000);
-    };
-    reader.readAsText(file);
-    if (e.target) e.target.value = '';
-  };
-
-  return (
-<div className="max-w-2xl mx-auto bg-white p-10 rounded-[2.5rem] border border-slate-200/60 shadow-xl space-y-8 print:p-0 print:border-none print:shadow-none" id="printable-colilla">
-            {/* Header info */}
-            <div className="flex justify-between items-start pb-6 border-b border-slate-200/60">
-              <div className="space-y-1">
-                <h3 className="text-xl font-black text-slate-955">OPTIMOLDES S.A.S.</h3>
-                <p className="text-xs font-bold text-slate-500">NIT 900.069.620-9</p>
-                <p className="text-[10px] text-slate-400 font-medium">Carrera 41 C No. 50-16 - Itagüí • Tel: 277 77 18</p>
-              </div>
-              <div className="text-right space-y-1">
-                <span className="inline-block px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[9px] font-black uppercase tracking-wider">
-                  Comprobante Quincenal
-                </span>
-                <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Periodo: {startDate} a {endDate}</p>
-              </div>
-            </div>
-
-            {/* Worker Metadata Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-6 text-xs bg-slate-50/50 p-6 rounded-2xl border border-slate-100">
-              <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase block">Nombre del Trabajador</span>
-                <span className="font-black text-slate-900">{selectedWorkerData.masterRow.nombre}</span>
-              </div>
-              <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase block">Cédula de Ciudadanía</span>
-                <span className="font-bold text-slate-800">{selectedWorkerData.masterRow.cedula}</span>
-              </div>
-              <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase block">Cargo de Operación</span>
-                <span className="font-bold text-slate-800 capitalize">{selectedWorkerData.masterRow.cargo.toLowerCase()}</span>
-              </div>
-              <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase block">Salario Básico Mensual</span>
-                <span className="font-bold text-slate-800">${fmtCOP(selectedWorkerData.masterRow.salario)}</span>
-              </div>
-              <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase block">Días Liquidados</span>
-                <span className="font-bold text-slate-800">{selectedWorkerData.masterRow.dias_pagados} Días</span>
-              </div>
-              <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase block">Entidad Bancaria</span>
-                <span className="font-black text-slate-900">{selectedWorkerData.masterRow.banco}</span>
-              </div>
-            </div>
-
-            {/* Income & Deduction Columns */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              
-              {/* Devengos */}
-              <div className="space-y-4">
-                <div className="pb-2 border-b border-slate-200">
-                  <h5 className="font-black text-xs text-slate-900 uppercase tracking-widest text-emerald-600">Devengos (Ingresos)</h5>
-                </div>
-                <div className="space-y-2.5 text-xs font-semibold text-slate-600">
-                  <div className="flex justify-between">
-                    <span>Sueldo ordinario ({selectedWorkerData.masterRow.dias_pagados}d):</span>
-                    <span className="font-bold text-slate-900">${fmtCOP(selectedWorkerData.masterRow.sueldo)}</span>
-                  </div>
-                  {selectedWorkerData.masterRow.recargo_nocturno > 0 && (
-                    <div className="flex justify-between">
-                      <span>Recargo Nocturno ({selectedWorkerData.masterRow.horas_nocturnas.toFixed(1)}h):</span>
-                      <span className="font-bold text-slate-900">${fmtCOP(selectedWorkerData.masterRow.recargo_nocturno)}</span>
-                    </div>
-                  )}
-                  {selectedWorkerData.masterRow.val_extras_diurnas > 0 && (
-                    <div className="flex justify-between">
-                      <span>Extras Diurnas ({selectedWorkerData.masterRow.extras_diurnas.toFixed(1)}h):</span>
-                      <span className="font-bold text-slate-900">${fmtCOP(selectedWorkerData.masterRow.val_extras_diurnas)}</span>
-                    </div>
-                  )}
-                  {selectedWorkerData.masterRow.val_extras_nocturnas > 0 && (
-                    <div className="flex justify-between">
-                      <span>Extras Nocturnas ({selectedWorkerData.masterRow.extras_nocturnas.toFixed(1)}h):</span>
-                      <span className="font-bold text-slate-900">${fmtCOP(selectedWorkerData.masterRow.val_extras_nocturnas)}</span>
-                    </div>
-                  )}
-                  {selectedWorkerData.masterRow.val_extras_festivas > 0 && (
-                    <div className="flex justify-between">
-                      <span>Extras Festivas ({selectedWorkerData.masterRow.extras_festivas.toFixed(1)}h):</span>
-                      <span className="font-bold text-slate-900">${fmtCOP(selectedWorkerData.masterRow.val_extras_festivas)}</span>
-                    </div>
-                  )}
-                  {selectedWorkerData.masterRow.transporte > 0 && (
-                    <div className="flex justify-between">
-                      <span>Auxilio Legal Transporte:</span>
-                      <span className="font-bold text-slate-900">${fmtCOP(selectedWorkerData.masterRow.transporte)}</span>
-                    </div>
-                  )}
-                  {(selectedWorkerData.masterRow.rodamiento > 0 || selectedWorkerData.masterRow.comisiones > 0) && (
-                    <div className="flex justify-between">
-                      <span>Rodamiento / Comisiones:</span>
-                      <span className="font-bold text-slate-900">${fmtCOP(selectedWorkerData.masterRow.rodamiento + selectedWorkerData.masterRow.comisiones)}</span>
-                    </div>
-                  )}
-                  {selectedWorkerData.masterRow.incapacidad > 0 && (
-                    <div className="flex justify-between">
-                      <span>Incapacidad Médica ({selectedWorkerData.masterRow.dias_incapacidad}d):</span>
-                      <span className="font-bold text-slate-900">${fmtCOP(selectedWorkerData.masterRow.incapacidad)}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Deducciones */}
-              <div className="space-y-4">
-                <div className="pb-2 border-b border-slate-200">
-                  <h5 className="font-black text-xs text-slate-900 uppercase tracking-widest text-rose-600">Deducciones (Descuentos)</h5>
-                </div>
-                <div className="space-y-2.5 text-xs font-semibold text-slate-600">
-                  <div className="flex justify-between">
-                    <span>Aporte Salud (4%):</span>
-                    <span className="font-bold text-rose-600">${fmtCOP(selectedWorkerData.masterRow.salud)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Aporte Pensión (4%):</span>
-                    <span className="font-bold text-rose-600">${fmtCOP(selectedWorkerData.masterRow.pension)}</span>
-                  </div>
-                  {selectedWorkerData.masterRow.solidaridad > 0 && (
-                    <div className="flex justify-between">
-                      <span>Fondo Solidaridad Pensional:</span>
-                      <span className="font-bold text-rose-600">${fmtCOP(selectedWorkerData.masterRow.solidaridad)}</span>
-                    </div>
-                  )}
-                  {selectedWorkerData.masterRow.prestamos > 0 && (
-                    <div className="flex justify-between">
-                      <span>Amortización Préstamos:</span>
-                      <span className="font-bold text-rose-600">${fmtCOP(selectedWorkerData.masterRow.prestamos)}</span>
-                    </div>
-                  )}
-                  {selectedWorkerData.masterRow.poliza_bolivar > 0 && (
-                    <div className="flex justify-between">
-                      <span>Póliza Seguro Bolívar:</span>
-                      <span className="font-bold text-rose-600">${fmtCOP(selectedWorkerData.masterRow.poliza_bolivar)}</span>
-                    </div>
-                  )}
-                  {selectedWorkerData.masterRow.poliza_plenitud > 0 && (
-                    <div className="flex justify-between">
-                      <span>Seguro Plenitud Funerario:</span>
-                      <span className="font-bold text-rose-600">${fmtCOP(selectedWorkerData.masterRow.poliza_plenitud)}</span>
-                    </div>
-                  )}
-                  {selectedWorkerData.masterRow.libranza_comfama > 0 && (
-                    <div className="flex justify-between">
-                      <span>Crédito Libranza Comfama:</span>
-                      <span className="font-bold text-rose-600">${fmtCOP(selectedWorkerData.masterRow.libranza_comfama)}</span>
-                    </div>
-                  )}
-                  {selectedWorkerData.masterRow.poliza_sura > 0 && (
-                    <div className="flex justify-between">
-                      <span>Seguro Póliza Sura:</span>
-                      <span className="font-bold text-rose-600">${fmtCOP(selectedWorkerData.masterRow.poliza_sura)}</span>
-                    </div>
-                  )}
-                  {selectedWorkerData.masterRow.optica > 0 && (
-                    <div className="flex justify-between">
-                      <span>Descuento Óptica / Celular:</span>
-                      <span className="font-bold text-rose-600">${fmtCOP(selectedWorkerData.masterRow.optica + selectedWorkerData.masterRow.celular)}</span>
-                    </div>
-                  )}
-                  {selectedWorkerData.masterRow.retencion > 0 && (
-                    <div className="flex justify-between">
-                      <span>Retención en la Fuente:</span>
-                      <span className="font-bold text-rose-600">${fmtCOP(selectedWorkerData.masterRow.retencion)}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-            </div>
-
-            {/* Total net payment summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-slate-200/60 text-xs">
-              <div className="space-y-1">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Total Devengado (W)</span>
-                <span className="text-base font-extrabold text-slate-900">${fmtCOP(selectedWorkerData.masterRow.total_devengados)}</span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Total Deducciones (AI)</span>
-                <span className="text-base font-extrabold text-slate-900">${fmtCOP(selectedWorkerData.masterRow.total_deducciones)}</span>
-              </div>
-              
-              <div className="bg-slate-955 text-white p-6 rounded-3xl text-right space-y-1 shadow-md">
-                <span className="text-[10px] font-black uppercase tracking-widest opacity-60 block">Neto Transferido (AL)</span>
-                <span className="text-2xl font-black text-yellow-400 block">${fmtCOP(selectedWorkerData.masterRow.neto_pagar)} COP</span>
-              </div>
-            </div>
-
-            {/* Signature layout */}
-            <div className="pt-12 grid grid-cols-2 gap-10 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              <div className="space-y-4">
-                <div className="border-b border-slate-300 h-10" />
-                <p>Elaborado y Pagado por Empresa</p>
-              </div>
-              <div className="space-y-4">
-                <div className="border-b border-slate-300 h-10" />
-                <p>Recibido Conforme Trabajador (Firma y C.C)</p>
-              </div>
-            </div>
-
-            </div>
-
-              );
-           }()}
-        </div>
+        <TabColillas 
+          nominaRows={nominaRows}
+          payrollData={filteredPayrollData}
+          fmtCOP={fmtCOP}
+          startDate={startDate}
+          endDate={endDate}
+        />
       )}
-
-      </>
-    )}
-
       {/* Info Alert footer bar */}
       <div className="p-6 bg-slate-100 rounded-[1.5rem] border border-slate-200/60 flex items-start gap-4 shadow-sm mt-6">
         <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center text-white shrink-0 shadow-inner">
@@ -1444,6 +1136,9 @@ const handleSaveToCloud = async () => {
           </p>
         </div>
       </div>
+
+      </>
+    )}
 
     </div>
   

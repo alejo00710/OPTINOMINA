@@ -4,7 +4,7 @@ import { upsertEmployeeRecord, toggleEmployeeStatus } from '@/utils/supabase';
 import EmployeeEditorModal from './EmployeeEditorModal';
 import { fmtCOP, parseLocalNumber } from "@/utils/mathNomina";
 
-export default function EmployeeDirectory({ employees, onRefresh }) {
+export default function TabDirectorio({ employees, onRefresh }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
 
