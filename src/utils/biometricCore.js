@@ -199,6 +199,9 @@ export async function parseBiometricExcel(file) {
           }
         });
 
+        // TAREA 1: Ordenar los datos cronológicamente ASCENDENTE antes de agruparlos
+        cleanData.sort((a, b) => a.timestamp - b.timestamp);
+
         resolve(cleanData);
       } catch (error) {
         reject("Error procesando el archivo Excel: " + error.message);
@@ -263,60 +266,29 @@ export const cleanWorkerPunches = (punches, startDate, endDate) => {
     }
   }
 
-  // 4. Regla de Cruce de medianoche
+  // 4. Agrupamiento por Día Lógico (-8 horas)
   const punchesByDate = {};
   for (let i = 0; i < filteredPunches.length; i++) {
     const p = filteredPunches[i];
-    let effectiveDate = p.fecha;
+    
+    // Restar 8 horas (28,800,000 ms) al timestamp real para obtener el "Día Lógico"
+    const logicalTimestamp = p.timestamp - (8 * 3600000);
+    const dateObj = new Date(logicalTimestamp);
+    
+    const logicalDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
 
-    if (p.hora >= "00:00" && p.hora <= "07:00") {
-      let isNightShiftExit = true;
-      let nextP = null;
-      for (let j = i + 1; j < filteredPunches.length; j++) {
-        if (filteredPunches[j].fecha === p.fecha) { nextP = filteredPunches[j]; break; }
-      }
-
-      let lookaheadDetermined = false;
-      if (nextP && nextP.hora >= "15:00") {
-        const gapToNext = (nextP.timestamp - p.timestamp) / 3600000;
-        if (gapToNext >= 13) { isNightShiftExit = true; lookaheadDetermined = true; }
-      }
-
-      if (!lookaheadDetermined) {
-        if (i > 0) {
-          const prev = filteredPunches[i - 1];
-          const diffHours = (p.timestamp - prev.timestamp) / 3600000;
-          const prevEffectiveDate = prev.effectiveDate || prev.fecha;
-          const punchesInPrevDay = punchesByDate[prevEffectiveDate] || [];
-          const firstPunchOfPrevDay = punchesInPrevDay.length > 0 ? punchesInPrevDay[0].hora : prev.hora;
-
-          if (firstPunchOfPrevDay && firstPunchOfPrevDay < "16:00") {
-            if (p.hora >= "04:00" || diffHours > 8) isNightShiftExit = false;
-          } else {
-            if (diffHours > 14) isNightShiftExit = false;
-          }
-        } else {
-          if (p.hora >= "04:00") isNightShiftExit = false;
-        }
-      }
-
-      if (isNightShiftExit) {
-        const [y, m, d] = p.fecha.split("-").map(Number);
-        const dateObj = new Date(y, m - 1, d);
-        dateObj.setDate(dateObj.getDate() - 1);
-        effectiveDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
-      }
-    }
-
-    p.effectiveDate = effectiveDate;
-    if (!punchesByDate[effectiveDate]) punchesByDate[effectiveDate] = [];
-    punchesByDate[effectiveDate].push(p);
+    p.effectiveDate = logicalDate; // Solo como metadato, la UI y la tabla usarán p.hora y p.fecha originales
+    
+    if (!punchesByDate[logicalDate]) punchesByDate[logicalDate] = [];
+    punchesByDate[logicalDate].push(p);
   }
 
-  // 5. ASIGNACIÓN SECUENCIAL PURA
+  // 5. ASIGNACIÓN SECUENCIAL PURA POR DÍA LÓGICO
   Object.keys(punchesByDate).forEach(dateStr => {
+    // La fila de la UI debe existir en attendanceRows (se crea en base a los días del rango)
     if (!attendanceRows[dateStr]) return;
 
+    // Ordenar por Timestamp absoluto original (menor a mayor)
     const dayPunches = punchesByDate[dateStr].sort((a, b) => a.timestamp - b.timestamp);
     if (dayPunches.length === 0) return;
 
@@ -328,25 +300,25 @@ export const cleanWorkerPunches = (punches, startDate, endDate) => {
     }
     else if (n === 2) {
       hr_ent = dayPunches[0].hora;
-      hr_sal = dayPunches[1].hora;
+      hr_sal = dayPunches[1].hora; // C
     }
     else if (n === 3) {
       hr_ent = dayPunches[0].hora;
-      hr_sal_desc1 = dayPunches[1].hora;
-      hr_sal = dayPunches[2].hora;
+      hr_sal_desc1 = dayPunches[1].hora; // D
+      hr_ent_desc1 = dayPunches[2].hora; // E
     }
     else if (n === 4) {
       hr_ent = dayPunches[0].hora;
-      hr_sal_desc1 = dayPunches[1].hora;
-      hr_ent_desc1 = dayPunches[2].hora;
-      hr_sal = dayPunches[3].hora;
+      hr_sal_desc1 = dayPunches[1].hora; // D
+      hr_ent_desc1 = dayPunches[2].hora; // E
+      hr_sal = dayPunches[3].hora;       // C
     }
     else if (n === 5) {
       hr_ent = dayPunches[0].hora;
-      hr_sal_desc1 = dayPunches[1].hora;
-      hr_ent_desc1 = dayPunches[2].hora;
-      hr_sal_desc2 = dayPunches[3].hora;
-      hr_sal = dayPunches[4].hora;
+      hr_sal_desc1 = dayPunches[1].hora; // D
+      hr_ent_desc1 = dayPunches[2].hora; // E
+      hr_sal_desc2 = dayPunches[3].hora; // G
+      hr_ent_desc2 = dayPunches[4].hora; // H
     }
     else if (n >= 6) {
       hr_ent = dayPunches[0].hora;
@@ -354,7 +326,7 @@ export const cleanWorkerPunches = (punches, startDate, endDate) => {
       hr_ent_desc1 = dayPunches[2].hora;
       hr_sal_desc2 = dayPunches[3].hora;
       hr_ent_desc2 = dayPunches[4].hora;
-      hr_sal = dayPunches[n - 1].hora;
+      hr_sal = dayPunches[n - 1].hora; // Última marca es la salida
     }
 
     attendanceRows[dateStr] = {

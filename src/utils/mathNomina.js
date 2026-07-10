@@ -83,28 +83,24 @@ export const parseLocalNumber = (val) => {
   return isNaN(n) ? 0 : Number(n.toFixed(2));
 };
 
-export const getTimeDifference = (start, end) => {
-  const sStr = String(start).trim();
-  const eStr = String(end).trim();
-  if (!sStr || sStr === "-" || sStr === "00:00" || !eStr || eStr === "-" || eStr === "00:00") return 0;
+export const getTimeDifference = (start, end, allowMidnight = true) => {
+  if (!start || !end || start === "-" || end === "-" || start === "00:00" || end === "00:00") return 0;
   
-  const parseMin = (str) => {
-    const parts = str.split(":");
-    if (parts.length < 2) {
-      const v = parseFloat(str);
-      return isNaN(v) ? 0 : v * 60;
-    }
-    const h = parseInt(parts[0], 10) || 0;
-    const m = parseInt(parts[1], 10) || 0;
-    return (h * 60) + m;
-  };
-
-  const startMin = parseMin(sStr);
-  const endMin = parseMin(eStr);
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
   
-  let diff = endMin - startMin;
+  if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return 0;
+  
+  const startTotal = (sh * 60) + sm;
+  const endTotal = (eh * 60) + em;
+  
+  let diff = endTotal - startTotal;
   if (diff < 0) {
-    diff += 1440; // 24 hours in minutes
+    if (allowMidnight) {
+      diff += 1440; // Cruce de medianoche
+    } else {
+      return 0; // Si da negativo o absurdo por falta de datos, que retorne 0.00
+    }
   }
   
   return Number((diff / 60).toFixed(4));
@@ -119,19 +115,22 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   const hrEntDesc2 = overrides[`${prefix}_hr_ent_desc2`] !== undefined ? String(overrides[`${prefix}_hr_ent_desc2`]) : (day.hr_ent_desc2 || "-");
   const hrSalDesc2 = overrides[`${prefix}_hr_sal_desc2`] !== undefined ? String(overrides[`${prefix}_hr_sal_desc2`]) : (day.hr_sal_desc2 || "-");
 
-  const desc1 = getTimeDifference(hrEntDesc1, hrSalDesc1);
-  const desc2 = getTimeDifference(hrEntDesc2, hrSalDesc2);
+  const desc1 = getTimeDifference(hrSalDesc1, hrEntDesc1, false);
+  const desc2 = getTimeDifference(hrSalDesc2, hrEntDesc2, false);
 
   // Pago Ent (J) y Pago Sal (K)
-  // J debe ser B (hr_ent), K debe ser C (hr_sal)
-  const hrEntPago = overrides[`${prefix}_hr_ent_pago`] !== undefined ? String(overrides[`${prefix}_hr_ent_pago`]) : (day.hr_ent || "-");
-  const hrSalPago = overrides[`${prefix}_hr_sal_pago`] !== undefined ? String(overrides[`${prefix}_hr_sal_pago`]) : (day.hr_sal || "-");
+  // J debe ser B (hr_ent), K debe ser C (hr_sal) estrictamente
+  const baseHrEnt = day.hr_ent || "-";
+  const baseHrSal = day.hr_sal || "-";
+
+  const hrEntPago = overrides[`${prefix}_hr_ent_pago`] !== undefined ? String(overrides[`${prefix}_hr_ent_pago`]) : baseHrEnt;
+  const hrSalPago = overrides[`${prefix}_hr_sal_pago`] !== undefined ? String(overrides[`${prefix}_hr_sal_pago`]) : baseHrSal;
   
   // Col L: Hr. Lab = Diferencia entre J y K, menos los descansos
   let hrLab = 0;
   if (isTime(hrEntPago) && isTime(hrSalPago)) {
      hrLab = getTimeDifference(hrEntPago, hrSalPago) - desc1 - desc2;
-     if (hrLab < 0) hrLab = 0; // Prevenir horas negativas si los descansos superan el turno
+     if (hrLab < 0) hrLab = 0;
   }
   
   // Col M: Des = SI(L3>8.9; 0.5; 0)
@@ -156,6 +155,7 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   const extNoc = overrides[`${prefix}_ext_noc`] !== undefined ? Number(overrides[`${prefix}_ext_noc`]) : Number(day.ext_noc || 0);
   const extFesDiu = overrides[`${prefix}_ext_fes_diu`] !== undefined ? Number(overrides[`${prefix}_ext_fes_diu`]) : Number(day.ext_fes_diu || 0);
   const extFesNoc = overrides[`${prefix}_ext_fes_noc`] !== undefined ? Number(overrides[`${prefix}_ext_fes_noc`]) : Number(day.ext_fes_noc || 0);
+  
   const llegadaTarde = overrides[`${prefix}_llegada_tarde`] !== undefined ? Number(overrides[`${prefix}_llegada_tarde`]) : Number(day.llegada_tarde || 0);
   const llegadaTardeMin = overrides[`${prefix}_llegada_tarde_min`] !== undefined ? Number(overrides[`${prefix}_llegada_tarde_min`]) : Number(day.llegada_tarde_min || 0);
   
