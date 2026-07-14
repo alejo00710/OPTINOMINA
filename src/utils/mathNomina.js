@@ -202,15 +202,15 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   // Col N: Hr. Pag = L3 - M3
   const hrPag = hrLab > 0 ? hrLab - des : 0;
   
-  const J3 = isTime(hrEntPago) ? timeStrToDecimal(hrEntPago) : 0;
-  const C41 = timeStrToDecimal(horaInicioDiurna);
-  const D41 = timeStrToDecimal(horaFinDiurna);
+  const inicioDia = "04:50";
+  const finDia = "17:49";
+  const baseHoras = 44 / 6; // 7.333333
   
-  // Col P: Noct = SI(J3>D41; 44/6; 0)
-  const noct = (hrPag > 0 && J3 > D41) ? (44 / 6) : 0;
+  // Cálculo Nocturnas (P):
+  const noct = (hrEntPago > finDia) ? baseHoras : 0;
   
-  // Col O: Diurn = SI(Y(J3>=C41; J3<=D41); (44/6)-P3; 0)
-  const diurn = (hrPag > 0 && J3 >= C41 && J3 <= D41) ? (44 / 6) - noct : 0;
+  // Cálculo Diurnas (O):
+  const diurn = (hrEntPago >= inicioDia && hrEntPago <= finDia) ? (baseHoras - noct) : 0;
   
   // Manuals overriding or defaults to 0
   const fesDiu = overrides[`${prefix}_fes_diu`] !== undefined ? Number(overrides[`${prefix}_fes_diu`]) : Number(day.fes_diu || 0);

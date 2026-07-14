@@ -64,7 +64,8 @@ export default function NominaPage() {
   const [endDate, setEndDate] = useState("2026-05-15");
 
   const [isClient, setIsClient] = useState(false);
-  const [isReady, setIsReady] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
     setIsClient(true);
@@ -78,18 +79,17 @@ export default function NominaPage() {
     } catch (e) {
       console.error("Error parsing optinomina_draft", e);
     }
-    setIsReady(true);
+    setDataLoaded(true);
   }, []);
 
-  useEffect(() => {
-    if (isReady) {
-      const hasLogs = Object.keys(attendanceLogs).length > 0;
-      const hasOverrides = Object.keys(overrides).length > 0;
-      if (hasLogs || hasOverrides) {
-        localStorage.setItem("optinomina_draft", JSON.stringify({ attendanceLogs, overrides }));
-      }
-    }
-  }, [attendanceLogs, overrides, isReady]);
+  const handleSaveDraft = () => {
+    localStorage.setItem('optinomina_draft', JSON.stringify({ attendanceLogs, overrides }));
+    setToast({
+      message: "Borrador guardado con éxito. Puedes recargar la página sin perder datos.",
+      type: "success"
+    });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const loadEmployees = async () => {
       try {
@@ -655,6 +655,7 @@ const handleSaveToCloud = async () => {
     reader.readAsText(file);
     if (e.target) e.target.value = '';
   };
+  if (!dataLoaded) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-semibold animate-pulse">Cargando área de trabajo, por favor espera...</div>;
 
   return (
     <>
@@ -678,7 +679,21 @@ const handleSaveToCloud = async () => {
           <Info size={16} className="text-accent shrink-0" />
           <span>Haz clic en cualquier celda para editar. Al escribir, la celda se congelará (color ámbar) anulando el cálculo automático de Excel.</span>
         </div>
-        <div className="flex gap-2 shrink-0 w-full md:w-auto justify-end">
+        <div className="flex gap-2 shrink-0 w-full md:w-auto justify-end flex-wrap">
+          <button
+            onClick={handleSaveDraft}
+            className="bg-blue-600 text-white px-4 py-2 rounded font-bold hover:bg-blue-700 shadow-md transition-all active:scale-95 duration-200 text-xs inline-flex items-center gap-2"
+          >
+            💾 Guardar Borrador
+          </button>
+
+          <button
+            disabled
+            className="bg-emerald-600 opacity-50 cursor-not-allowed text-white px-4 py-2 rounded font-bold shadow-md text-xs inline-flex items-center gap-2"
+          >
+            ✅ Cerrar Quincena (Próximamente)
+          </button>
+
           <button
             onClick={handleSaveToCloud}
             className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-emerald-100 active:scale-95 duration-200"
@@ -686,8 +701,6 @@ const handleSaveToCloud = async () => {
             <CheckCircle2 size={14} />
             Guardar Cambios
           </button>
-
-            
 
           <label className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all shadow-md active:scale-95 duration-200 cursor-pointer">
             <RotateCcw size={14} className="rotate-180" />

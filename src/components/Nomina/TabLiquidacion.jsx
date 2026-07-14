@@ -190,8 +190,12 @@ export default function TabLiquidacion({
                                      <option value="DESCANSO">DESCANSO</option>
                                   </select>
                                </td>
-                               <td className="px-2 py-2 text-blue-600 font-mono">{day.hr_ent || "-"}</td>
-                               <td className="px-2 py-2 text-blue-600 font-mono">{day.hr_sal || "-"}</td>
+                               <td className="px-1 py-1">
+                                  <input type="time" value={overrides[`${prefix}_hr_ent`] !== undefined ? overrides[`${prefix}_hr_ent`] : (day.hr_ent || "")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent`, e.target.value)} className="w-full bg-transparent text-center font-mono outline-none focus:ring-1 focus:bg-slate-50 rounded text-blue-600" />
+                               </td>
+                               <td className="px-1 py-1">
+                                  <input type="time" value={overrides[`${prefix}_hr_sal`] !== undefined ? overrides[`${prefix}_hr_sal`] : (day.hr_sal || "")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal`, e.target.value)} className="w-full bg-transparent text-center font-mono outline-none focus:ring-1 focus:bg-slate-50 rounded text-blue-600" />
+                               </td>
                                <td className="px-1 py-1">
                                   <input type="text" value={overrides[`${prefix}_hr_ent_desc1`] !== undefined ? overrides[`${prefix}_hr_ent_desc1`] : (day.hr_ent_desc1 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_desc1`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
                                </td>
@@ -215,39 +219,45 @@ export default function TabLiquidacion({
                                   <input type="text" value={overrides[`${prefix}_hr_sal_pago`] !== undefined ? overrides[`${prefix}_hr_sal_pago`] : (day.hr_sal_pago || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_pago`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none text-purple-600" />
                                </td>
 
-                               <td className="px-2 py-2 text-center text-slate-400">{Number(day.hr_lab || 0).toFixed(1)}</td>
-                               <td className="px-2 py-2 text-center text-slate-400">{Number(day.desc_lunch || 0).toFixed(1)}</td>
-                               <td className="px-2 py-2 text-center font-bold text-slate-600">{Number(day.hr_pag || 0).toFixed(1)}</td>
+                               <td className="px-1 py-1">
+                                  <input type="number" step="0.1" value={overrides[`${prefix}_hr_lab`] !== undefined ? overrides[`${prefix}_hr_lab`] : Number(day.hr_lab || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_hr_lab`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded text-slate-500" />
+                               </td>
+                               <td className="px-1 py-1">
+                                  <input type="number" step="0.1" value={overrides[`${prefix}_desc_lunch`] !== undefined ? overrides[`${prefix}_desc_lunch`] : Number(day.desc_lunch || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_desc_lunch`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded text-slate-500" />
+                               </td>
+                               <td className="px-1 py-1">
+                                  <input type="number" step="0.1" value={overrides[`${prefix}_hr_pag`] !== undefined ? overrides[`${prefix}_hr_pag`] : Number(day.hr_pag || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_hr_pag`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded font-bold text-slate-600" />
+                               </td>
                                
-                               <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_diurnas`] !== undefined ? overrides[`${prefix}_diurnas`] : Number(day.diurnas || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_diurnas`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                               <td className="px-1 py-1">
+                                  <input type="number" step="0.1" value={overrides[`${prefix}_diurnas`] !== undefined ? overrides[`${prefix}_diurnas`] : Number(day.diurnas || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_diurnas`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
                                </td>
-                               <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_nocturnas`] !== undefined ? overrides[`${prefix}_nocturnas`] : Number(day.nocturnas || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_nocturnas`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                               <td className="px-1 py-1">
+                                  <input type="number" step="0.1" value={overrides[`${prefix}_nocturnas`] !== undefined ? overrides[`${prefix}_nocturnas`] : Number(day.nocturnas || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_nocturnas`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
                                </td>
-                               <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_fes_diu`] !== undefined ? overrides[`${prefix}_fes_diu`] : Number(day.fes_diu || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_fes_diu`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                               <td className="px-1 py-1">
+                                  <input type="number" step="0.1" value={overrides[`${prefix}_fes_diu`] !== undefined ? overrides[`${prefix}_fes_diu`] : Number(day.fes_diu || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_fes_diu`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
                                </td>
-                               <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_fes_noc`] !== undefined ? overrides[`${prefix}_fes_noc`] : Number(day.fes_noc || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_fes_noc`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                               <td className="px-1 py-1">
+                                  <input type="number" step="0.1" value={overrides[`${prefix}_fes_noc`] !== undefined ? overrides[`${prefix}_fes_noc`] : Number(day.fes_noc || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_fes_noc`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
                                </td>
-                               <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_ext_diu`] !== undefined ? overrides[`${prefix}_ext_diu`] : Number(day.ext_diu || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_ext_diu`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                               <td className="px-1 py-1">
+                                  <input type="number" step="0.1" value={overrides[`${prefix}_ext_diu`] !== undefined ? overrides[`${prefix}_ext_diu`] : Number(day.ext_diu || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_ext_diu`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
                                </td>
-                               <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_ext_noc`] !== undefined ? overrides[`${prefix}_ext_noc`] : Number(day.ext_noc || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_ext_noc`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                               <td className="px-1 py-1">
+                                  <input type="number" step="0.1" value={overrides[`${prefix}_ext_noc`] !== undefined ? overrides[`${prefix}_ext_noc`] : Number(day.ext_noc || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_ext_noc`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
                                </td>
-                               <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_ext_fes_diu`] !== undefined ? overrides[`${prefix}_ext_fes_diu`] : Number(day.ext_fes_diu || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_ext_fes_diu`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                               <td className="px-1 py-1">
+                                  <input type="number" step="0.1" value={overrides[`${prefix}_ext_fes_diu`] !== undefined ? overrides[`${prefix}_ext_fes_diu`] : Number(day.ext_fes_diu || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_ext_fes_diu`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
                                </td>
-                               <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_ext_fes_noc`] !== undefined ? overrides[`${prefix}_ext_fes_noc`] : Number(day.ext_fes_noc || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_ext_fes_noc`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                               <td className="px-1 py-1">
+                                  <input type="number" step="0.1" value={overrides[`${prefix}_ext_fes_noc`] !== undefined ? overrides[`${prefix}_ext_fes_noc`] : Number(day.ext_fes_noc || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_ext_fes_noc`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
                                </td>
-                               <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_llegada_tarde`] !== undefined ? overrides[`${prefix}_llegada_tarde`] : Number(day.llegada_tarde || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_llegada_tarde`, e.target.value)} className="w-10 bg-rose-50 border border-slate-200 text-right rounded focus:ring-1 outline-none text-rose-700" />
+                               <td className="px-1 py-1">
+                                  <input type="number" step="0.1" value={overrides[`${prefix}_llegada_tarde`] !== undefined ? overrides[`${prefix}_llegada_tarde`] : Number(day.llegada_tarde || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_llegada_tarde`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded text-rose-600" />
                                </td>
-                               <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_llegada_tarde_min`] !== undefined ? overrides[`${prefix}_llegada_tarde_min`] : Number(day.llegada_tarde_min || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_llegada_tarde_min`, e.target.value)} className="w-10 bg-rose-50 border border-slate-200 text-right rounded focus:ring-1 outline-none text-rose-700" />
+                               <td className="px-1 py-1">
+                                  <input type="number" step="0.1" value={overrides[`${prefix}_llegada_tarde_min`] !== undefined ? overrides[`${prefix}_llegada_tarde_min`] : Number(day.llegada_tarde_min || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_llegada_tarde_min`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded text-rose-600" />
                                </td>
                             </tr>
                          )
@@ -292,115 +302,205 @@ export default function TabLiquidacion({
                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6">Liquidación de Horas (26-38)</h3>
                    
                    <div className="space-y-4 mb-6">
-                      <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
-                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">26. Horas que debe</span>
-                         <div className="w-24">
-                            <input
-                               type="text"
-                               value={overrides[`${selectedWorkerData.cedula}_horas_que_debe`] !== undefined ? overrides[`${selectedWorkerData.cedula}_horas_que_debe`] : (selectedWorkerData.horas_debe || 0)}
-                               onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_horas_que_debe`, e.target.value)}
-                               className="w-full bg-slate-800 text-white border-slate-700 text-sm font-bold rounded-lg px-3 py-1.5 outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 text-right transition-all"
-                            />
-                         </div>
-                      </div>
-                      
-                      <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
-                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Horas Pendientes</span>
-                         <span className="text-sm font-bold text-slate-300 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700/50">
-                            {Number(selectedWorkerData.horas_pendientes || 0).toFixed(1)}
-                         </span>
-                      </div>
+                      {(() => {
+                         const sueldo = Number(overrides[`${selectedWorkerData.cedula}_sueldo`] !== undefined ? overrides[`${selectedWorkerData.cedula}_sueldo`] : (selectedWorkerData.salario || 0));
+                         const calcValor = (horas, porcentaje) => Math.round((sueldo / 240) * (porcentaje / 100) * (horas || 0));
+                         
+                         const horasDebe = Number(overrides[`${selectedWorkerData.cedula}_horas_que_debe`] !== undefined ? overrides[`${selectedWorkerData.cedula}_horas_que_debe`] : (selectedWorkerData.horas_debe || 0));
+                         
+                         const getTotHr = (field, defaultVal) => overrides[`${selectedWorkerData.cedula}_tot_hr_${field}`] !== undefined ? Number(overrides[`${selectedWorkerData.cedula}_tot_hr_${field}`]) : defaultVal;
+                         
+                         const tDiurnas = getTotHr('diurnas', Number(selectedWorkerData.horas_diurnas || 0));
+                         const tNocturnas = getTotHr('nocturnas', Number(selectedWorkerData.horas_nocturnas || 0));
+                         const tFesDiu = getTotHr('fes_diu', Number(selectedWorkerData.festivas_diurnas || 0));
+                         const tFesNoc = getTotHr('fes_noc', Number(selectedWorkerData.festivas_nocturnas || 0));
+                         
+                         const baseExtraDiurna = Number(selectedWorkerData.extras_diurnas || 0);
+                         const horasExtraDiurnaReal = getTotHr('ext_diu', Math.max(0, baseExtraDiurna - horasDebe));
+                         
+                         const totalExtraNoc = getTotHr('ext_noc', Number(selectedWorkerData.extras_nocturnas || 0));
+                         const totalExtFesDiu = getTotHr('ext_fes_diu', Number(selectedWorkerData.extras_festivas || 0));
+                         const totalExtFesNoc = getTotHr('ext_fes_noc', Number(selectedWorkerData.extras_festivas_nocturnas || 0));
+                         
+                         const horasPendientes = horasExtraDiurnaReal + totalExtraNoc + totalExtFesDiu + totalExtFesNoc;
+                         
+                         const getVr = (field, defaultVal) => overrides[`${selectedWorkerData.cedula}_vr_${field}`] !== undefined && overrides[`${selectedWorkerData.cedula}_vr_${field}`] !== "" ? overrides[`${selectedWorkerData.cedula}_vr_${field}`] : defaultVal;
+                         
+                         const vNocturnas = getVr('nocturnas', calcValor(tNocturnas, 35));
+                         const vFesDiu = getVr('fes_diu', calcValor(tFesDiu, 75));
+                         const vFesNoc = getVr('fes_noc', calcValor(tFesNoc, 210));
+                         const vExtDiu = getVr('ext_diu', calcValor(horasExtraDiurnaReal, 150));
+                         const vExtNoc = getVr('ext_noc', calcValor(totalExtraNoc, 150));
+                         const vExtFesDiu = getVr('ext_fes_diu', calcValor(totalExtFesDiu, 200));
+                         const vExtFesNoc = getVr('ext_fes_noc', calcValor(totalExtFesNoc, 200));
+                         const vTotalExtras = Number(vNocturnas) + Number(vFesDiu) + Number(vFesNoc) + Number(vExtDiu) + Number(vExtNoc) + Number(vExtFesDiu) + Number(vExtFesNoc);
 
-                      <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
-                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Salario Básico (B37)</span>
-                         <div className="w-28">
-                            <input
-                               type="text"
-                               value={overrides[`${selectedWorkerData.cedula}_sueldo`] !== undefined ? overrides[`${selectedWorkerData.cedula}_sueldo`] : (selectedWorkerData.salario || 0)}
-                               onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_sueldo`, e.target.value)}
-                               className="w-full bg-slate-800 text-emerald-400 border-slate-700 text-sm font-bold rounded-lg px-3 py-1.5 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-right transition-all"
-                            />
-                         </div>
-                      </div>
-                                  <div className="border-t border-slate-800 pt-4 w-full overflow-x-auto">
-                      <table className="w-full border-collapse">
-                         <thead>
-                            <tr className="border-b border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                               <th className="py-3 px-4 text-left whitespace-nowrap">ITEM</th>
-                               <th className="py-3 px-4 text-center whitespace-nowrap">T. Hr.</th>
-                               <th className="py-3 px-4 text-center whitespace-nowrap">%</th>
-                               <th className="py-3 px-4 text-right whitespace-nowrap">Vr. Pagar</th>
-                            </tr>
-                         </thead>
-                         <tbody className="divide-y divide-slate-800/60 text-sm font-bold">
-                            <tr className="hover:bg-slate-800/50 transition-colors">
-                               <td className="py-3 px-4 text-slate-300 whitespace-nowrap">28. Diurnas</td>
-                               <td className="py-3 px-4 text-center text-slate-400">{Number(selectedWorkerData.horas_diurnas || 0).toFixed(1)}</td>
-                               <td className="py-3 px-4 text-center"><span className="bg-slate-800 text-slate-400 text-[9px] px-2 py-0.5 rounded-full border border-slate-700 whitespace-nowrap">x 0.0</span></td>
-                               <td className="py-3 px-4 text-right text-slate-500">$0</td>
-                            </tr>
-                            <tr className="hover:bg-slate-800/50 transition-colors">
-                               <td className="py-3 px-4 text-slate-300 whitespace-nowrap">29. Nocturnas</td>
-                               <td className="py-3 px-4 text-center text-indigo-300">{Number(selectedWorkerData.horas_nocturnas || 0).toFixed(1)}</td>
-                               <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">x 0.35</span></td>
-                               <td className="py-3 px-4 text-right text-indigo-400">${fmtCOP(selectedWorkerData.recargo_nocturno || 0)}</td>
-                            </tr>
-                            <tr className="hover:bg-slate-800/50 transition-colors">
-                               <td className="py-3 px-4 text-slate-300 whitespace-nowrap">30. Festiva Diurna</td>
-                               <td className="py-3 px-4 text-center text-indigo-300">{Number(selectedWorkerData.festivas_diurnas || 0).toFixed(1)}</td>
-                               <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">x 0.75</span></td>
-                               <td className="py-3 px-4 text-right text-indigo-400">${fmtCOP(selectedWorkerData.val_extras_festivas || 0)}</td>
-                            </tr>
-                            <tr className="hover:bg-slate-800/50 transition-colors">
-                               <td className="py-3 px-4 text-slate-300 whitespace-nowrap">31. Fest Noc</td>
-                               <td className="py-3 px-4 text-center text-indigo-300">{Number(selectedWorkerData.festivas_nocturnas || 0).toFixed(1)}</td>
-                               <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">x 2.10</span></td>
-                               <td className="py-3 px-4 text-right text-indigo-400">${fmtCOP(selectedWorkerData.val_extras_festivas_nocturnas || 0)}</td>
-                            </tr>
-                            <tr className="hover:bg-slate-800/50 transition-colors">
-                               <td className="py-3 px-4 text-slate-300 whitespace-nowrap">32. Extra Diurna</td>
-                               <td className="py-3 px-4 text-center text-emerald-300">{Number(selectedWorkerData.extras_diurnas || 0).toFixed(1)}</td>
-                               <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">x 1.25</span></td>
-                               <td className="py-3 px-4 text-right text-emerald-400">${fmtCOP(selectedWorkerData.val_extras_diurnas || 0)}</td>
-                            </tr>
-                            <tr className="hover:bg-slate-800/50 transition-colors">
-                               <td className="py-3 px-4 text-slate-300 whitespace-nowrap">33. Extra Noc</td>
-                               <td className="py-3 px-4 text-center text-emerald-300">{Number(selectedWorkerData.extras_nocturnas || 0).toFixed(1)}</td>
-                               <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">x 1.75</span></td>
-                               <td className="py-3 px-4 text-right text-emerald-400">${fmtCOP(selectedWorkerData.val_extras_nocturnas || 0)}</td>
-                            </tr>
-                            <tr className="hover:bg-slate-800/50 transition-colors">
-                               <td className="py-3 px-4 text-slate-300 whitespace-nowrap">34. Ext Fes Diu</td>
-                               <td className="py-3 px-4 text-center text-emerald-300">{Number(selectedWorkerData.extras_festivas || 0).toFixed(1)}</td>
-                               <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">x 2.00</span></td>
-                               <td className="py-3 px-4 text-right text-emerald-400">${fmtCOP(selectedWorkerData.val_extras_festivas || 0)}</td>
-                            </tr>
-                            <tr className="hover:bg-slate-800/50 transition-colors">
-                               <td className="py-3 px-4 text-slate-300 whitespace-nowrap">35. Ext Fes Noc</td>
-                               <td className="py-3 px-4 text-center text-emerald-300">{Number(selectedWorkerData.extras_festivas_nocturnas || 0).toFixed(1)}</td>
-                               <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">x 2.50</span></td>
-                               <td className="py-3 px-4 text-right text-emerald-400">${fmtCOP(selectedWorkerData.val_extras_festivas_nocturnas || 0)}</td>
-                            </tr>
-                         </tbody>
-                         <tfoot className="border-t border-slate-600">
-                            <tr>
-                               <td className="py-4 px-4 text-xs font-black uppercase tracking-widest text-slate-400 text-right whitespace-nowrap">TOTALES</td>
-                               <td className="py-4 px-4 text-center text-lg font-black text-white whitespace-nowrap">{Number(
-                                  (selectedWorkerData.horas_diurnas || 0) +
-                                  (selectedWorkerData.horas_nocturnas || 0) +
-                                  (selectedWorkerData.festivas_diurnas || 0) +
-                                  (selectedWorkerData.festivas_nocturnas || 0) +
-                                  (selectedWorkerData.extras_diurnas || 0) +
-                                  (selectedWorkerData.extras_nocturnas || 0) +
-                                  (selectedWorkerData.extras_festivas || 0) +
-                                  (selectedWorkerData.extras_festivas_nocturnas || 0)
-                               ).toFixed(1)}</td>
-                               <td className="py-4 px-4"></td>
-                               <td className="py-4 px-4 text-right text-2xl font-black text-emerald-400 tracking-tight whitespace-nowrap">${fmtCOP(selectedWorkerData.liquidation.total_extra_val || 0)}</td>
-                            </tr>
-                         </tfoot>
-                      </table>
-                   </div>
+                         return (
+                            <>
+                               <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">26. Horas que debe</span>
+                                  <div className="w-24">
+                                     <input
+                                        type="number" step="0.1"
+                                        value={overrides[`${selectedWorkerData.cedula}_horas_que_debe`] !== undefined ? overrides[`${selectedWorkerData.cedula}_horas_que_debe`] : (selectedWorkerData.horas_debe !== undefined ? selectedWorkerData.horas_debe : "")}
+                                        onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_horas_que_debe`, e.target.value)}
+                                        className="w-full bg-slate-800 text-white border-slate-700 text-sm font-bold rounded-lg px-3 py-1.5 outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 text-right transition-all"
+                                     />
+                                  </div>
+                               </div>
+                               
+                               <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Horas Pendientes</span>
+                                  <span className="text-sm font-bold text-slate-300 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700/50">
+                                     {horasPendientes.toFixed(1)}
+                                  </span>
+                               </div>
+
+                               <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Salario Básico (B37)</span>
+                                  <div className="w-28">
+                                     <input
+                                        type="number"
+                                        value={overrides[`${selectedWorkerData.cedula}_sueldo`] !== undefined ? overrides[`${selectedWorkerData.cedula}_sueldo`] : (selectedWorkerData.salario || "")}
+                                        onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_sueldo`, e.target.value)}
+                                        className="w-full bg-slate-800 text-emerald-400 border-slate-700 text-sm font-bold rounded-lg px-3 py-1.5 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-right transition-all"
+                                     />
+                                  </div>
+                               </div>
+
+                               <div className="border-t border-slate-800 pt-4 w-full overflow-x-auto">
+                                  <table className="w-full border-collapse">
+                                     <thead>
+                                        <tr className="border-b border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                           <th className="py-3 px-4 text-left whitespace-nowrap">ITEM</th>
+                                           <th className="py-3 px-4 text-center whitespace-nowrap">T. Hr.</th>
+                                           <th className="py-3 px-4 text-center whitespace-nowrap">%</th>
+                                           <th className="py-3 px-4 text-right whitespace-nowrap">Vr. Pagar</th>
+                                        </tr>
+                                     </thead>
+                                     <tbody className="divide-y divide-slate-800/60 text-sm font-bold">
+                                        <tr className="hover:bg-slate-800/50 transition-colors">
+                                           <td className="py-3 px-4 text-slate-300 whitespace-nowrap">28. Diurnas</td>
+                                           <td className="py-2 px-2 text-center text-slate-400">
+                                              <input type="number" step="0.1" value={overrides[`${selectedWorkerData.cedula}_tot_hr_diurnas`] !== undefined ? overrides[`${selectedWorkerData.cedula}_tot_hr_diurnas`] : Number(tDiurnas).toFixed(1)} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_diurnas`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded" />
+                                           </td>
+                                           <td className="py-3 px-4 text-center"><span className="bg-slate-800 text-slate-400 text-[9px] px-2 py-0.5 rounded-full border border-slate-700 whitespace-nowrap">0%</span></td>
+                                           <td className="py-3 px-4 text-right text-slate-500">$0</td>
+                                        </tr>
+                                        <tr className="hover:bg-slate-800/50 transition-colors">
+                                           <td className="py-3 px-4 text-slate-300 whitespace-nowrap">29. Nocturnas</td>
+                                           <td className="py-2 px-2 text-center text-indigo-300">
+                                              <input type="number" step="0.1" value={overrides[`${selectedWorkerData.cedula}_tot_hr_nocturnas`] !== undefined ? overrides[`${selectedWorkerData.cedula}_tot_hr_nocturnas`] : Number(tNocturnas).toFixed(1)} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_nocturnas`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
+                                           </td>
+                                           <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">35%</span></td>
+                                           <td className="py-2 px-2 text-right">
+                                              <div className="flex justify-end items-center gap-1">
+                                                 <span className="text-indigo-400">$</span>
+                                                 <input type="number" value={vNocturnas} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_vr_nocturnas`, e.target.value)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" />
+                                              </div>
+                                           </td>
+                                        </tr>
+                                        <tr className="hover:bg-slate-800/50 transition-colors">
+                                           <td className="py-3 px-4 text-slate-300 whitespace-nowrap">30. Festiva Diurna</td>
+                                           <td className="py-2 px-2 text-center text-indigo-300">
+                                              <input type="number" step="0.1" value={overrides[`${selectedWorkerData.cedula}_tot_hr_fes_diu`] !== undefined ? overrides[`${selectedWorkerData.cedula}_tot_hr_fes_diu`] : Number(tFesDiu).toFixed(1)} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_fes_diu`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
+                                           </td>
+                                           <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">75%</span></td>
+                                           <td className="py-2 px-2 text-right">
+                                              <div className="flex justify-end items-center gap-1">
+                                                 <span className="text-indigo-400">$</span>
+                                                 <input type="number" value={vFesDiu} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_vr_fes_diu`, e.target.value)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" />
+                                              </div>
+                                           </td>
+                                        </tr>
+                                        <tr className="hover:bg-slate-800/50 transition-colors">
+                                           <td className="py-3 px-4 text-slate-300 whitespace-nowrap">31. Fest Noc</td>
+                                           <td className="py-2 px-2 text-center text-indigo-300">
+                                              <input type="number" step="0.1" value={overrides[`${selectedWorkerData.cedula}_tot_hr_fes_noc`] !== undefined ? overrides[`${selectedWorkerData.cedula}_tot_hr_fes_noc`] : Number(tFesNoc).toFixed(1)} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_fes_noc`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
+                                           </td>
+                                           <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">210%</span></td>
+                                           <td className="py-2 px-2 text-right">
+                                              <div className="flex justify-end items-center gap-1">
+                                                 <span className="text-indigo-400">$</span>
+                                                 <input type="number" value={vFesNoc} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_vr_fes_noc`, e.target.value)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" />
+                                              </div>
+                                           </td>
+                                        </tr>
+                                        <tr className="hover:bg-slate-800/50 transition-colors">
+                                           <td className="py-3 px-4 text-slate-300 whitespace-nowrap">32. Extra Diurna</td>
+                                           <td className="py-2 px-2 text-center text-emerald-300">
+                                              <input type="number" step="0.1" value={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_diu`] !== undefined ? overrides[`${selectedWorkerData.cedula}_tot_hr_ext_diu`] : Number(horasExtraDiurnaReal).toFixed(1)} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_diu`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
+                                           </td>
+                                           <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">150%</span></td>
+                                           <td className="py-2 px-2 text-right">
+                                              <div className="flex justify-end items-center gap-1">
+                                                 <span className="text-emerald-400">$</span>
+                                                 <input type="number" value={vExtDiu} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_diu`, e.target.value)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" />
+                                              </div>
+                                           </td>
+                                        </tr>
+                                        <tr className="hover:bg-slate-800/50 transition-colors">
+                                           <td className="py-3 px-4 text-slate-300 whitespace-nowrap">33. Extra Noc</td>
+                                           <td className="py-2 px-2 text-center text-emerald-300">
+                                              <input type="number" step="0.1" value={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_noc`] !== undefined ? overrides[`${selectedWorkerData.cedula}_tot_hr_ext_noc`] : Number(totalExtraNoc).toFixed(1)} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_noc`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
+                                           </td>
+                                           <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">150%</span></td>
+                                           <td className="py-2 px-2 text-right">
+                                              <div className="flex justify-end items-center gap-1">
+                                                 <span className="text-emerald-400">$</span>
+                                                 <input type="number" value={vExtNoc} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_noc`, e.target.value)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" />
+                                              </div>
+                                           </td>
+                                        </tr>
+                                        <tr className="hover:bg-slate-800/50 transition-colors">
+                                           <td className="py-3 px-4 text-slate-300 whitespace-nowrap">34. Ext Fes Diu</td>
+                                           <td className="py-2 px-2 text-center text-emerald-300">
+                                              <input type="number" step="0.1" value={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`] !== undefined ? overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`] : Number(totalExtFesDiu).toFixed(1)} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
+                                           </td>
+                                           <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">200%</span></td>
+                                           <td className="py-2 px-2 text-right">
+                                              <div className="flex justify-end items-center gap-1">
+                                                 <span className="text-emerald-400">$</span>
+                                                 <input type="number" value={vExtFesDiu} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_fes_diu`, e.target.value)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" />
+                                              </div>
+                                           </td>
+                                        </tr>
+                                        <tr className="hover:bg-slate-800/50 transition-colors">
+                                           <td className="py-3 px-4 text-slate-300 whitespace-nowrap">35. Ext Fes Noc</td>
+                                           <td className="py-2 px-2 text-center text-emerald-300">
+                                              <input type="number" step="0.1" value={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`] !== undefined ? overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`] : Number(totalExtFesNoc).toFixed(1)} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
+                                           </td>
+                                           <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">200%</span></td>
+                                           <td className="py-2 px-2 text-right">
+                                              <div className="flex justify-end items-center gap-1">
+                                                 <span className="text-emerald-400">$</span>
+                                                 <input type="number" value={vExtFesNoc} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_fes_noc`, e.target.value)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" />
+                                              </div>
+                                           </td>
+                                        </tr>
+                                     </tbody>
+                                     <tfoot className="border-t border-slate-600">
+                                        <tr>
+                                           <td className="py-4 px-4 text-xs font-black uppercase tracking-widest text-slate-400 text-right whitespace-nowrap">TOTALES</td>
+                                           <td className="py-4 px-4 text-center text-lg font-black text-white whitespace-nowrap">{Number(
+                                              (selectedWorkerData.horas_diurnas || 0) +
+                                              (selectedWorkerData.horas_nocturnas || 0) +
+                                              (selectedWorkerData.festivas_diurnas || 0) +
+                                              (selectedWorkerData.festivas_nocturnas || 0) +
+                                              horasExtraDiurnaReal +
+                                              totalExtraNoc +
+                                              totalExtFesDiu +
+                                              totalExtFesNoc
+                                           ).toFixed(1)}</td>
+                                           <td className="py-4 px-4"></td>
+                                           <td className="py-4 px-4 text-right text-2xl font-black text-emerald-400 tracking-tight whitespace-nowrap">${fmtCOP(vTotalExtras)}</td>
+                                        </tr>
+                                     </tfoot>
+                                  </table>
+                               </div>
+                            </>
+                         );
+                      })()}
                 </div>
              </div>
 
