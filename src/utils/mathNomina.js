@@ -75,12 +75,38 @@ export const fmtDec = (n, min = 1, max = 2) => {
 
 export const parseLocalNumber = (val) => {
   if (val === null || val === undefined || val === "") return 0;
-  if (typeof val === "number") return Number(val.toFixed(2));
+  if (typeof val === "number") return Number(val.toFixed(1));
   let s = String(val).replace(/\$|\s/g, '').trim();
   s = s.replace(/\./g, '');
   s = s.replace(/,/g, '.');
   const n = parseFloat(s);
-  return isNaN(n) ? 0 : Number(n.toFixed(2));
+  return isNaN(n) ? 0 : Number(n.toFixed(1));
+};
+
+export const getTimeDifferenceHHMM = (start, end, allowMidnight = true) => {
+  if (!start || !end || start === "-" || end === "-") return "00:00";
+  if (typeof start !== 'string' || typeof end !== 'string' || !start.includes(":") || !end.includes(":")) return "00:00";
+  
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  
+  if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return "00:00";
+  
+  const startTotal = (sh * 60) + sm;
+  const endTotal = (eh * 60) + em;
+  
+  let diff = endTotal - startTotal;
+  if (diff < 0) {
+    if (allowMidnight) {
+      diff += 1440;
+    } else {
+      return "00:00";
+    }
+  }
+  
+  let outH = Math.floor(diff / 60);
+  let outM = diff % 60;
+  return `${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}`;
 };
 
 export const getTimeDifference = (start, end, allowMidnight = true) => {
@@ -106,6 +132,41 @@ export const getTimeDifference = (start, end, allowMidnight = true) => {
   return Number((diff / 60).toFixed(4));
 };
 
+
+export const getOfficialShiftTime = (timeStr, type) => {
+  if (!timeStr || timeStr === "-") return "-";
+  const parts = timeStr.split(":");
+  if (parts.length !== 2) return timeStr;
+  
+  let hours = parseInt(parts[0], 10);
+  let minutes = parseInt(parts[1], 10);
+  let totalMinutes = hours * 60 + minutes;
+
+  const validShifts = [360, 840, 1080, 1320];
+  let closestShift = validShifts[0];
+  let minDiff = Math.abs(totalMinutes - closestShift);
+  
+  for (let i = 1; i < validShifts.length; i++) {
+    const diff = Math.abs(totalMinutes - validShifts[i]);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closestShift = validShifts[i];
+    }
+  }
+  
+  totalMinutes = closestShift;
+
+  let newHours = Math.floor(totalMinutes / 60);
+  let newMinutes = totalMinutes % 60;
+  
+  // Manejo de cruce de medianoche por redondeo
+  if (newHours >= 24) newHours -= 24;
+
+  const hh = String(newHours).padStart(2, "0");
+  const mm = String(newMinutes).padStart(2, "0");
+  return `${hh}:${mm}`;
+};
+
 export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, horaFinDiurna) => {
   const isTime = (t) => t && String(t).trim() !== "" && String(t).trim() !== "-" && String(t).trim() !== "00:00";
 
@@ -115,21 +176,23 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   const hrEntDesc2 = overrides[`${prefix}_hr_ent_desc2`] !== undefined ? String(overrides[`${prefix}_hr_ent_desc2`]) : (day.hr_ent_desc2 || "-");
   const hrSalDesc2 = overrides[`${prefix}_hr_sal_desc2`] !== undefined ? String(overrides[`${prefix}_hr_sal_desc2`]) : (day.hr_sal_desc2 || "-");
 
-  const desc1 = getTimeDifference(hrSalDesc1, hrEntDesc1, false);
-  const desc2 = getTimeDifference(hrSalDesc2, hrEntDesc2, false);
+  const desc1 = getTimeDifferenceHHMM(hrEntDesc1, hrSalDesc1, false);
+  const desc2 = getTimeDifferenceHHMM(hrEntDesc2, hrSalDesc2, false);
+  
+  const desc1Val = timeStrToDecimal(desc1);
+  const desc2Val = timeStrToDecimal(desc2);
 
   // Pago Ent (J) y Pago Sal (K)
-  // J debe ser B (hr_ent), K debe ser C (hr_sal) estrictamente
-  const baseHrEnt = day.hr_ent || "-";
-  const baseHrSal = day.hr_sal || "-";
+  const baseHrEnt = getOfficialShiftTime(day.hr_ent, "ent");
+  const baseHrSal = getOfficialShiftTime(day.hr_sal, "sal");
 
   const hrEntPago = overrides[`${prefix}_hr_ent_pago`] !== undefined ? String(overrides[`${prefix}_hr_ent_pago`]) : baseHrEnt;
   const hrSalPago = overrides[`${prefix}_hr_sal_pago`] !== undefined ? String(overrides[`${prefix}_hr_sal_pago`]) : baseHrSal;
   
-  // Col L: Hr. Lab = Diferencia entre J y K, menos los descansos
+  // Col L: Hr. Lab = Diferencia entre J y K
   let hrLab = 0;
   if (isTime(hrEntPago) && isTime(hrSalPago)) {
-     hrLab = getTimeDifference(hrEntPago, hrSalPago) - desc1 - desc2;
+     hrLab = getTimeDifference(hrEntPago, hrSalPago); // Ya maneja cruce de medianoche por defecto
      if (hrLab < 0) hrLab = 0;
   }
   

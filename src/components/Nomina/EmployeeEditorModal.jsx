@@ -3,11 +3,13 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, CheckCircle2 } from 'lucide-react';
 import { parseLocalNumber } from '@/utils/mathNomina';
+import { upsertEmployeeRecord } from '@/utils/supabase';
 import EditableCell from './EditableCell';
 
-export default function EmployeeEditorModal({ isOpen, onClose, employee, onSave }) {
+export default function EmployeeEditorModal({ isOpen, onClose, employee, onSaveSuccess }) {
   const [formData, setFormData] = useState({
     cedula: '',
+    biometric_id: '',
     nombre: '',
     cargo: '',
     categoria: 'OTROS',
@@ -25,6 +27,7 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, onSave 
     if (employee) {
       setFormData({
         cedula: employee.cedula || '',
+        biometric_id: employee.biometric_id || '',
         nombre: employee.nombre || '',
         cargo: employee.cargo || '',
         categoria: employee.categoria || 'OTROS',
@@ -39,6 +42,7 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, onSave 
     } else {
       setFormData({
         cedula: '',
+    biometric_id: '',
         nombre: '',
         cargo: '',
         categoria: 'OTROS',
@@ -57,23 +61,52 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, onSave 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
-    const empData = {
-      cedula: formData.cedula,
-      nombre: formData.nombre.toUpperCase(),
-      cargo: formData.cargo.toUpperCase(),
-      categoria: formData.categoria.toUpperCase(),
-      salario_base: parseLocalNumber(formData.salario_base),
-      aux_transporte: parseLocalNumber(formData.aux_transporte),
-      rodamiento: parseLocalNumber(formData.rodamiento),
-      poliza_bolivar: parseLocalNumber(formData.poliza_bolivar),
-      poliza_sura: parseLocalNumber(formData.poliza_sura),
-      optica: parseLocalNumber(formData.optica),
-      prestamos: parseLocalNumber(formData.prestamos),
-      is_active: true
-    };
-    await onSave(empData);
-    setIsLoading(false);
+    if (!formData.cedula || !formData.nombre) {
+      alert("Faltan campos obligatorios");
+      return;
+    }
+    
+    try {
+      console.log("🚀 INTENTANDO GUARDAR PAYLOAD:", formData);
+      setIsLoading(true);
+      
+      const empData = {
+        cedula: formData.cedula,
+        biometric_id: formData.biometric_id,
+        nombre: formData.nombre.toUpperCase(),
+        cargo: formData.cargo.toUpperCase(),
+        categoria: formData.categoria.toUpperCase(),
+        salario_base: parseLocalNumber(formData.salario_base),
+        aux_transporte: parseLocalNumber(formData.aux_transporte),
+        rodamiento: parseLocalNumber(formData.rodamiento),
+        poliza_bolivar: parseLocalNumber(formData.poliza_bolivar),
+        poliza_sura: parseLocalNumber(formData.poliza_sura),
+        optica: parseLocalNumber(formData.optica),
+        prestamos: parseLocalNumber(formData.prestamos),
+        is_active: true
+      };
+      
+      console.log("Enviando a Supabase...", empData);
+      const result = await upsertEmployeeRecord(empData);
+      
+      if (!result.success) {
+        throw new Error(result.error?.message || "Error desconocido de Supabase");
+      }
+      
+      alert("✅ GUARDADO CORRECTO");
+      if (onSaveSuccess) {
+        await onSaveSuccess(); // Fuerza a la tabla a recargar los datos frescos
+      }
+      if (onClose) {
+        onClose(); // Cierra el modal
+      }
+      
+    } catch (error) {
+      console.error("Error capturado:", error);
+      alert("❌ ERROR SUPABASE: " + (error.message || JSON.stringify(error)));
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleNumChange = (field, val) => {
@@ -111,6 +144,17 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, onSave 
                 readOnly={!!employee}
                 className="w-full text-right text-sm font-medium text-slate-900 focus:ring-0 outline-none"
                 placeholder="Ej: 10203040"
+              />
+            </div>
+            
+            <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col shadow-sm">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">ID Biométrico (ZKTeco)</span>
+              <input
+                type="text"
+                value={formData.biometric_id}
+                onChange={(e) => setFormData({...formData, biometric_id: e.target.value})}
+                className="w-full text-right text-sm font-medium text-slate-900 focus:ring-0 outline-none"
+                placeholder="Ej: 123"
               />
             </div>
             

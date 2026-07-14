@@ -12,7 +12,7 @@ import TabLiquidacion from "@/components/Nomina/TabLiquidacion";
 import { NOMINA_DATE_RANGE_KEY, loadPersistedDateRange, savePersistedDateRange, PLANILLA_COLUMNS, DAILY_COLUMNS, LIQUIDATION_CONCEPTS, SMLV, AUX_TRANSPORTE, DIVISOR_RECARGOS_NOCTURNOS, DIVISOR_HORAS_EXTRAS, FACTOR_RECARGO_NOCTURNO, FACTOR_EXTRA_DIURNA, FACTOR_EXTRA_NOCTURNA, FACTOR_EXTRA_FESTIVA, FACTOR_EXTRA_FESTIVA_NOCTURNA, HORA_INICIO_DIURNA, HORA_FIN_DIURNA } from "@/utils/constants";
 import { timeStrToDecimal, decimalToTimeStr, diffTimeStr, getDecimalHours, getHourDist, fmtCOP, fmtDec, parseLocalNumber, calculateDailyRecord } from "@/utils/mathNomina";
 import { supabase, savePayrollToCloud, loadPayrollFromCloud, loadEmployeesFromCloud, uploadEmployeesBulk } from "@/utils/supabase";
-import { detectShiftTemplate, emptyAttendanceDay, cleanWorkerPunches, parseBiometricExcel, findEmployeeMatch } from "@/utils/biometricCore";
+import { detectShiftTemplate, emptyAttendanceDay, cleanWorkerPunches, parseBiometricCSV, findEmployeeMatch } from "@/utils/biometricCore";
 
 // Helper to look up overridden state values
 const resolveValue = (overrides, key, formulaFn) => {
@@ -63,6 +63,34 @@ export default function NominaPage() {
   const [startDate, setStartDate] = useState("2026-05-01");
   const [endDate, setEndDate] = useState("2026-05-15");
 
+  const [isClient, setIsClient] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+    try {
+      const saved = localStorage.getItem("optinomina_draft");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.attendanceLogs) setAttendanceLogs(parsed.attendanceLogs);
+        if (parsed.overrides) setOverrides(parsed.overrides);
+      }
+    } catch (e) {
+      console.error("Error parsing optinomina_draft", e);
+    }
+    setIsReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (isReady) {
+      const hasLogs = Object.keys(attendanceLogs).length > 0;
+      const hasOverrides = Object.keys(overrides).length > 0;
+      if (hasLogs || hasOverrides) {
+        localStorage.setItem("optinomina_draft", JSON.stringify({ attendanceLogs, overrides }));
+      }
+    }
+  }, [attendanceLogs, overrides, isReady]);
+
   const loadEmployees = async () => {
       try {
         let masterEmployees = [];
@@ -71,6 +99,7 @@ export default function NominaPage() {
           masterEmployees = empRes.data.map((emp, index) => ({
             consecutivo: index + 1,
             cedula: emp.cedula,
+            biometric_id: emp.biometric_id || "",
             nombre: emp.nombre,
             cargo: emp.cargo,
             categoria: emp.categoria,
@@ -164,10 +193,13 @@ export default function NominaPage() {
     return nominaRows.map(emp => {
       const cedula = emp.cedula;
       const logs = attendanceLogs[cedula] || [];
+      const allDates = getDatesInRange(startDate, endDate);
       
-      const processedLogs = logs.map(day => {
-         const prefix = `${cedula}_${day.dia}`;
-         return calculateDailyRecord(day, overrides, prefix, HORA_INICIO_DIURNA, HORA_FIN_DIURNA);
+      const processedLogs = allDates.map(date => {
+         const existingLog = logs.find(l => l.dia === date);
+         const dayLog = existingLog || { dia: date, hr_ent: "-", hr_sal: "-", hr_ent_desc1: "-", hr_sal_desc1: "-", hr_ent_desc2: "-", hr_sal_desc2: "-" };
+         const prefix = `${cedula}_${date}`;
+         return calculateDailyRecord(dayLog, overrides, prefix, HORA_INICIO_DIURNA, HORA_FIN_DIURNA);
       });
       
       // 1. Sumatorias del Biométrico (Equivalente a Fila 24 de hojas individuales)
@@ -260,9 +292,12 @@ export default function NominaPage() {
         horas_pendientes: horasPendientes,
         horas_diurnas: sumDiurnas,
         horas_nocturnas: sumNocturnas,
+        festivas_diurnas: sumFesDiu,
+        festivas_nocturnas: sumFesNoc,
         extras_diurnas: sumExtDiu,
         extras_nocturnas: sumExtNoc,
         extras_festivas: sumExtFesDiu,
+        extras_festivas_nocturnas: sumExtFesNoc,
         sueldo: sueldoBasico,
         recargo_nocturno: valRecargoNocturno,
         val_extras_diurnas: valExtDiurna,
@@ -424,6 +459,7 @@ export default function NominaPage() {
       setNominaRows(freshRows);
       setAttendanceLogs({});
       setOverrides({});
+      localStorage.removeItem('optinomina_draft');
       
       try {
         await supabase
@@ -480,7 +516,7 @@ const handleSaveToCloud = async () => {
     });
 
     try {
-      const cleanData = await parseBiometricExcel(file);
+      const cleanData = await parseBiometricCSV(file, startDate, endDate, nominaRows);
       
       setUploadStatus((prev) => ({
         ...prev,
@@ -503,35 +539,15 @@ const handleSaveToCloud = async () => {
       const newOrphans = [];
 
       cleanData.forEach(row => {
-         const match = findEmployeeMatch(row.nombre, nominaRows);
-         let key;
-         if (match) {
-            key = match.cedula;
-            if (!match.isExact && !stats.matchedNames.includes(key)) {
-                console.log(`Cruce parcial encontrado: ${row.nombre} -> ${match.dirName}`);
-            }
-         } else {
-            key = `TEMP-${row.nombre}`;
-            if (!nominaRows.find(r => r.cedula === key) && !newOrphans.find(r => r.cedula === key)) {
-               newOrphans.push({
-                  cedula: key,
-                  nombre: `[HUÉRFANO] ${row.nombre}`,
-                  cargo: "Sin Asignar",
-                  salario_base: 0,
-                  is_temporal: true
-               });
-            }
-         }
+         const key = row.cedula;
+         // Si es un empleado no emparejado (null), simplemente lo ignoramos (solo se emparejan los oficiales).
+         if (!key) return;
          
          if (!punchesByEmployee[key]) {
             punchesByEmployee[key] = [];
          }
          punchesByEmployee[key].push(row);
       });
-
-      if (newOrphans.length > 0) {
-          setNominaRows(prev => [...prev, ...newOrphans]);
-      }
 
       for (const [groupKey, punches] of Object.entries(punchesByEmployee)) {
          if (groupKey === "No Encontrados") {
@@ -607,6 +623,9 @@ const handleSaveToCloud = async () => {
     });
 
     setAttendanceLogs(nuevosLogs);
+    if (scope === "all") {
+      localStorage.removeItem('optinomina_draft');
+    }
     setToast({
       message: scope === "all" ? "Marcaciones borradas para todos en el rango." : `Marcaciones borradas para ${selectedWorkerName}.`,
       type: "success",
@@ -723,7 +742,7 @@ const handleSaveToCloud = async () => {
             <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-blue-500 to-indigo-500"></div>
             <h2 className="text-2xl font-black text-slate-800 tracking-tight">El área de trabajo está vacía</h2>
             <p className="text-slate-500 mt-4 text-sm font-medium leading-relaxed">
-              Para comenzar, sube el archivo Excel <span className="font-bold text-slate-700">"MATRIZ Y LIQUIDADOR"</span> y luego importa el archivo CSV de marcas biométricas.
+              Para comenzar, selecciona el rango de fechas en la barra superior y luego importa el archivo CSV de marcas biométricas crudo.
             </p>
           </div>
         </div>

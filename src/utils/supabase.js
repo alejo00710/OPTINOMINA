@@ -40,7 +40,7 @@ export const loadEmployeesFromCloud = async () => {
   try {
     const { data, error } = await supabase
       .from('optimoldes_employees')
-      .select('cedula, nombre, cargo, categoria, salario_base, aux_transporte, rodamiento, poliza_bolivar, poliza_sura, optica, prestamos')
+      .select('cedula, biometric_id, nombre, cargo, categoria, salario_base, aux_transporte, rodamiento, poliza_bolivar, poliza_sura, optica, prestamos')
       .eq('is_active', true)
       .order('nombre', { ascending: true });
 
@@ -91,7 +91,11 @@ export const uploadEmployeesBulk = async (employees) => {
 export const upsertEmployeeRecord = async (empData) => {
   try {
     const { error } = await supabase.from('optimoldes_employees').upsert([empData], { onConflict: 'cedula' });
-    if (error) throw error;
+    if (error) {
+      alert("❌ ERROR SUPABASE: " + error.message);
+      throw error;
+    }
+    alert("✅ GUARDADO CORRECTO");
     return { success: true };
   } catch (error) {
     console.error("Error upserting employee:", error);

@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import Papa from "papaparse";
 import { timeStrToDecimal, decimalToTimeStr } from "./mathNomina";
 import { getTemplatesForCategory } from "./constants";
 
@@ -117,226 +117,254 @@ export const parseMarcacionTime = (val) => {
   return null;
 };
 
-export async function parseBiometricExcel(file) {
+
+const normalizeString = (str) => {
+  if (!str) return "";
+  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+};
+
+const fuzzyMatch = (csvName, nominaRows) => {
+  if (!csvName || !nominaRows || nominaRows.length === 0) return null;
+  const cleanCsv = normalizeString(csvName);
+  
+  // Coincidencia exacta
+  let match = nominaRows.find(n => normalizeString(n.nombre) === cleanCsv);
+  if (match) return match;
+  
+  // Coincidencia parcial (inclusión)
+  match = nominaRows.find(n => {
+    const cleanDb = normalizeString(n.nombre);
+    return cleanCsv.includes(cleanDb) || cleanDb.includes(cleanCsv);
+  });
+  
+  return match || null;
+};
+
+export async function parseBiometricCSV(file, startDate, endDate, nominaRows = []) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        try {
+          const startMs = new Date(`${startDate}T00:00:00`).getTime();
+          const endMs = new Date(`${endDate}T23:59:59`).getTime();
 
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
+          const allEmployeesMap = new Map();
+          const cleanData = [];
+          
+          results.data.forEach(row => {
+            const getVal = (keys) => {
+              const k = Object.keys(row).find(key => keys.some(search => key.toLowerCase().includes(search.toLowerCase())));
+              return k ? row[k] : null;
+            };
 
-        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true, cellDates: true });
+            let cedula = getVal(["Employee ID", "cedula", "id", "empleado"]);
+            let nombre = getVal(["Nombres", "nombre", "name"]);
+            let fecha = getVal(["Fecha", "date"]);
+            let hora = getVal(["Hora", "time"]);
 
-        const cleanData = [];
-        let currentEmployeeName = "";
-        let currentCedula = "";
+            if (!cedula || !nombre || !fecha || !hora) return;
 
-        rows.forEach(row => {
-          if (!row || !row.length) return;
-          const col0 = String(row[0] || '').trim();
+            cedula = String(cedula).trim();
+            nombre = String(nombre).trim().toUpperCase();
+            fecha = String(fecha).trim();
+            hora = String(hora).trim();
 
-          // Detección del Empleado
-          if (col0.startsWith("Employee ID:") || col0.includes("Nombres:")) {
-            const idMatch = col0.match(/Employee ID:\s*([^,]+)/i);
-            if (idMatch) currentCedula = idMatch[1].trim();
-
-            const nameMatch = col0.match(/Nombres:\s*([^,]+)/i);
-            if (nameMatch) currentEmployeeName = nameMatch[1].trim().toUpperCase();
-            return;
-          }
-
-          // Detección de Fila de Datos
-          const estado = String(row[0] || '').trim().toLowerCase();
-          if (estado === "habilitado") {
-            let parsedFecha = null;
-            let parsedHora = null;
-
-            for (let i = 1; i < row.length; i++) {
-              const val = row[i];
-              if (val === undefined || val === null || val === "") continue;
-
-              if (val instanceof Date && !isNaN(val.getTime())) {
-                const y = val.getFullYear();
-                if (y > 1900 && !parsedFecha) {
-                  parsedFecha = parseMarcacionDate(val);
-                } else if (!parsedHora) {
-                  parsedHora = parseMarcacionTime(val);
-                }
-              } else if (typeof val === "number") {
-                if (val > 1000 && !parsedFecha) {
-                  parsedFecha = parseMarcacionDate(val);
-                } else if (val < 1 && val >= 0 && !parsedHora) {
-                  parsedHora = parseMarcacionTime(val);
-                }
-              } else {
-                const s = String(val).trim();
-                const isDateStr = /^(\d{1,4})[\/\-](\d{1,2})[\/\-](\d{1,4})/.test(s);
-                const isTimeStr = /^(\d{1,2}):(\d{2})/.test(s);
-                if (isDateStr && !parsedFecha) {
-                  parsedFecha = parseMarcacionDate(val);
-                } else if (isTimeStr && !parsedHora) {
-                  parsedHora = parseMarcacionTime(val);
-                }
-              }
+            // TAREA 3: Match por biometric_id / cedula + Fallback a Fuzzy Matching
+            let match = null;
+            const rawId = row["Employee ID"] || row["cedula"] || row["id"] || row["empleado"] || cedula;
+            if (rawId) {
+               const cleanId = String(rawId).trim();
+               match = nominaRows.find(n => String(n.biometric_id || "").trim() === cleanId || String(n.cedula).trim() === cleanId);
+            }
+            if (!match) {
+               match = fuzzyMatch(nombre, nominaRows);
             }
 
-            if (parsedFecha && parsedHora) {
-              const [y, m, d] = parsedFecha.split("-").map(Number);
-              const [hh, mm] = parsedHora.split(":").map(Number);
-              const exactTimestamp = new Date(y, m - 1, d, hh, mm).getTime();
+            if (match) {
+               cedula = match.cedula;
+               nombre = match.nombre;
+               allEmployeesMap.set(cedula, nombre);
+            } else {
+               // Si no coincide con un trabajador real, se omite por completo
+               return;
+            }
 
+            const isoFechaMatch = fecha.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+            const dmyFechaMatch = fecha.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+            
+            let parsedFecha = null;
+            if (isoFechaMatch) {
+              parsedFecha = `${isoFechaMatch[1]}-${String(isoFechaMatch[2]).padStart(2, '0')}-${String(isoFechaMatch[3]).padStart(2, '0')}`;
+            } else if (dmyFechaMatch) {
+               let p1 = parseInt(dmyFechaMatch[1], 10);
+               let p2 = parseInt(dmyFechaMatch[2], 10);
+               let d = p1, m = p2;
+               if (p1 > 12) { d = p1; m = p2; }
+               else if (p2 > 12) { m = p1; d = p2; }
+               parsedFecha = `${dmyFechaMatch[3]}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            }
+
+            if (!parsedFecha) return;
+
+            const hmMatch = hora.match(/^(\d{1,2}):(\d{2})/);
+            if (!hmMatch) return;
+            const parsedHora = `${String(parseInt(hmMatch[1], 10)).padStart(2, '0')}:${hmMatch[2]}`;
+
+            const [y, m, d] = parsedFecha.split("-").map(Number);
+            const [hh, mm] = parsedHora.split(":").map(Number);
+            const timestamp = new Date(y, m - 1, d, hh, mm).getTime();
+
+            if (timestamp >= startMs && timestamp <= endMs) {
               cleanData.push({
-                cedula: currentCedula,
-                nombre: currentEmployeeName,
+                cedula,
+                nombre,
                 fecha: parsedFecha,
                 hora: parsedHora,
-                timestamp: exactTimestamp
+                timestamp
               });
             }
+          });
+
+          // TAREA 1 & 2: Inicialización Universal
+          const foundEmployeeIds = new Set(cleanData.map(e => e.cedula));
+          for (const [c, n] of allEmployeesMap.entries()) {
+             if (!foundEmployeeIds.has(c)) {
+                 cleanData.push({
+                    cedula: c,
+                    nombre: n,
+                    fecha: null,
+                    hora: null,
+                    timestamp: null
+                 });
+             }
           }
-        });
 
-        // TAREA 1: Ordenar los datos cronológicamente ASCENDENTE antes de agruparlos
-        cleanData.sort((a, b) => a.timestamp - b.timestamp);
-
-        resolve(cleanData);
-      } catch (error) {
-        reject("Error procesando el archivo Excel: " + error.message);
-      }
-    };
-    reader.readAsArrayBuffer(file);
+          // Etapa 2.1: Ordenar cronológicamente (Fecha + Hora)
+          cleanData.sort((a, b) => {
+             if (a.timestamp === null) return -1;
+             if (b.timestamp === null) return 1;
+             return a.timestamp - b.timestamp;
+          });
+          resolve(cleanData);
+        } catch (err) {
+          reject("Error procesando CSV: " + err.message);
+        }
+      },
+      error: (err) => reject("Error leyendo CSV: " + err.message)
+    });
   });
 }
 
-// --- ALGORITMO DE LIMPIEZA ---
-export const cleanWorkerPunches = (punches, startDate, endDate) => {
+// ETAPAS 2, 3 y 4
+export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
   const getDatesInRange = (start, end) => {
     const dates = [];
-    try {
-      const [sy, sm, sd] = start.split("-").map(Number);
-      const [ey, em, ed] = end.split("-").map(Number);
-      let curr = new Date(sy, sm - 1, sd);
-      const stop = new Date(ey, em - 1, ed);
-      let limit = 0;
-      while (curr <= stop && limit < 90) {
-        const ny = curr.getFullYear();
-        const nm = String(curr.getMonth() + 1).padStart(2, "0");
-        const nd = String(curr.getDate()).padStart(2, "0");
-        dates.push(`${ny}-${nm}-${nd}`);
-        curr.setDate(curr.getDate() + 1);
-        limit++;
-      }
-    } catch (e) { console.error(e); }
+    const [sy, sm, sd] = start.split("-").map(Number);
+    const [ey, em, ed] = end.split("-").map(Number);
+    let curr = new Date(sy, sm - 1, sd);
+    const stop = new Date(ey, em - 1, ed);
+    let limit = 0;
+    while (curr <= stop && limit < 90) {
+      const ny = curr.getFullYear();
+      const nm = String(curr.getMonth() + 1).padStart(2, "0");
+      const nd = String(curr.getDate()).padStart(2, "0");
+      dates.push(`${ny}-${nm}-${nd}`);
+      curr.setDate(curr.getDate() + 1);
+      limit++;
+    }
     return dates;
   };
 
   const dates = getDatesInRange(startDate, endDate);
   const attendanceRows = {};
   dates.forEach(dateStr => {
-    attendanceRows[dateStr] = emptyAttendanceDay(dateStr);
+    attendanceRows[dateStr] = { ...emptyAttendanceDay(dateStr), estado: "" };
   });
 
-  if (!punches || punches.length === 0) return attendanceRows;
+  if (!employeePunches || employeePunches.length === 0) return attendanceRows;
 
-  // 1. Contexto de Fechas
-  const [startYear, startMonth, startDay] = startDate.split("-").map(Number);
-  const [endYear, endMonth, endDay] = endDate.split("-").map(Number);
-  const startMs = new Date(startYear, startMonth - 1, startDay, 0, 0, 0).getTime();
-  const endMs = new Date(endYear, endMonth - 1, endDay, 23, 59, 59).getTime();
-  const contextStartMs = startMs - (24 * 3600000);
+  // ETAPA 2.2: Agrupador Lógico por Huecos (Turnos)
+  const shifts = [];
+  let currentShift = [];
 
-  // 2. Ordenamiento Absoluto
-  const punchesWithTime = [...punches]
-    .filter(p => p.timestamp >= contextStartMs && p.timestamp <= endMs)
-    .sort((a, b) => a.timestamp - b.timestamp);
-
-  // 3. De-duplicación (5 minutos)
-  const filteredPunches = [];
-  for (let i = 0; i < punchesWithTime.length; i++) {
-    const p = punchesWithTime[i];
-    if (filteredPunches.length === 0) {
-      filteredPunches.push(p);
+  for (let i = 0; i < employeePunches.length; i++) {
+    const p = employeePunches[i];
+    if (!p.timestamp) continue;
+    if (currentShift.length === 0) {
+      currentShift.push(p);
     } else {
-      const last = filteredPunches[filteredPunches.length - 1];
-      const diffMin = (p.timestamp - last.timestamp) / 60000;
-      if (diffMin >= 5) filteredPunches.push(p);
+      const last = currentShift[currentShift.length - 1];
+      const diffHours = (p.timestamp - last.timestamp) / 3600000;
+      
+      if (diffHours < (5 / 60)) continue; // Ignorar marcaciones dobles (menos de 5 mins)
+
+      if (diffHours > 8) {
+        shifts.push([...currentShift]);
+        currentShift = [p];
+      } else {
+        currentShift.push(p);
+      }
     }
   }
 
-  // 4. Agrupamiento por Día Lógico (-8 horas)
-  const punchesByDate = {};
-  for (let i = 0; i < filteredPunches.length; i++) {
-    const p = filteredPunches[i];
-    
-    // Restar 8 horas (28,800,000 ms) al timestamp real para obtener el "Día Lógico"
-    const logicalTimestamp = p.timestamp - (8 * 3600000);
-    const dateObj = new Date(logicalTimestamp);
-    
-    const logicalDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
-
-    p.effectiveDate = logicalDate; // Solo como metadato, la UI y la tabla usarán p.hora y p.fecha originales
-    
-    if (!punchesByDate[logicalDate]) punchesByDate[logicalDate] = [];
-    punchesByDate[logicalDate].push(p);
+  if (currentShift.length > 0) {
+    shifts.push(currentShift);
   }
 
-  // 5. ASIGNACIÓN SECUENCIAL PURA POR DÍA LÓGICO
-  Object.keys(punchesByDate).forEach(dateStr => {
-    // La fila de la UI debe existir en attendanceRows (se crea en base a los días del rango)
-    if (!attendanceRows[dateStr]) return;
-
-    // Ordenar por Timestamp absoluto original (menor a mayor)
-    const dayPunches = punchesByDate[dateStr].sort((a, b) => a.timestamp - b.timestamp);
-    if (dayPunches.length === 0) return;
+  // ETAPA 3 & 4: Clasificador Posicional y Mapeo a la UI
+  shifts.forEach(shift => {
+    if (shift.length === 0) return;
+    
+    // El "Día Lógico" del turno corresponde a su fecha de entrada
+    const shiftLogicalDate = shift[0].fecha; 
+    
+    if (!attendanceRows[shiftLogicalDate]) return;
 
     let hr_ent = "", hr_sal_desc1 = "", hr_ent_desc1 = "", hr_sal_desc2 = "", hr_ent_desc2 = "", hr_sal = "";
-    const n = dayPunches.length;
+    let estado = "";
 
-    if (n === 1) {
-      hr_ent = dayPunches[0].hora;
-    }
-    else if (n === 2) {
-      hr_ent = dayPunches[0].hora;
-      hr_sal = dayPunches[1].hora; // C
-    }
-    else if (n === 3) {
-      hr_ent = dayPunches[0].hora;
-      hr_sal_desc1 = dayPunches[1].hora; // D
-      hr_ent_desc1 = dayPunches[2].hora; // E
-    }
-    else if (n === 4) {
-      hr_ent = dayPunches[0].hora;
-      hr_sal_desc1 = dayPunches[1].hora; // D
-      hr_ent_desc1 = dayPunches[2].hora; // E
-      hr_sal = dayPunches[3].hora;       // C
-    }
-    else if (n === 5) {
-      hr_ent = dayPunches[0].hora;
-      hr_sal_desc1 = dayPunches[1].hora; // D
-      hr_ent_desc1 = dayPunches[2].hora; // E
-      hr_sal_desc2 = dayPunches[3].hora; // G
-      hr_ent_desc2 = dayPunches[4].hora; // H
-    }
-    else if (n >= 6) {
-      hr_ent = dayPunches[0].hora;
-      hr_sal_desc1 = dayPunches[1].hora;
-      hr_ent_desc1 = dayPunches[2].hora;
-      hr_sal_desc2 = dayPunches[3].hora;
-      hr_ent_desc2 = dayPunches[4].hora;
-      hr_sal = dayPunches[n - 1].hora; // Última marca es la salida
+    const n = shift.length;
+
+    hr_ent = shift[0].hora;
+    
+    if (n === 2) {
+      hr_sal = shift[1].hora;
+    } else if (n === 3) {
+      hr_ent_desc1 = shift[1].hora;
+      hr_sal = shift[2].hora;
+      estado = "incompleto";
+    } else if (n === 4) {
+      hr_ent_desc1 = shift[1].hora;
+      hr_sal_desc1 = shift[2].hora;
+      hr_sal = shift[3].hora;
+    } else if (n === 5) {
+      hr_ent_desc1 = shift[1].hora;
+      hr_sal_desc1 = shift[2].hora;
+      hr_ent_desc2 = shift[3].hora;
+      hr_sal = shift[4].hora;
+      estado = "incompleto";
+    } else if (n >= 6) {
+      hr_ent_desc1 = shift[1].hora;
+      hr_sal_desc1 = shift[2].hora;
+      hr_ent_desc2 = shift[3].hora;
+      hr_sal_desc2 = shift[4].hora;
+      hr_sal = shift[n - 1].hora;
+      if (n % 2 !== 0) estado = "incompleto";
+    } else if (n === 1) {
+      estado = "incompleto";
     }
 
-    attendanceRows[dateStr] = {
-      ...attendanceRows[dateStr],
+    attendanceRows[shiftLogicalDate] = {
+      ...attendanceRows[shiftLogicalDate],
       hr_ent,
       hr_sal_desc1,
       hr_ent_desc1,
       hr_sal_desc2,
       hr_ent_desc2,
-      hr_sal
+      hr_sal,
+      estado
     };
   });
 

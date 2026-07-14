@@ -11,7 +11,7 @@ export default function EditableCell({ value, onChange, isOverridden, isCurrency
   let displayValue = value;
   if (!isEditing) {
     if (isCurrency) displayValue = `$ ${fmtCOP(value)}`;
-    else if (isDecimal) displayValue = Number(value).toFixed(2);
+    else if (isDecimal) displayValue = Number(value).toFixed(1);
   }
 
   const handleBlur = () => {

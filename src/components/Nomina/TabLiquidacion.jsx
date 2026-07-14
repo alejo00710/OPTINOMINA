@@ -20,12 +20,32 @@ export default function TabLiquidacion({
   nominaRows
 }) {
   if (!selectedWorkerData) {
-    return (
+    const getTotal = (field) => {
+    if (!selectedWorkerData || !selectedWorkerData.workerDays) return "0.0";
+    const sum = selectedWorkerData.workerDays.reduce((acc, row) => {
+      const prefix = `${selectedWorkerData.cedula}_${row.dia}`;
+      const val = overrides[`${prefix}_${field}`] !== undefined ? overrides[`${prefix}_${field}`] : row[field];
+      return acc + (Number(val) || 0);
+    }, 0);
+    return sum === 0 ? "0.0" : sum.toFixed(1);
+  };
+
+  return (
       <div className="p-12 text-center text-slate-500 font-bold bg-white rounded-3xl border border-slate-200 shadow-sm animate-stitch">
          Selecciona un operario desde el Panel General para liquidar.
       </div>
     );
   }
+
+  const getTotal = (field) => {
+    if (!selectedWorkerData || !selectedWorkerData.workerDays) return "0.0";
+    const sum = selectedWorkerData.workerDays.reduce((acc, row) => {
+      const prefix = `${selectedWorkerData.cedula}_${row.dia}`;
+      const val = overrides[`${prefix}_${field}`] !== undefined ? overrides[`${prefix}_${field}`] : row[field];
+      return acc + (Number(val) || 0);
+    }, 0);
+    return sum === 0 ? "0.0" : sum.toFixed(1);
+  };
 
   return (
     <div className="space-y-6">
@@ -95,7 +115,7 @@ export default function TabLiquidacion({
                             <th colSpan="6" className="py-2 bg-slate-100 border-b border-slate-200">Control de Descansos</th>
                             <th colSpan="5" className="py-2 bg-indigo-50/50 border-b border-indigo-100 text-indigo-600">Liquidación Base</th>
                             <th colSpan="8" className="py-2 bg-amber-50/50 border-b border-amber-100 text-amber-700">Clasificación Extras/Recargos</th>
-                            <th colSpan="2" className="py-2 bg-rose-50/50 border-b border-rose-100 text-rose-600">Novedades</th>
+                            <th colSpan="2" className="py-2 bg-rose-50/50 border-b border-rose-100 text-rose-600">Llegadas</th>
                       </tr>
                       <tr className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-200">
                          <th className="px-2 py-2" title="Día/Fecha">A (Fecha)</th>
@@ -131,9 +151,45 @@ export default function TabLiquidacion({
                          const displayDate = day.dia;
                          const prefix = `${selectedWorkerData.cedula}_${displayDate}`;
 
-                         return (
-                            <tr key={displayDate} className="hover:bg-slate-50">
-                               <td className="px-2 py-2 whitespace-nowrap"><span className="text-slate-400 mr-1">{dayName}</span> {displayDate}</td>
+                         const getTotal = (field) => {
+    if (!selectedWorkerData || !selectedWorkerData.workerDays) return "0.0";
+    const sum = selectedWorkerData.workerDays.reduce((acc, row) => {
+      const prefix = `${selectedWorkerData.cedula}_${row.dia}`;
+      const val = overrides[`${prefix}_${field}`] !== undefined ? overrides[`${prefix}_${field}`] : row[field];
+      return acc + (Number(val) || 0);
+    }, 0);
+    return sum === 0 ? "0.0" : sum.toFixed(1);
+  };
+
+  const isAnomalo = day.estado === 'incompleto';
+  const defaultStatus = isAnomalo ? 'ANÓMALO' : 'NORMAL';
+  const statusVal = overrides[`${prefix}_novedad_status`] || defaultStatus;
+  
+  let rowBg = "hover:bg-slate-50 transition-colors";
+  if (statusVal === "CALAMIDAD") rowBg = "bg-red-500 text-white hover:bg-red-600";
+  else if (statusVal === "INCAPACIDAD EG") rowBg = "bg-orange-400 text-white hover:bg-orange-500";
+  else if (statusVal === "NO MARCÓ RELOJ") rowBg = "bg-yellow-300 text-black hover:bg-yellow-400";
+  else if (statusVal === "DESCANSO") rowBg = "bg-green-200 text-black hover:bg-green-300";
+  else if (statusVal === "ANÓMALO") rowBg = "bg-amber-50/80 outline outline-1 outline-amber-200";
+
+  return (
+                            <tr key={displayDate} className={`${rowBg}`}>
+                               <td className="px-2 py-2 whitespace-nowrap flex items-center gap-1">
+                                  <span className={statusVal === 'NORMAL' || statusVal === 'ANÓMALO' ? "text-slate-400" : "opacity-80"}>{dayName}</span> 
+                                  {displayDate}
+                                  <select 
+                                     value={statusVal} 
+                                     onChange={(e) => handleCellEdit(`${prefix}_novedad_status`, e.target.value)} 
+                                     className={`ml-1 appearance-none rounded-full px-2 py-1 text-xs font-bold uppercase tracking-wider outline-none cursor-pointer text-center ${statusVal === 'NORMAL' ? 'bg-slate-200 text-slate-500 hover:bg-slate-300' : statusVal === 'ANÓMALO' ? 'bg-amber-100 text-amber-700 animate-pulse hover:bg-amber-200' : 'bg-white/40 text-current hover:bg-white/60'}`}
+                                  >
+                                     <option value="NORMAL">NORMAL</option>
+                                     <option value="ANÓMALO">ANÓMALO</option>
+                                     <option value="CALAMIDAD">CALAMIDAD</option>
+                                     <option value="INCAPACIDAD EG">INCAPACIDAD EG</option>
+                                     <option value="NO MARCÓ RELOJ">NO MARCÓ RELOJ</option>
+                                     <option value="DESCANSO">DESCANSO</option>
+                                  </select>
+                               </td>
                                <td className="px-2 py-2 text-blue-600 font-mono">{day.hr_ent || "-"}</td>
                                <td className="px-2 py-2 text-blue-600 font-mono">{day.hr_sal || "-"}</td>
                                <td className="px-1 py-1">
@@ -142,14 +198,14 @@ export default function TabLiquidacion({
                                <td className="px-1 py-1">
                                   <input type="text" value={overrides[`${prefix}_hr_sal_desc1`] !== undefined ? overrides[`${prefix}_hr_sal_desc1`] : (day.hr_sal_desc1 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_desc1`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
                                </td>
-                               <td className="px-2 py-2 text-center text-slate-400 font-mono">{day.total_desc1 ? Number(day.total_desc1).toFixed(2) : "0.00"}</td>
+                               <td className="px-2 py-2 text-center text-slate-400 font-mono">{day.total_desc1 && day.total_desc1 !== "NaN" ? day.total_desc1 : "00:00"}</td>
                                <td className="px-1 py-1">
                                   <input type="text" value={overrides[`${prefix}_hr_ent_desc2`] !== undefined ? overrides[`${prefix}_hr_ent_desc2`] : (day.hr_ent_desc2 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_desc2`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
                                </td>
                                <td className="px-1 py-1">
                                   <input type="text" value={overrides[`${prefix}_hr_sal_desc2`] !== undefined ? overrides[`${prefix}_hr_sal_desc2`] : (day.hr_sal_desc2 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_desc2`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
                                </td>
-                               <td className="px-2 py-2 text-center text-slate-400 font-mono">{day.total_desc2 ? Number(day.total_desc2).toFixed(2) : "0.00"}</td>
+                               <td className="px-2 py-2 text-center text-slate-400 font-mono">{day.total_desc2 && day.total_desc2 !== "NaN" ? day.total_desc2 : "00:00"}</td>
                                
                                {/* Pago Entrada/Salida */}
                                <td className="px-1 py-1">
@@ -159,50 +215,78 @@ export default function TabLiquidacion({
                                   <input type="text" value={overrides[`${prefix}_hr_sal_pago`] !== undefined ? overrides[`${prefix}_hr_sal_pago`] : (day.hr_sal_pago || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_pago`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none text-purple-600" />
                                </td>
 
-                               <td className="px-2 py-2 text-center text-slate-400">{Number(day.hr_lab || 0).toFixed(2)}</td>
-                               <td className="px-2 py-2 text-center text-slate-400">{Number(day.desc_lunch || 0).toFixed(2)}</td>
-                               <td className="px-2 py-2 text-center font-bold text-slate-600">{Number(day.hr_pag || 0).toFixed(2)}</td>
+                               <td className="px-2 py-2 text-center text-slate-400">{Number(day.hr_lab || 0).toFixed(1)}</td>
+                               <td className="px-2 py-2 text-center text-slate-400">{Number(day.desc_lunch || 0).toFixed(1)}</td>
+                               <td className="px-2 py-2 text-center font-bold text-slate-600">{Number(day.hr_pag || 0).toFixed(1)}</td>
                                
                                <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_diurnas`] !== undefined ? overrides[`${prefix}_diurnas`] : Number(day.diurnas || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_diurnas`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                  <input type="text" value={overrides[`${prefix}_diurnas`] !== undefined ? overrides[`${prefix}_diurnas`] : Number(day.diurnas || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_diurnas`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
                                </td>
                                <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_nocturnas`] !== undefined ? overrides[`${prefix}_nocturnas`] : Number(day.nocturnas || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_nocturnas`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                  <input type="text" value={overrides[`${prefix}_nocturnas`] !== undefined ? overrides[`${prefix}_nocturnas`] : Number(day.nocturnas || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_nocturnas`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
                                </td>
                                <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_fes_diu`] !== undefined ? overrides[`${prefix}_fes_diu`] : Number(day.fes_diu || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_fes_diu`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                  <input type="text" value={overrides[`${prefix}_fes_diu`] !== undefined ? overrides[`${prefix}_fes_diu`] : Number(day.fes_diu || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_fes_diu`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
                                </td>
                                <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_fes_noc`] !== undefined ? overrides[`${prefix}_fes_noc`] : Number(day.fes_noc || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_fes_noc`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                  <input type="text" value={overrides[`${prefix}_fes_noc`] !== undefined ? overrides[`${prefix}_fes_noc`] : Number(day.fes_noc || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_fes_noc`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
                                </td>
                                <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_ext_diu`] !== undefined ? overrides[`${prefix}_ext_diu`] : Number(day.ext_diu || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_ext_diu`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                  <input type="text" value={overrides[`${prefix}_ext_diu`] !== undefined ? overrides[`${prefix}_ext_diu`] : Number(day.ext_diu || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_ext_diu`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
                                </td>
                                <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_ext_noc`] !== undefined ? overrides[`${prefix}_ext_noc`] : Number(day.ext_noc || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_ext_noc`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                  <input type="text" value={overrides[`${prefix}_ext_noc`] !== undefined ? overrides[`${prefix}_ext_noc`] : Number(day.ext_noc || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_ext_noc`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
                                </td>
                                <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_ext_fes_diu`] !== undefined ? overrides[`${prefix}_ext_fes_diu`] : Number(day.ext_fes_diu || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_ext_fes_diu`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                  <input type="text" value={overrides[`${prefix}_ext_fes_diu`] !== undefined ? overrides[`${prefix}_ext_fes_diu`] : Number(day.ext_fes_diu || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_ext_fes_diu`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
                                </td>
                                <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_ext_fes_noc`] !== undefined ? overrides[`${prefix}_ext_fes_noc`] : Number(day.ext_fes_noc || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_ext_fes_noc`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
+                                  <input type="text" value={overrides[`${prefix}_ext_fes_noc`] !== undefined ? overrides[`${prefix}_ext_fes_noc`] : Number(day.ext_fes_noc || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_ext_fes_noc`, e.target.value)} className="w-10 bg-white border border-slate-200 text-right rounded focus:ring-1 outline-none" />
                                </td>
                                <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_llegada_tarde`] !== undefined ? overrides[`${prefix}_llegada_tarde`] : Number(day.llegada_tarde || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_llegada_tarde`, e.target.value)} className="w-10 bg-rose-50 border border-slate-200 text-right rounded focus:ring-1 outline-none text-rose-700" />
+                                  <input type="text" value={overrides[`${prefix}_llegada_tarde`] !== undefined ? overrides[`${prefix}_llegada_tarde`] : Number(day.llegada_tarde || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_llegada_tarde`, e.target.value)} className="w-10 bg-rose-50 border border-slate-200 text-right rounded focus:ring-1 outline-none text-rose-700" />
                                </td>
                                <td className="px-1 py-1 text-right">
-                                  <input type="text" value={overrides[`${prefix}_llegada_tarde_min`] !== undefined ? overrides[`${prefix}_llegada_tarde_min`] : Number(day.llegada_tarde_min || 0).toFixed(2)} onChange={(e) => handleCellEdit(`${prefix}_llegada_tarde_min`, e.target.value)} className="w-10 bg-rose-50 border border-slate-200 text-right rounded focus:ring-1 outline-none text-rose-700" />
+                                  <input type="text" value={overrides[`${prefix}_llegada_tarde_min`] !== undefined ? overrides[`${prefix}_llegada_tarde_min`] : Number(day.llegada_tarde_min || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_llegada_tarde_min`, e.target.value)} className="w-10 bg-rose-50 border border-slate-200 text-right rounded focus:ring-1 outline-none text-rose-700" />
                                </td>
                             </tr>
                          )
                       })}
-                   </tbody>
+                    </tbody>
+                    <tfoot className="bg-slate-50 border-t-2 border-slate-200 text-slate-700 text-[10px] font-bold">
+                       <tr>
+                          <td className="px-2 py-2"></td>
+                          <td className="px-2 py-2"></td>
+                          <td className="px-2 py-2"></td>
+                          <td className="px-1 py-1"></td>
+                          <td className="px-1 py-1"></td>
+                          <td className="px-2 py-2"></td>
+                          <td className="px-1 py-1"></td>
+                          <td className="px-1 py-1"></td>
+                          <td className="px-2 py-2"></td>
+                          <td className="px-1 py-1"></td>
+                          <td className="px-1 py-1 text-right pr-2 uppercase tracking-widest text-slate-500">TOTAL</td>
+                          <td className="px-2 py-2 text-center text-slate-700">{getTotal('hr_lab')}</td>
+                          <td className="px-2 py-2 text-center text-slate-700">{getTotal('desc_lunch')}</td>
+                          <td className="px-2 py-2 text-center font-black text-slate-800">{getTotal('hr_pag')}</td>
+                          <td className="px-1 py-1 text-center">{getTotal('diurnas')}</td>
+                          <td className="px-1 py-1 text-center">{getTotal('nocturnas')}</td>
+                          <td className="px-1 py-1 text-center">{getTotal('fes_diu')}</td>
+                          <td className="px-1 py-1 text-center">{getTotal('fes_noc')}</td>
+                          <td className="px-1 py-1 text-center">{getTotal('ext_diu')}</td>
+                          <td className="px-1 py-1 text-center">{getTotal('ext_noc')}</td>
+                          <td className="px-1 py-1 text-center">{getTotal('ext_fes_diu')}</td>
+                          <td className="px-1 py-1 text-center">{getTotal('ext_fes_noc')}</td>
+                          <td className="px-1 py-1 text-center text-red-600">{getTotal('llegada_tarde')}</td>
+                          <td className="px-1 py-1 text-center text-red-600">{getTotal('llegada_tarde_min')}</td>
+                       </tr>
+                    </tfoot>
                 </table>
              </div>
           </div>
 
           {/* BOTTOM PANEL */}
-          <div className="w-full max-w-md mx-auto mt-6 mb-12">
+          <div className="w-full max-w-full mx-auto mt-6 mb-12 overflow-hidden">
              <div className="space-y-6">
                 <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-xl">
                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6">Liquidación de Horas (26-38)</h3>
@@ -223,7 +307,7 @@ export default function TabLiquidacion({
                       <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Horas Pendientes</span>
                          <span className="text-sm font-bold text-slate-300 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700/50">
-                            {selectedWorkerData.horas_pendientes || 0}
+                            {Number(selectedWorkerData.horas_pendientes || 0).toFixed(1)}
                          </span>
                       </div>
 
@@ -238,74 +322,122 @@ export default function TabLiquidacion({
                             />
                          </div>
                       </div>
+                                  <div className="border-t border-slate-800 pt-4 w-full overflow-x-auto">
+                      <table className="w-full border-collapse">
+                         <thead>
+                            <tr className="border-b border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                               <th className="py-3 px-4 text-left whitespace-nowrap">ITEM</th>
+                               <th className="py-3 px-4 text-center whitespace-nowrap">T. Hr.</th>
+                               <th className="py-3 px-4 text-center whitespace-nowrap">%</th>
+                               <th className="py-3 px-4 text-right whitespace-nowrap">Vr. Pagar</th>
+                            </tr>
+                         </thead>
+                         <tbody className="divide-y divide-slate-800/60 text-sm font-bold">
+                            <tr className="hover:bg-slate-800/50 transition-colors">
+                               <td className="py-3 px-4 text-slate-300 whitespace-nowrap">28. Diurnas</td>
+                               <td className="py-3 px-4 text-center text-slate-400">{Number(selectedWorkerData.horas_diurnas || 0).toFixed(1)}</td>
+                               <td className="py-3 px-4 text-center"><span className="bg-slate-800 text-slate-400 text-[9px] px-2 py-0.5 rounded-full border border-slate-700 whitespace-nowrap">x 0.0</span></td>
+                               <td className="py-3 px-4 text-right text-slate-500">$0</td>
+                            </tr>
+                            <tr className="hover:bg-slate-800/50 transition-colors">
+                               <td className="py-3 px-4 text-slate-300 whitespace-nowrap">29. Nocturnas</td>
+                               <td className="py-3 px-4 text-center text-indigo-300">{Number(selectedWorkerData.horas_nocturnas || 0).toFixed(1)}</td>
+                               <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">x 0.35</span></td>
+                               <td className="py-3 px-4 text-right text-indigo-400">${fmtCOP(selectedWorkerData.recargo_nocturno || 0)}</td>
+                            </tr>
+                            <tr className="hover:bg-slate-800/50 transition-colors">
+                               <td className="py-3 px-4 text-slate-300 whitespace-nowrap">30. Festiva Diurna</td>
+                               <td className="py-3 px-4 text-center text-indigo-300">{Number(selectedWorkerData.festivas_diurnas || 0).toFixed(1)}</td>
+                               <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">x 0.75</span></td>
+                               <td className="py-3 px-4 text-right text-indigo-400">${fmtCOP(selectedWorkerData.val_extras_festivas || 0)}</td>
+                            </tr>
+                            <tr className="hover:bg-slate-800/50 transition-colors">
+                               <td className="py-3 px-4 text-slate-300 whitespace-nowrap">31. Fest Noc</td>
+                               <td className="py-3 px-4 text-center text-indigo-300">{Number(selectedWorkerData.festivas_nocturnas || 0).toFixed(1)}</td>
+                               <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">x 2.10</span></td>
+                               <td className="py-3 px-4 text-right text-indigo-400">${fmtCOP(selectedWorkerData.val_extras_festivas_nocturnas || 0)}</td>
+                            </tr>
+                            <tr className="hover:bg-slate-800/50 transition-colors">
+                               <td className="py-3 px-4 text-slate-300 whitespace-nowrap">32. Extra Diurna</td>
+                               <td className="py-3 px-4 text-center text-emerald-300">{Number(selectedWorkerData.extras_diurnas || 0).toFixed(1)}</td>
+                               <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">x 1.25</span></td>
+                               <td className="py-3 px-4 text-right text-emerald-400">${fmtCOP(selectedWorkerData.val_extras_diurnas || 0)}</td>
+                            </tr>
+                            <tr className="hover:bg-slate-800/50 transition-colors">
+                               <td className="py-3 px-4 text-slate-300 whitespace-nowrap">33. Extra Noc</td>
+                               <td className="py-3 px-4 text-center text-emerald-300">{Number(selectedWorkerData.extras_nocturnas || 0).toFixed(1)}</td>
+                               <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">x 1.75</span></td>
+                               <td className="py-3 px-4 text-right text-emerald-400">${fmtCOP(selectedWorkerData.val_extras_nocturnas || 0)}</td>
+                            </tr>
+                            <tr className="hover:bg-slate-800/50 transition-colors">
+                               <td className="py-3 px-4 text-slate-300 whitespace-nowrap">34. Ext Fes Diu</td>
+                               <td className="py-3 px-4 text-center text-emerald-300">{Number(selectedWorkerData.extras_festivas || 0).toFixed(1)}</td>
+                               <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">x 2.00</span></td>
+                               <td className="py-3 px-4 text-right text-emerald-400">${fmtCOP(selectedWorkerData.val_extras_festivas || 0)}</td>
+                            </tr>
+                            <tr className="hover:bg-slate-800/50 transition-colors">
+                               <td className="py-3 px-4 text-slate-300 whitespace-nowrap">35. Ext Fes Noc</td>
+                               <td className="py-3 px-4 text-center text-emerald-300">{Number(selectedWorkerData.extras_festivas_nocturnas || 0).toFixed(1)}</td>
+                               <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">x 2.50</span></td>
+                               <td className="py-3 px-4 text-right text-emerald-400">${fmtCOP(selectedWorkerData.val_extras_festivas_nocturnas || 0)}</td>
+                            </tr>
+                         </tbody>
+                         <tfoot className="border-t border-slate-600">
+                            <tr>
+                               <td className="py-4 px-4 text-xs font-black uppercase tracking-widest text-slate-400 text-right whitespace-nowrap">TOTALES</td>
+                               <td className="py-4 px-4 text-center text-lg font-black text-white whitespace-nowrap">{Number(
+                                  (selectedWorkerData.horas_diurnas || 0) +
+                                  (selectedWorkerData.horas_nocturnas || 0) +
+                                  (selectedWorkerData.festivas_diurnas || 0) +
+                                  (selectedWorkerData.festivas_nocturnas || 0) +
+                                  (selectedWorkerData.extras_diurnas || 0) +
+                                  (selectedWorkerData.extras_nocturnas || 0) +
+                                  (selectedWorkerData.extras_festivas || 0) +
+                                  (selectedWorkerData.extras_festivas_nocturnas || 0)
+                               ).toFixed(1)}</td>
+                               <td className="py-4 px-4"></td>
+                               <td className="py-4 px-4 text-right text-2xl font-black text-emerald-400 tracking-tight whitespace-nowrap">${fmtCOP(selectedWorkerData.liquidation.total_extra_val || 0)}</td>
+                            </tr>
+                         </tfoot>
+                      </table>
                    </div>
+                </div>
+             </div>
 
-                   <div className="border-t border-slate-800 pt-4 space-y-1">
-                      <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
-                         <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold uppercase tracking-wide text-slate-300">28. Diurnas</span>
-                            <span className="bg-slate-800 text-slate-400 text-[9px] px-2 py-0.5 rounded-full border border-slate-700">x 0.0</span>
-                         </div>
-                         <div className="text-sm font-bold text-slate-500">N/A</div>
-                      </div>
-                      <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
-                         <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold uppercase tracking-wide text-slate-300">29. Nocturnas</span>
-                            <span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800">x 0.35</span>
-                         </div>
-                         <div className="text-sm font-bold text-indigo-400">${fmtCOP(selectedWorkerData.recargo_nocturno)}</div>
-                      </div>
-                      <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
-                         <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold uppercase tracking-wide text-slate-300">30. Festiva Diurna</span>
-                            <span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800">x 0.75</span>
-                         </div>
-                         <div className="text-sm font-bold text-indigo-400">${fmtCOP(selectedWorkerData.val_extras_festivas || 0)}</div>
-                      </div>
-                      <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
-                         <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold uppercase tracking-wide text-slate-300">31. Fest Noc</span>
-                            <span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800">x 2.10</span>
-                         </div>
-                         <div className="text-sm font-bold text-indigo-400">${fmtCOP(selectedWorkerData.val_extras_festivas_nocturnas || 0)}</div>
-                      </div>
-                      <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
-                         <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold uppercase tracking-wide text-slate-300">32. Extra Diurna</span>
-                            <span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800">x 1.25</span>
-                         </div>
-                         <div className="text-sm font-bold text-emerald-400">${fmtCOP(selectedWorkerData.val_extras_diurnas)}</div>
-                      </div>
-                      <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
-                         <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold uppercase tracking-wide text-slate-300">33. Extra Noc</span>
-                            <span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800">x 1.75</span>
-                         </div>
-                         <div className="text-sm font-bold text-emerald-400">${fmtCOP(selectedWorkerData.val_extras_nocturnas)}</div>
-                      </div>
-                      <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
-                         <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold uppercase tracking-wide text-slate-300">34. Ext Fes Diu</span>
-                            <span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800">x 2.00</span>
-                         </div>
-                         <div className="text-sm font-bold text-emerald-400">${fmtCOP(selectedWorkerData.val_extras_festivas)}</div>
-                      </div>
-                      <div className="flex justify-between items-center py-3 border-b border-slate-800/60">
-                         <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold uppercase tracking-wide text-slate-300">35. Ext Fes Noc</span>
-                            <span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800">x 2.50</span>
-                         </div>
-                         <div className="text-sm font-bold text-emerald-400">${fmtCOP(selectedWorkerData.val_extras_festivas_nocturnas || 0)}</div>
-                      </div>
+             <div className="w-full max-w-md mx-auto mb-12">
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 overflow-hidden break-words">
+                   <h3 className="text-sm font-black uppercase tracking-widest text-slate-900 mb-4 border-b border-slate-100 pb-2">NOVEDADES:</h3>
+                   <div className="flex flex-wrap gap-2 mb-6">
+                      <span className="flex items-center gap-1 text-[10px] font-bold"><span className="w-3 h-3 bg-slate-200 rounded-sm"></span> NORMAL</span>
+                      <span className="flex items-center gap-1 text-[10px] font-bold"><span className="w-3 h-3 bg-amber-100 border border-amber-300 rounded-sm"></span> ANÓMALO</span>
+                      <span className="flex items-center gap-1 text-[10px] font-bold"><span className="w-3 h-3 bg-red-500 rounded-sm"></span> CALAMIDAD</span>
+                      <span className="flex items-center gap-1 text-[10px] font-bold"><span className="w-3 h-3 bg-orange-400 rounded-sm"></span> INCAPACIDAD</span>
+                      <span className="flex items-center gap-1 text-[10px] font-bold"><span className="w-3 h-3 bg-yellow-300 rounded-sm border border-slate-200"></span> NO MARCÓ</span>
+                      <span className="flex items-center gap-1 text-[10px] font-bold"><span className="w-3 h-3 bg-green-200 rounded-sm border border-slate-200"></span> DESCANSO</span>
                    </div>
-
-                   <div className="mt-8 pt-6 border-t border-slate-700 text-center">
-                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">36. Totales Extras/Recargos</div>
-                      <div className="text-4xl font-black text-emerald-400 tracking-tight">${fmtCOP(selectedWorkerData.liquidation.total_extra_val)}</div>
+                   
+                   <div className="space-y-1.5 text-sm font-semibold text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                      {Number(selectedWorkerData.horas_nocturnas) > 0 && <p className="flex justify-between"><span>Recargo Nocturno</span> <span className="text-slate-900">{Number(selectedWorkerData.horas_nocturnas).toFixed(1)} hrs</span></p>}
+                      {Number(selectedWorkerData.festivas_diurnas) > 0 && <p className="flex justify-between"><span>Festiva Diurna</span> <span className="text-slate-900">{Number(selectedWorkerData.festivas_diurnas).toFixed(1)} hrs</span></p>}
+                      {Number(selectedWorkerData.festivas_nocturnas) > 0 && <p className="flex justify-between"><span>Festiva Nocturna</span> <span className="text-slate-900">{Number(selectedWorkerData.festivas_nocturnas).toFixed(1)} hrs</span></p>}
+                      {Number(selectedWorkerData.extras_diurnas) > 0 && <p className="flex justify-between"><span>Extra Diurna</span> <span className="text-slate-900">{Number(selectedWorkerData.extras_diurnas).toFixed(1)} hrs</span></p>}
+                      {Number(selectedWorkerData.extras_nocturnas) > 0 && <p className="flex justify-between"><span>Extra Nocturna</span> <span className="text-slate-900">{Number(selectedWorkerData.extras_nocturnas).toFixed(1)} hrs</span></p>}
+                      {Number(selectedWorkerData.extras_festivas) > 0 && <p className="flex justify-between"><span>Extra Festiva Diurna</span> <span className="text-slate-900">{Number(selectedWorkerData.extras_festivas).toFixed(1)} hrs</span></p>}
+                      {Number(selectedWorkerData.extras_festivas_nocturnas) > 0 && <p className="flex justify-between"><span>Extra Festiva Nocturna</span> <span className="text-slate-900">{Number(selectedWorkerData.extras_festivas_nocturnas).toFixed(1)} hrs</span></p>}
+                      {Number(
+                          (selectedWorkerData.horas_nocturnas || 0) +
+                          (selectedWorkerData.festivas_diurnas || 0) +
+                          (selectedWorkerData.festivas_nocturnas || 0) +
+                          (selectedWorkerData.extras_diurnas || 0) +
+                          (selectedWorkerData.extras_nocturnas || 0) +
+                          (selectedWorkerData.extras_festivas || 0) +
+                          (selectedWorkerData.extras_festivas_nocturnas || 0)
+                      ) === 0 && <p className="text-slate-400 italic text-center text-xs">Sin novedades en la quincena</p>}
                    </div>
                 </div>
              </div>
           </div>
+       </div>
        </div>
     </div>
   );

@@ -17,7 +17,12 @@ export default function TabDirectorio({ employees, onRefresh }) {
     setIsModalOpen(false);
   };
 
-  const handleSave = async (empData) => {
+  const handleSave = async (empData, alreadySaved = false) => {
+    if (alreadySaved) {
+      setIsModalOpen(false);
+      if (onRefresh) onRefresh();
+      return;
+    }
     const res = await upsertEmployeeRecord(empData);
     if (res.success) {
       setIsModalOpen(false);
@@ -58,6 +63,7 @@ export default function TabDirectorio({ employees, onRefresh }) {
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 font-bold">
               <th className="py-4 px-6">Cédula</th>
+              <th className="py-4 px-6">ID Biométrico</th>
               <th className="py-4 px-6">Nombre Completo</th>
               <th className="py-4 px-6">Cargo</th>
               <th className="py-4 px-6">Categoría</th>
@@ -72,6 +78,7 @@ export default function TabDirectorio({ employees, onRefresh }) {
             {employees.map((emp) => (
               <tr key={emp.cedula} className="hover:bg-slate-50/80 transition-colors">
                 <td className="py-3 px-6 text-sm text-slate-600 font-medium">{emp.cedula}</td>
+                <td className="py-3 px-6 text-sm text-slate-600 font-medium">{emp.biometric_id || '-'}</td>
                 <td className="py-3 px-6 text-sm text-slate-900 font-bold">{emp.nombre}</td>
                 <td className="py-3 px-6 text-sm text-slate-600">{emp.cargo}</td>
                 <td className="py-3 px-6 text-sm text-slate-600">
@@ -109,7 +116,7 @@ export default function TabDirectorio({ employees, onRefresh }) {
             ))}
             {employees.length === 0 && (
               <tr>
-                <td colSpan="9" className="py-12 text-center text-slate-500">No hay empleados registrados.</td>
+                <td colSpan="10" className="py-12 text-center text-slate-500">No hay empleados registrados.</td>
               </tr>
             )}
           </tbody>
@@ -120,7 +127,7 @@ export default function TabDirectorio({ employees, onRefresh }) {
         isOpen={isModalOpen} 
         onClose={handleCloseModal} 
         employee={selectedEmployee} 
-        onSave={handleSave} 
+        onSaveSuccess={onRefresh} 
       />
     </div>
   );
