@@ -6,7 +6,7 @@ import { parseLocalNumber } from '@/utils/mathNomina';
 import { upsertEmployeeRecord } from '@/utils/supabase';
 import EditableCell from './EditableCell';
 
-export default function EmployeeEditorModal({ isOpen, onClose, employee, onSaveSuccess }) {
+export default function EmployeeEditorModal({ isOpen, onClose, employee, refreshEmployees }) {
   const [formData, setFormData] = useState({
     cedula: '',
     biometric_id: '',
@@ -19,7 +19,9 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, onSaveS
     poliza_bolivar: 0,
     poliza_sura: 0,
     optica: 0,
-    prestamos: 0
+    prestamos: 0,
+    banco: '',
+    tipo_vinculacion: 'Empresa'
   });
   const [isLoading, setIsLoading] = useState(false);
 
@@ -37,7 +39,9 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, onSaveS
         poliza_bolivar: employee.poliza_bolivar || 0,
         poliza_sura: employee.poliza_sura || 0,
         optica: employee.optica || 0,
-        prestamos: employee.prestamos || 0
+        prestamos: employee.prestamos || 0,
+        banco: employee.banco || '',
+        tipo_vinculacion: employee.tipo_vinculacion || 'Empresa'
       });
     } else {
       setFormData({
@@ -52,7 +56,9 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, onSaveS
         poliza_bolivar: 0,
         poliza_sura: 0,
         optica: 0,
-        prestamos: 0
+        prestamos: 0,
+        banco: '',
+        tipo_vinculacion: 'Empresa'
       });
     }
   }, [employee, isOpen]);
@@ -83,6 +89,8 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, onSaveS
         poliza_sura: parseLocalNumber(formData.poliza_sura),
         optica: parseLocalNumber(formData.optica),
         prestamos: parseLocalNumber(formData.prestamos),
+        banco: formData.banco ? formData.banco.toUpperCase() : '',
+        tipo_vinculacion: formData.tipo_vinculacion,
         is_active: true
       };
       
@@ -94,8 +102,8 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, onSaveS
       }
       
       alert("✅ GUARDADO CORRECTO");
-      if (onSaveSuccess) {
-        await onSaveSuccess(); // Fuerza a la tabla a recargar los datos frescos
+      if (refreshEmployees) {
+        await refreshEmployees();
       }
       if (onClose) {
         onClose(); // Cierra el modal
@@ -194,6 +202,30 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, onSaveS
                 <option value="TALLER">TALLER</option>
                 <option value="OTROS">OTROS</option>
                 <option value="NUEVOS">NUEVOS</option>
+              </select>
+            </div>
+
+            <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col shadow-sm">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Banco</span>
+              <input
+                type="text"
+                value={formData.banco}
+                onChange={(e) => setFormData({...formData, banco: e.target.value})}
+                className="w-full text-right text-sm font-medium text-slate-900 focus:ring-0 outline-none uppercase"
+                placeholder="Ej: BANCOLOMBIA"
+              />
+            </div>
+
+            <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col shadow-sm">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Tipo de Vinculación</span>
+              <select
+                value={formData.tipo_vinculacion}
+                onChange={(e) => setFormData({...formData, tipo_vinculacion: e.target.value})}
+                className="w-full text-right text-sm font-medium text-slate-900 focus:ring-0 outline-none bg-transparent appearance-none"
+                dir="rtl"
+              >
+                <option value="Empresa">Empresa</option>
+                <option value="Temporal">Temporal</option>
               </select>
             </div>
 

@@ -5,6 +5,54 @@ const fmtCOP = (num) => {
   return new Intl.NumberFormat('es-CO').format(num || 0);
 };
 
+
+const GridInput = ({ globalValue, fallback, onSave, className, decimals = 1 }) => {
+  const [localVal, setLocalVal] = React.useState(() => {
+    if (globalValue !== undefined && globalValue !== "") return globalValue.toString();
+    if (globalValue === "") return "";
+    return Number(fallback).toFixed(decimals);
+  });
+
+  React.useEffect(() => {
+    if (globalValue !== undefined) {
+      setLocalVal(globalValue.toString());
+    } else {
+      setLocalVal(globalValue === "" ? "" : Number(fallback).toFixed(decimals));
+    }
+  }, [globalValue, fallback, decimals]);
+
+  const handleBlur = () => {
+    let cleanVal = localVal.toString().replace(',', '.');
+    if (cleanVal === "") {
+      onSave("");
+    } else if (!isNaN(parseFloat(cleanVal))) {
+      const finalNum = parseFloat(cleanVal).toString();
+      onSave(finalNum);
+      setLocalVal(finalNum);
+    } else {
+      onSave(0);
+      setLocalVal("0");
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') e.target.blur();
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      className={className}
+      value={localVal}
+      onFocus={(e) => e.target.select()}
+      onChange={(e) => setLocalVal(e.target.value)}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+    />
+  );
+};
+
 export default function TabLiquidacion({ 
   selectedWorkerData, 
   overrides, 
@@ -220,44 +268,44 @@ export default function TabLiquidacion({
                                </td>
 
                                <td className="px-1 py-1">
-                                  <input type="number" step="0.1" value={overrides[`${prefix}_hr_lab`] !== undefined ? overrides[`${prefix}_hr_lab`] : Number(day.hr_lab || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_hr_lab`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded text-slate-500" />
+                                  <GridInput globalValue={overrides[`${prefix}_hr_lab`]} fallback={day.hr_lab || 0} onSave={(val) => handleCellEdit(`${prefix}_hr_lab`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded text-slate-500" />
                                </td>
                                <td className="px-1 py-1">
-                                  <input type="number" step="0.1" value={overrides[`${prefix}_desc_lunch`] !== undefined ? overrides[`${prefix}_desc_lunch`] : Number(day.desc_lunch || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_desc_lunch`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded text-slate-500" />
+                                  <GridInput globalValue={overrides[`${prefix}_desc_lunch`]} fallback={day.desc_lunch || 0} onSave={(val) => handleCellEdit(`${prefix}_desc_lunch`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded text-slate-500" />
                                </td>
                                <td className="px-1 py-1">
-                                  <input type="number" step="0.1" value={overrides[`${prefix}_hr_pag`] !== undefined ? overrides[`${prefix}_hr_pag`] : Number(day.hr_pag || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_hr_pag`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded font-bold text-slate-600" />
+                                  <GridInput globalValue={overrides[`${prefix}_hr_pag`]} fallback={day.hr_pag || 0} onSave={(val) => handleCellEdit(`${prefix}_hr_pag`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded font-bold text-slate-600" />
                                </td>
                                
                                <td className="px-1 py-1">
-                                  <input type="number" step="0.1" value={overrides[`${prefix}_diurnas`] !== undefined ? overrides[`${prefix}_diurnas`] : Number(day.diurnas || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_diurnas`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
+                                  <GridInput globalValue={overrides[`${prefix}_diurnas`]} fallback={day.diurnas || 0} onSave={(val) => handleCellEdit(`${prefix}_diurnas`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
                                </td>
                                <td className="px-1 py-1">
-                                  <input type="number" step="0.1" value={overrides[`${prefix}_nocturnas`] !== undefined ? overrides[`${prefix}_nocturnas`] : Number(day.nocturnas || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_nocturnas`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
+                                  <GridInput globalValue={overrides[`${prefix}_nocturnas`]} fallback={day.nocturnas || 0} onSave={(val) => handleCellEdit(`${prefix}_nocturnas`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
                                </td>
                                <td className="px-1 py-1">
-                                  <input type="number" step="0.1" value={overrides[`${prefix}_fes_diu`] !== undefined ? overrides[`${prefix}_fes_diu`] : Number(day.fes_diu || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_fes_diu`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
+                                  <GridInput globalValue={overrides[`${prefix}_fes_diu`]} fallback={day.fes_diu || 0} onSave={(val) => handleCellEdit(`${prefix}_fes_diu`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
                                </td>
                                <td className="px-1 py-1">
-                                  <input type="number" step="0.1" value={overrides[`${prefix}_fes_noc`] !== undefined ? overrides[`${prefix}_fes_noc`] : Number(day.fes_noc || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_fes_noc`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
+                                  <GridInput globalValue={overrides[`${prefix}_fes_noc`]} fallback={day.fes_noc || 0} onSave={(val) => handleCellEdit(`${prefix}_fes_noc`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
                                </td>
                                <td className="px-1 py-1">
-                                  <input type="number" step="0.1" value={overrides[`${prefix}_ext_diu`] !== undefined ? overrides[`${prefix}_ext_diu`] : Number(day.ext_diu || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_ext_diu`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
+                                  <GridInput globalValue={overrides[`${prefix}_ext_diu`]} fallback={day.ext_diu || 0} onSave={(val) => handleCellEdit(`${prefix}_ext_diu`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
                                </td>
                                <td className="px-1 py-1">
-                                  <input type="number" step="0.1" value={overrides[`${prefix}_ext_noc`] !== undefined ? overrides[`${prefix}_ext_noc`] : Number(day.ext_noc || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_ext_noc`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
+                                  <GridInput globalValue={overrides[`${prefix}_ext_noc`]} fallback={day.ext_noc || 0} onSave={(val) => handleCellEdit(`${prefix}_ext_noc`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
                                </td>
                                <td className="px-1 py-1">
-                                  <input type="number" step="0.1" value={overrides[`${prefix}_ext_fes_diu`] !== undefined ? overrides[`${prefix}_ext_fes_diu`] : Number(day.ext_fes_diu || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_ext_fes_diu`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
+                                  <GridInput globalValue={overrides[`${prefix}_ext_fes_diu`]} fallback={day.ext_fes_diu || 0} onSave={(val) => handleCellEdit(`${prefix}_ext_fes_diu`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
                                </td>
                                <td className="px-1 py-1">
-                                  <input type="number" step="0.1" value={overrides[`${prefix}_ext_fes_noc`] !== undefined ? overrides[`${prefix}_ext_fes_noc`] : Number(day.ext_fes_noc || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_ext_fes_noc`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
+                                  <GridInput globalValue={overrides[`${prefix}_ext_fes_noc`]} fallback={day.ext_fes_noc || 0} onSave={(val) => handleCellEdit(`${prefix}_ext_fes_noc`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded" />
                                </td>
                                <td className="px-1 py-1">
-                                  <input type="number" step="0.1" value={overrides[`${prefix}_llegada_tarde`] !== undefined ? overrides[`${prefix}_llegada_tarde`] : Number(day.llegada_tarde || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_llegada_tarde`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded text-rose-600" />
+                                  <GridInput globalValue={overrides[`${prefix}_llegada_tarde`]} fallback={day.llegada_tarde || 0} onSave={(val) => handleCellEdit(`${prefix}_llegada_tarde`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded text-rose-600" />
                                </td>
                                <td className="px-1 py-1">
-                                  <input type="number" step="0.1" value={overrides[`${prefix}_llegada_tarde_min`] !== undefined ? overrides[`${prefix}_llegada_tarde_min`] : Number(day.llegada_tarde_min || 0).toFixed(1)} onChange={(e) => handleCellEdit(`${prefix}_llegada_tarde_min`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded text-rose-600" />
+                                  <GridInput globalValue={overrides[`${prefix}_llegada_tarde_min`]} fallback={day.llegada_tarde_min || 0} onSave={(val) => handleCellEdit(`${prefix}_llegada_tarde_min`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded text-rose-600" />
                                </td>
                             </tr>
                          )
@@ -382,99 +430,104 @@ export default function TabLiquidacion({
                                         <tr className="hover:bg-slate-800/50 transition-colors">
                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">28. Diurnas</td>
                                            <td className="py-2 px-2 text-center text-slate-400">
-                                              <input type="number" step="0.1" value={overrides[`${selectedWorkerData.cedula}_tot_hr_diurnas`] !== undefined ? overrides[`${selectedWorkerData.cedula}_tot_hr_diurnas`] : Number(tDiurnas).toFixed(1)} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_diurnas`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded" />
+                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_diurnas`]} fallback={tDiurnas} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_diurnas`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded" />
                                            </td>
                                            <td className="py-3 px-4 text-center"><span className="bg-slate-800 text-slate-400 text-[9px] px-2 py-0.5 rounded-full border border-slate-700 whitespace-nowrap">0%</span></td>
-                                           <td className="py-3 px-4 text-right text-slate-500">$0</td>
+                                           <td className="py-2 px-2 text-right">
+                                               <div className="flex justify-end items-center gap-1">
+                                                  <span className="text-slate-500">$</span>
+                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_diurnas`]} fallback={0} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_diurnas`, val)} className="w-24 bg-transparent text-right text-slate-500 outline-none focus:ring-1 rounded" decimals={0} />
+                                               </div>
+                                            </td>
                                         </tr>
                                         <tr className="hover:bg-slate-800/50 transition-colors">
                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">29. Nocturnas</td>
                                            <td className="py-2 px-2 text-center text-indigo-300">
-                                              <input type="number" step="0.1" value={overrides[`${selectedWorkerData.cedula}_tot_hr_nocturnas`] !== undefined ? overrides[`${selectedWorkerData.cedula}_tot_hr_nocturnas`] : Number(tNocturnas).toFixed(1)} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_nocturnas`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
+                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_nocturnas`]} fallback={tNocturnas} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_nocturnas`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
                                            </td>
                                            <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">35%</span></td>
                                            <td className="py-2 px-2 text-right">
                                               <div className="flex justify-end items-center gap-1">
                                                  <span className="text-indigo-400">$</span>
-                                                 <input type="number" value={vNocturnas} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_vr_nocturnas`, e.target.value)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" />
+                                                 <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_nocturnas`]} fallback={vNocturnas} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_nocturnas`, val)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" decimals={0} />
                                               </div>
                                            </td>
                                         </tr>
                                         <tr className="hover:bg-slate-800/50 transition-colors">
                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">30. Festiva Diurna</td>
                                            <td className="py-2 px-2 text-center text-indigo-300">
-                                              <input type="number" step="0.1" value={overrides[`${selectedWorkerData.cedula}_tot_hr_fes_diu`] !== undefined ? overrides[`${selectedWorkerData.cedula}_tot_hr_fes_diu`] : Number(tFesDiu).toFixed(1)} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_fes_diu`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
+                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_fes_diu`]} fallback={tFesDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_fes_diu`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
                                            </td>
                                            <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">75%</span></td>
                                            <td className="py-2 px-2 text-right">
                                               <div className="flex justify-end items-center gap-1">
                                                  <span className="text-indigo-400">$</span>
-                                                 <input type="number" value={vFesDiu} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_vr_fes_diu`, e.target.value)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" />
+                                                 <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_fes_diu`]} fallback={vFesDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_fes_diu`, val)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" decimals={0} />
                                               </div>
                                            </td>
                                         </tr>
                                         <tr className="hover:bg-slate-800/50 transition-colors">
                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">31. Fest Noc</td>
                                            <td className="py-2 px-2 text-center text-indigo-300">
-                                              <input type="number" step="0.1" value={overrides[`${selectedWorkerData.cedula}_tot_hr_fes_noc`] !== undefined ? overrides[`${selectedWorkerData.cedula}_tot_hr_fes_noc`] : Number(tFesNoc).toFixed(1)} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_fes_noc`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
+                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_fes_noc`]} fallback={tFesNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_fes_noc`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
                                            </td>
                                            <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">210%</span></td>
                                            <td className="py-2 px-2 text-right">
                                               <div className="flex justify-end items-center gap-1">
                                                  <span className="text-indigo-400">$</span>
-                                                 <input type="number" value={vFesNoc} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_vr_fes_noc`, e.target.value)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" />
+                                                 <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_fes_noc`]} fallback={vFesNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_fes_noc`, val)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" decimals={0} />
                                               </div>
                                            </td>
                                         </tr>
                                         <tr className="hover:bg-slate-800/50 transition-colors">
                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">32. Extra Diurna</td>
                                            <td className="py-2 px-2 text-center text-emerald-300">
-                                              <input type="number" step="0.1" value={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_diu`] !== undefined ? overrides[`${selectedWorkerData.cedula}_tot_hr_ext_diu`] : Number(horasExtraDiurnaReal).toFixed(1)} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_diu`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
+                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_diu`]} fallback={horasExtraDiurnaReal} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_diu`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
                                            </td>
                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">150%</span></td>
                                            <td className="py-2 px-2 text-right">
                                               <div className="flex justify-end items-center gap-1">
                                                  <span className="text-emerald-400">$</span>
-                                                 <input type="number" value={vExtDiu} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_diu`, e.target.value)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" />
+                                                 <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_ext_diu`]} fallback={vExtDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_diu`, val)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" decimals={0} />
                                               </div>
                                            </td>
                                         </tr>
                                         <tr className="hover:bg-slate-800/50 transition-colors">
                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">33. Extra Noc</td>
                                            <td className="py-2 px-2 text-center text-emerald-300">
-                                              <input type="number" step="0.1" value={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_noc`] !== undefined ? overrides[`${selectedWorkerData.cedula}_tot_hr_ext_noc`] : Number(totalExtraNoc).toFixed(1)} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_noc`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
+                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_noc`]} fallback={totalExtraNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_noc`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
                                            </td>
                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">150%</span></td>
                                            <td className="py-2 px-2 text-right">
                                               <div className="flex justify-end items-center gap-1">
                                                  <span className="text-emerald-400">$</span>
-                                                 <input type="number" value={vExtNoc} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_noc`, e.target.value)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" />
+                                                 <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_ext_noc`]} fallback={vExtNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_noc`, val)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" decimals={0} />
                                               </div>
                                            </td>
                                         </tr>
                                         <tr className="hover:bg-slate-800/50 transition-colors">
                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">34. Ext Fes Diu</td>
                                            <td className="py-2 px-2 text-center text-emerald-300">
-                                              <input type="number" step="0.1" value={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`] !== undefined ? overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`] : Number(totalExtFesDiu).toFixed(1)} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
+                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`]} fallback={totalExtFesDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
                                            </td>
                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">200%</span></td>
                                            <td className="py-2 px-2 text-right">
                                               <div className="flex justify-end items-center gap-1">
                                                  <span className="text-emerald-400">$</span>
-                                                 <input type="number" value={vExtFesDiu} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_fes_diu`, e.target.value)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" />
+                                                 <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_ext_fes_diu`]} fallback={vExtFesDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_fes_diu`, val)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" decimals={0} />
                                               </div>
                                            </td>
                                         </tr>
                                         <tr className="hover:bg-slate-800/50 transition-colors">
                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">35. Ext Fes Noc</td>
                                            <td className="py-2 px-2 text-center text-emerald-300">
-                                              <input type="number" step="0.1" value={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`] !== undefined ? overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`] : Number(totalExtFesNoc).toFixed(1)} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`, e.target.value)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
+                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`]} fallback={totalExtFesNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
                                            </td>
                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">200%</span></td>
                                            <td className="py-2 px-2 text-right">
                                               <div className="flex justify-end items-center gap-1">
                                                  <span className="text-emerald-400">$</span>
-                                                 <input type="number" value={vExtFesNoc} onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_fes_noc`, e.target.value)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" />
+                                                 <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_ext_fes_noc`]} fallback={vExtFesNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_fes_noc`, val)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" decimals={0} />
                                               </div>
                                            </td>
                                         </tr>

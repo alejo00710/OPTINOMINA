@@ -9,6 +9,7 @@ import EditableCell from "@/components/Nomina/EditableCell";
 import TabPanelGeneral from "@/components/Nomina/TabPanelGeneral";
 import TabColillas from "@/components/Nomina/TabColillas";
 import TabLiquidacion from "@/components/Nomina/TabLiquidacion";
+import TabHistorico from "@/components/Nomina/TabHistorico";
 import { NOMINA_DATE_RANGE_KEY, loadPersistedDateRange, savePersistedDateRange, PLANILLA_COLUMNS, DAILY_COLUMNS, LIQUIDATION_CONCEPTS, SMLV, AUX_TRANSPORTE, DIVISOR_RECARGOS_NOCTURNOS, DIVISOR_HORAS_EXTRAS, FACTOR_RECARGO_NOCTURNO, FACTOR_EXTRA_DIURNA, FACTOR_EXTRA_NOCTURNA, FACTOR_EXTRA_FESTIVA, FACTOR_EXTRA_FESTIVA_NOCTURNA, HORA_INICIO_DIURNA, HORA_FIN_DIURNA } from "@/utils/constants";
 import { timeStrToDecimal, decimalToTimeStr, diffTimeStr, getDecimalHours, getHourDist, fmtCOP, fmtDec, parseLocalNumber, calculateDailyRecord } from "@/utils/mathNomina";
 import { supabase, savePayrollToCloud, loadPayrollFromCloud, loadEmployeesFromCloud, uploadEmployeesBulk } from "@/utils/supabase";
@@ -50,6 +51,8 @@ export default function NominaPage() {
 
   // Toast notification state
   const [toast, setToast] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
 
   // File upload state
   const [uploadStatus, setUploadStatus] = useState({
@@ -69,26 +72,47 @@ export default function NominaPage() {
 
   useEffect(() => {
     setIsClient(true);
-    try {
-      const saved = localStorage.getItem("optinomina_draft");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.attendanceLogs) setAttendanceLogs(parsed.attendanceLogs);
-        if (parsed.overrides) setOverrides(parsed.overrides);
-      }
-    } catch (e) {
-      console.error("Error parsing optinomina_draft", e);
-    }
     setDataLoaded(true);
   }, []);
 
   const handleSaveDraft = () => {
     localStorage.setItem('optinomina_draft', JSON.stringify({ attendanceLogs, overrides }));
-    setToast({
-      message: "Borrador guardado con éxito. Puedes recargar la página sin perder datos.",
-      type: "success"
-    });
-    setTimeout(() => setToast(null), 4000);
+    setIsSaving(true);
+    setTimeout(() => {
+      setIsSaving(false);
+    }, 2000);
+  };
+
+  const handleCloseQuincena = async () => {
+    setIsClosing(true);
+    try {
+      const payload = {
+        identificador: selectedWorkerData?.nombre || 'General',
+        rango_quincena: `${startDate} a ${endDate}`,
+        payload_json: { attendanceLogs, overrides }
+      };
+
+      const { error } = await supabase
+        .from('historial_nominas')
+        .insert([payload]);
+
+      if (error) throw error;
+
+      setToast({
+        message: "¡Nómina cerrada y enviada al histórico con éxito!",
+        type: "success"
+      });
+      setTimeout(() => setToast(null), 4000);
+    } catch (error) {
+      console.error("Error al cerrar quincena:", error);
+      setToast({
+        message: "Error al guardar el histórico",
+        type: "error"
+      });
+      setTimeout(() => setToast(null), 4000);
+    } finally {
+      setIsClosing(false);
+    }
   };
 
   const loadEmployees = async () => {
@@ -126,8 +150,30 @@ export default function NominaPage() {
 
         // TAREA 3: Iniciar en blanco (solo cargar masterEmployees y estados vacíos)
         setNominaRows(masterEmployees);
-        setAttendanceLogs({});
-        setOverrides({});
+
+        const localDraft = typeof window !== 'undefined' ? localStorage.getItem('optinomina_draft') : null;
+        let blockReset = false;
+
+        if (localDraft) {
+          try {
+            const parsedDraft = JSON.parse(localDraft);
+            if (parsedDraft.attendanceLogs && Object.keys(parsedDraft.attendanceLogs).length > 0) {
+              setAttendanceLogs(parsedDraft.attendanceLogs);
+              setOverrides(parsedDraft.overrides || {});
+              blockReset = true;
+              console.log("✅ Borrador restaurado, ignorando plantillas vacías.");
+            }
+          } catch (e) {
+            console.error("Error leyendo borrador:", e);
+          }
+        }
+
+        if (blockReset) {
+          console.warn("Candado Activo: Se intentó limpiar la grilla, pero hay un borrador guardado. Borrado interceptado.");
+        } else {
+          setAttendanceLogs({});
+          setOverrides({});
+        }
       } catch (e) {
         console.error("Error loading persisted payroll data from cloud:", e);
       } finally {
@@ -227,19 +273,29 @@ export default function NominaPage() {
       const valDia = salarioBase / 30;
       const sueldoBasico = resolveValue(overrides, `${cedula}_sueldo`, () => parseLocalNumber(valDia * diasPagados));
 
+      // Allow global overrides for the summed hours
+      const finalDiurnas = resolveValue(overrides, `${cedula}_horas_diurnas`, () => sumDiurnas);
+      const finalNocturnas = resolveValue(overrides, `${cedula}_horas_nocturnas`, () => sumNocturnas);
+      const finalFesDiu = resolveValue(overrides, `${cedula}_festivas_diurnas`, () => sumFesDiu);
+      const finalFesNoc = resolveValue(overrides, `${cedula}_festivas_nocturnas`, () => sumFesNoc);
+      const finalExtDiu = resolveValue(overrides, `${cedula}_extras_diurnas`, () => sumExtDiu);
+      const finalExtNoc = resolveValue(overrides, `${cedula}_extras_nocturnas`, () => sumExtNoc);
+      const finalExtFesDiu = resolveValue(overrides, `${cedula}_extras_festivas`, () => sumExtFesDiu);
+      const finalExtFesNoc = resolveValue(overrides, `${cedula}_extras_festivas_nocturnas`, () => sumExtFesNoc);
+
       // 2. Cálculo de Valores (Fórmulas Excel Columnas N a R)
-      const extraDiurnaNeto = sumExtDiu - horasDebe > 0 ? sumExtDiu - horasDebe : 0;
-      const horasPendientes = extraDiurnaNeto + sumExtNoc + sumExtFesDiu + sumExtFesNoc;
+      const extraDiurnaNeto = finalExtDiu - horasDebe > 0 ? finalExtDiu - horasDebe : 0;
+      const horasPendientes = extraDiurnaNeto + finalExtNoc + finalExtFesDiu + finalExtFesNoc;
 
       // Nota: Usamos las variables de DIVISOR y FACTOR importadas de constants.js (240 por defecto)
-      const valRecargoNocturno = resolveValue(overrides, `${cedula}_recargo_nocturno`, () => parseLocalNumber((salarioBase / DIVISOR_RECARGOS_NOCTURNOS) * FACTOR_RECARGO_NOCTURNO * sumNocturnas));
+      const valRecargoNocturno = resolveValue(overrides, `${cedula}_recargo_nocturno`, () => parseLocalNumber((salarioBase / DIVISOR_RECARGOS_NOCTURNOS) * FACTOR_RECARGO_NOCTURNO * finalNocturnas));
       const valExtDiurna = resolveValue(overrides, `${cedula}_val_extras_diurnas`, () => parseLocalNumber((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_DIURNA * extraDiurnaNeto));
-      const valExtNocturna = resolveValue(overrides, `${cedula}_val_extras_nocturnas`, () => parseLocalNumber((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_NOCTURNA * sumExtNoc));
+      const valExtNocturna = resolveValue(overrides, `${cedula}_val_extras_nocturnas`, () => parseLocalNumber((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_NOCTURNA * finalExtNoc));
       
-      const valExtFesDiuRaw = (salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_FESTIVA * sumExtFesDiu;
+      const valExtFesDiuRaw = (salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_FESTIVA * finalExtFesDiu;
       const valExtFesTotal = resolveValue(overrides, `${cedula}_val_extras_festivas`, () => parseLocalNumber(valExtFesDiuRaw));
       
-      const valExtFesNocRaw = (salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_FESTIVA_NOCTURNA * sumExtFesNoc;
+      const valExtFesNocRaw = (salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_FESTIVA_NOCTURNA * finalExtFesNoc;
       const valExtFesNocTotal = resolveValue(overrides, `${cedula}_val_extras_festivas_nocturnas`, () => parseLocalNumber(valExtFesNocRaw));
 
       const comisiones = resolveValue(overrides, `${cedula}_comisiones`, () => 0);
@@ -290,14 +346,14 @@ export default function NominaPage() {
         dias_pagados: diasPagados,
         horas_debe: horasDebe,
         horas_pendientes: horasPendientes,
-        horas_diurnas: sumDiurnas,
-        horas_nocturnas: sumNocturnas,
-        festivas_diurnas: sumFesDiu,
-        festivas_nocturnas: sumFesNoc,
-        extras_diurnas: sumExtDiu,
-        extras_nocturnas: sumExtNoc,
-        extras_festivas: sumExtFesDiu,
-        extras_festivas_nocturnas: sumExtFesNoc,
+        horas_diurnas: finalDiurnas,
+        horas_nocturnas: finalNocturnas,
+        festivas_diurnas: finalFesDiu,
+        festivas_nocturnas: finalFesNoc,
+        extras_diurnas: finalExtDiu,
+        extras_nocturnas: finalExtNoc,
+        extras_festivas: finalExtFesDiu,
+        extras_festivas_nocturnas: finalExtFesNoc,
         sueldo: sueldoBasico,
         recargo_nocturno: valRecargoNocturno,
         val_extras_diurnas: valExtDiurna,
@@ -426,7 +482,7 @@ export default function NominaPage() {
   const handleCellEdit = (cellKey, val) => {
     setOverrides(prev => ({
       ...prev,
-      [cellKey]: parseLocalNumber(val)
+      [cellKey]: val
     }));
   };
   
@@ -682,31 +738,26 @@ const handleSaveToCloud = async () => {
         <div className="flex gap-2 shrink-0 w-full md:w-auto justify-end flex-wrap">
           <button
             onClick={handleSaveDraft}
-            className="bg-blue-600 text-white px-4 py-2 rounded font-bold hover:bg-blue-700 shadow-md transition-all active:scale-95 duration-200 text-xs inline-flex items-center gap-2"
+            className={
+              isSaving
+                ? "bg-emerald-500 text-white px-4 py-2 rounded font-bold transition-colors duration-300 text-xs inline-flex items-center gap-2"
+                : "bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold transition-colors duration-300 active:scale-95 text-xs inline-flex items-center gap-2 shadow-md"
+            }
           >
-            💾 Guardar Borrador
+            {isSaving ? "✅ ¡Guardado con éxito!" : "💾 Guardar Borrador"}
           </button>
 
           <button
-            disabled
-            className="bg-emerald-600 opacity-50 cursor-not-allowed text-white px-4 py-2 rounded font-bold shadow-md text-xs inline-flex items-center gap-2"
+            onClick={handleCloseQuincena}
+            disabled={isClosing}
+            className={
+              isClosing
+                ? "bg-emerald-600 opacity-70 cursor-wait text-white px-4 py-2 rounded font-bold shadow-md text-xs inline-flex items-center gap-2 transition-all"
+                : "bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded font-bold shadow-md text-xs inline-flex items-center gap-2 transition-all active:scale-95 duration-200"
+            }
           >
-            ✅ Cerrar Quincena (Próximamente)
+            {isClosing ? "⏳ Guardando en la nube..." : "✅ Cerrar Quincena"}
           </button>
-
-          <button
-            onClick={handleSaveToCloud}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-emerald-100 active:scale-95 duration-200"
-          >
-            <CheckCircle2 size={14} />
-            Guardar Cambios
-          </button>
-
-          <label className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all shadow-md active:scale-95 duration-200 cursor-pointer">
-            <RotateCcw size={14} className="rotate-180" />
-            Cargar Backup
-            <input type="file" accept=".json" onChange={handleImportBackup} className="hidden" />
-          </label>
         </div>
       </div>
 
@@ -720,7 +771,7 @@ const handleSaveToCloud = async () => {
             onClick={() => setActiveTab("dashboard")}
             className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === "dashboard" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
           >
-            📊 Panel General
+            📊 Nómina
           </button>
           <button
             onClick={() => setActiveTab("liquidacion")}
@@ -730,9 +781,9 @@ const handleSaveToCloud = async () => {
           </button>
           <button
             onClick={() => setActiveTab("directorio")}
-            className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all ${activeTab === "directorio" ? "bg-slate-900 text-white shadow-md" : "text-slate-500 hover:bg-slate-200/50"}`}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === "directorio" ? "bg-slate-900 text-white shadow-md" : "text-slate-500 hover:bg-slate-200/50"}`}
           >
-            Directorio HR
+            📇 DIRECTORIO
           </button>
           <button
             onClick={() => setActiveTab("colilla")}
@@ -745,6 +796,12 @@ const handleSaveToCloud = async () => {
             className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === "reportes" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
           >
             📈 Reportes
+          </button>
+          <button
+            onClick={() => setActiveTab("historico")}
+            className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === "historico" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+          >
+            ⏳ Histórico
           </button>
         </div>
       )}
@@ -764,7 +821,7 @@ const handleSaveToCloud = async () => {
       {activeTab === "directorio" && (
         <TabDirectorio 
           employees={nominaRows} 
-          onRefresh={loadEmployees} 
+          refreshEmployees={loadEmployees} 
         />
       )}
       
@@ -806,14 +863,6 @@ const handleSaveToCloud = async () => {
                 </select>
               </div>
 
-
-        <ColumnVisibilityToggle 
-          hiddenColumns={hiddenColumns}
-          setHiddenColumns={setHiddenColumns}
-          showColumnManager={showColumnManager}
-          setShowColumnManager={setShowColumnManager}
-          PLANILLA_COLUMNS={PLANILLA_COLUMNS}
-        />
             </div>
           </div>
         </section>
@@ -873,6 +922,11 @@ const handleSaveToCloud = async () => {
           endDate={endDate}
         />
       )}
+
+      {/* --- TAB: HISTÓRICO --- */}
+      {activeTab === "historico" && (
+        <TabHistorico />
+      )}
       {/* Info Alert footer bar */}
       <div className="p-6 bg-slate-100 rounded-[1.5rem] border border-slate-200/60 flex items-start gap-4 shadow-sm mt-6">
         <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center text-white shrink-0 shadow-inner">
@@ -907,12 +961,23 @@ const handleSaveToCloud = async () => {
           <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500 bg-emerald-100 px-3 py-1 rounded-lg">Auditora de Liquidacin</span>
           <h3 className="font-black text-2xl text-slate-900 mt-2">{detailsWorkerName}</h3>
         </div>
-        <button 
-          onClick={() => setIsDetailsModalOpen(false)} 
-          className="w-10 h-10 flex items-center justify-center bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 hover:text-rose-600 rounded-full text-slate-400 transition-all shadow-sm"
-        >
-          
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => {
+              handleSaveDraft();
+              setIsDetailsModalOpen(false);
+            }}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all active:scale-95 text-sm inline-flex items-center gap-2"
+          >
+            💾 Guardar Cambios
+          </button>
+          <button 
+            onClick={() => setIsDetailsModalOpen(false)} 
+            className="w-10 h-10 flex items-center justify-center bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 hover:text-rose-600 rounded-full text-slate-400 transition-all shadow-sm font-bold text-lg"
+          >
+            ×
+          </button>
+        </div>
       </div>
       
       {/* Cuerpo Scrollable con Grid de 40 columnas */}
@@ -936,6 +1001,7 @@ const handleSaveToCloud = async () => {
                         value={val}
                         onChange={(newVal) => handleCellEdit(cKey, newVal)}
                         isOverridden={overrides[cKey] !== undefined}
+                        isCalculated={col.isCalculated}
                         isCurrency={col.isCurrency}
                         isDecimal={col.isDecimal}
                      />

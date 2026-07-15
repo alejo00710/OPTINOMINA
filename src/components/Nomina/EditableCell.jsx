@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { fmtCOP, parseLocalNumber } from "@/utils/mathNomina";
 
-export default function EditableCell({ value, onChange, isOverridden, isCurrency = false, isDecimal = false }) {
+export default function EditableCell({ value, onChange, isOverridden, isCalculated = false, isCurrency = false, isDecimal = false }) {
   const [isEditing, setIsEditing] = useState(false);
   const [localVal, setLocalVal] = useState(value);
 
@@ -20,10 +20,16 @@ export default function EditableCell({ value, onChange, isOverridden, isCurrency
     onChange(cleanNum);
   };
 
+  const getContainerClasses = () => {
+    if (isOverridden) return 'bg-amber-50/50 hover:bg-amber-100/50';
+    if (isCalculated) return 'bg-indigo-50/50 border border-indigo-200 hover:bg-indigo-100/50';
+    return 'hover:bg-slate-100/50';
+  };
+
   return (
     <div
-      className={`relative group px-3 py-2 -mx-3 -my-2 rounded-lg transition-all duration-200 cursor-text
-      ${isOverridden ? 'bg-amber-50/50' : 'hover:bg-slate-100/50'}`}
+      title={isCalculated && !isOverridden ? "Dato calculado desde Liquidación" : ""}
+      className={`relative group px-3 py-2 -mx-3 -my-2 rounded-lg transition-all duration-200 cursor-text ${getContainerClasses()}`}
       onClick={() => setIsEditing(true)}
     >
       {isOverridden && (

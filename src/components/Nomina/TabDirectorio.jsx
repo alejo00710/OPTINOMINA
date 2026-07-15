@@ -4,7 +4,7 @@ import { upsertEmployeeRecord, toggleEmployeeStatus } from '@/utils/supabase';
 import EmployeeEditorModal from './EmployeeEditorModal';
 import { fmtCOP, parseLocalNumber } from "@/utils/mathNomina";
 
-export default function TabDirectorio({ employees, onRefresh }) {
+export default function TabDirectorio({ employees, refreshEmployees }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
 
@@ -20,13 +20,13 @@ export default function TabDirectorio({ employees, onRefresh }) {
   const handleSave = async (empData, alreadySaved = false) => {
     if (alreadySaved) {
       setIsModalOpen(false);
-      if (onRefresh) onRefresh();
+      if (refreshEmployees) refreshEmployees();
       return;
     }
     const res = await upsertEmployeeRecord(empData);
     if (res.success) {
       setIsModalOpen(false);
-      if (onRefresh) onRefresh();
+      if (refreshEmployees) refreshEmployees();
     } else {
       alert("Error guardando empleado.");
     }
@@ -35,8 +35,8 @@ export default function TabDirectorio({ employees, onRefresh }) {
   const handleToggleStatus = async (cedula, currentStatus) => {
     if (window.confirm(`¿Seguro que deseas ${currentStatus ? 'desactivar' : 'activar'} a este empleado?`)) {
       const res = await toggleEmployeeStatus(cedula, currentStatus);
-      if (res.success && onRefresh) {
-        onRefresh();
+      if (res.success && refreshEmployees) {
+        refreshEmployees();
       }
     }
   };
@@ -67,6 +67,8 @@ export default function TabDirectorio({ employees, onRefresh }) {
               <th className="py-4 px-6">Nombre Completo</th>
               <th className="py-4 px-6">Cargo</th>
               <th className="py-4 px-6">Categoría</th>
+              <th className="py-4 px-6">Banco</th>
+              <th className="py-4 px-6">Vinculación</th>
               <th className="py-4 px-6">Salario Base</th>
               <th className="py-4 px-6">Rodamiento</th>
               <th className="py-4 px-6">Préstamos</th>
@@ -84,6 +86,12 @@ export default function TabDirectorio({ employees, onRefresh }) {
                 <td className="py-3 px-6 text-sm text-slate-600">
                   <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold">
                     {emp.categoria}
+                  </span>
+                </td>
+                <td className="py-3 px-6 text-sm text-slate-600 font-medium">{emp.banco || '-'}</td>
+                <td className="py-3 px-6 text-sm text-slate-600 font-medium">
+                  <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${emp.tipo_vinculacion === 'Temporal' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                    {emp.tipo_vinculacion || 'Empresa'}
                   </span>
                 </td>
                 <td className="py-3 px-6 text-sm text-slate-900 font-bold">{fmtCOP(emp.salario_base || emp.salario)}</td>
@@ -116,7 +124,7 @@ export default function TabDirectorio({ employees, onRefresh }) {
             ))}
             {employees.length === 0 && (
               <tr>
-                <td colSpan="10" className="py-12 text-center text-slate-500">No hay empleados registrados.</td>
+                <td colSpan="12" className="py-12 text-center text-slate-500">No hay empleados registrados.</td>
               </tr>
             )}
           </tbody>
@@ -127,7 +135,7 @@ export default function TabDirectorio({ employees, onRefresh }) {
         isOpen={isModalOpen} 
         onClose={handleCloseModal} 
         employee={selectedEmployee} 
-        onSaveSuccess={onRefresh} 
+        refreshEmployees={refreshEmployees} 
       />
     </div>
   );

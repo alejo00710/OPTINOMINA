@@ -117,11 +117,11 @@ export const PLANILLA_COLUMNS = [
   { key: "salario", label: "Salario Base", letter: "F", type: "number", isCurrency: true, editable: true },
   { key: "dias_pagados", label: "Días Pagados", letter: "G", type: "number", center: true, editable: true },
   
-  { key: "horas_diurnas", label: "Hrs Diurnas (H)", letter: "H", type: "number", isDecimal: true, center: true, bg: "bg-blue-500/5", editable: true },
-  { key: "horas_nocturnas", label: "Hrs Nocturnas (I)", letter: "I", type: "number", isDecimal: true, center: true, bg: "bg-blue-500/5", editable: true },
-  { key: "extras_diurnas", label: "Ext Diurnas (J)", letter: "J", type: "number", isDecimal: true, center: true, bg: "bg-blue-500/5", editable: true },
-  { key: "extras_nocturnas", label: "Ext Nocturnas (K)", letter: "K", type: "number", isDecimal: true, center: true, bg: "bg-blue-500/5", editable: true },
-  { key: "extras_festivas", label: "Ext Festivas (L)", letter: "L", type: "number", isDecimal: true, center: true, bg: "bg-blue-500/5", editable: true },
+  { key: "horas_diurnas", label: "Hrs Diurnas (H)", letter: "H", type: "number", isDecimal: true, center: true, isCalculated: true, editable: true },
+  { key: "horas_nocturnas", label: "Hrs Nocturnas (I)", letter: "I", type: "number", isDecimal: true, center: true, isCalculated: true, editable: true },
+  { key: "extras_diurnas", label: "Ext Diurnas (J)", letter: "J", type: "number", isDecimal: true, center: true, isCalculated: true, editable: true },
+  { key: "extras_nocturnas", label: "Ext Nocturnas (K)", letter: "K", type: "number", isDecimal: true, center: true, isCalculated: true, editable: true },
+  { key: "extras_festivas", label: "Ext Festivas (L)", letter: "L", type: "number", isDecimal: true, center: true, isCalculated: true, editable: true },
   
   { key: "sueldo", label: "Sueldo (M)", letter: "M", type: "number", isCurrency: true, editable: true },
   { key: "recargo_nocturno", label: "Recargo Noct (N)", letter: "N", type: "number", isCurrency: true, editable: true },
