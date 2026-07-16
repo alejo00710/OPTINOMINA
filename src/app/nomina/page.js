@@ -10,7 +10,8 @@ import TabPanelGeneral from "@/components/Nomina/TabPanelGeneral";
 import TabColillas from "@/components/Nomina/TabColillas";
 import TabLiquidacion from "@/components/Nomina/TabLiquidacion";
 import TabHistorico from "@/components/Nomina/TabHistorico";
-import { NOMINA_DATE_RANGE_KEY, loadPersistedDateRange, savePersistedDateRange, PLANILLA_COLUMNS, DAILY_COLUMNS, LIQUIDATION_CONCEPTS, SMLV, AUX_TRANSPORTE, DIVISOR_RECARGOS_NOCTURNOS, DIVISOR_HORAS_EXTRAS, FACTOR_RECARGO_NOCTURNO, FACTOR_EXTRA_DIURNA, FACTOR_EXTRA_NOCTURNA, FACTOR_EXTRA_FESTIVA, FACTOR_EXTRA_FESTIVA_NOCTURNA, HORA_INICIO_DIURNA, HORA_FIN_DIURNA } from "@/utils/constants";
+import FormulaEditorModal from "@/components/Nomina/FormulaEditorModal";
+import { NOMINA_DATE_RANGE_KEY, loadPersistedDateRange, savePersistedDateRange, PLANILLA_COLUMNS, DAILY_COLUMNS, LIQUIDATION_CONCEPTS, DEFAULT_FORMULAS, SMLV, AUX_TRANSPORTE, MINIMO_DIARIO_INCAPACIDAD, evaluateFormula, DIVISOR_RECARGOS_NOCTURNOS, DIVISOR_HORAS_EXTRAS, FACTOR_RECARGO_NOCTURNO, FACTOR_EXTRA_DIURNA, FACTOR_EXTRA_NOCTURNA, FACTOR_EXTRA_FESTIVA, FACTOR_EXTRA_FESTIVA_NOCTURNA, HORA_INICIO_DIURNA, HORA_FIN_DIURNA } from "@/utils/constants";
 import { timeStrToDecimal, decimalToTimeStr, diffTimeStr, getDecimalHours, getHourDist, fmtCOP, fmtDec, parseLocalNumber, calculateDailyRecord } from "@/utils/mathNomina";
 import { supabase, savePayrollToCloud, loadPayrollFromCloud, loadEmployeesFromCloud, uploadEmployeesBulk } from "@/utils/supabase";
 import { detectShiftTemplate, emptyAttendanceDay, cleanWorkerPunches, parseBiometricCSV, findEmployeeMatch } from "@/utils/biometricCore";
@@ -47,6 +48,36 @@ export default function NominaPage() {
   const [showColumnManager, setShowColumnManager] = useState(false);
 
   const [selectedWorkerName, setSelectedWorkerName] = useState("");
+
+  const [activeFormulas, setActiveFormulas] = useState(DEFAULT_FORMULAS);
+
+  useEffect(() => {
+    const savedFormulas = localStorage.getItem('optinomina_global_formulas');
+    if (savedFormulas) {
+      setActiveFormulas({ ...DEFAULT_FORMULAS, ...JSON.parse(savedFormulas) });
+    }
+  }, []);
+
+  const [formulaConfig, setFormulaConfig] = useState({ isOpen: false, fieldId: null, currentFormula: '' });
+
+  const handleOpenFormulaEditor = (campoId) => {
+    const formulaBase = activeFormulas[campoId] || '';
+    setFormulaConfig({ isOpen: true, fieldId: campoId, currentFormula: formulaBase });
+  };
+
+  const handleSaveFormula = (newFormula) => {
+    const campoId = formulaConfig.fieldId;
+    const updatedFormulas = { ...activeFormulas, [campoId]: newFormula };
+    setActiveFormulas(updatedFormulas);
+    localStorage.setItem('optinomina_global_formulas', JSON.stringify(updatedFormulas));
+    
+    setToast({
+      message: "¡Fórmula global actualizada!",
+      type: "success"
+    });
+    setTimeout(() => setToast(null), 4000);
+    setFormulaConfig({ ...formulaConfig, isOpen: false });
+  };
 
 
   // Toast notification state
@@ -87,9 +118,14 @@ export default function NominaPage() {
     setIsClosing(true);
     try {
       const payload = {
-        identificador: selectedWorkerData?.nombre || 'General',
-        rango_quincena: `${startDate} a ${endDate}`,
-        payload_json: { attendanceLogs, overrides }
+        identificador: 'NÓMINA GENERAL',
+        rango_quincena: `${startDate} al ${endDate}`,
+        payload_json: {
+          rango_fechas: { inicio: startDate, fin: endDate },
+          asistencias_globales: attendanceLogs,
+          modificaciones_manuales: overrides,
+          nomina_calculada: typeof filteredPayrollData !== 'undefined' ? filteredPayrollData : nominaRows
+        }
       };
 
       const { error } = await supabase
@@ -97,6 +133,11 @@ export default function NominaPage() {
         .insert([payload]);
 
       if (error) throw error;
+
+      // Limpieza de estado local tras guardado exitoso
+      localStorage.removeItem('optinomina_draft');
+      setOverrides({});
+      setAttendanceLogs({});
 
       setToast({
         message: "¡Nómina cerrada y enviada al histórico con éxito!",
@@ -127,6 +168,8 @@ export default function NominaPage() {
             nombre: emp.nombre,
             cargo: emp.cargo,
             categoria: emp.categoria,
+            banco: emp.banco || "",
+            tipo_vinculacion: emp.tipo_vinculacion || "",
             salario: Number(emp.salario_base || emp.salario || 0),
             aux_transporte: Number(emp.aux_transporte || 0),
             rodamiento: Number(emp.rodamiento || 0),
@@ -269,9 +312,7 @@ export default function NominaPage() {
       const diasPagados = resolveValue(overrides, `${cedula}_dias_pagados`, () => (diasLaborados > 0 ? diasLaborados : 15));
       const horasDebe = resolveValue(overrides, `${cedula}_horas_que_debe`, () => Number(emp.horas_debe || 0));
       
-      const salarioBase = Number(emp.salario_base || emp.salario || 0);
-      const valDia = salarioBase / 30;
-      const sueldoBasico = resolveValue(overrides, `${cedula}_sueldo`, () => parseLocalNumber(valDia * diasPagados));
+      const salarioBase = resolveValue(overrides, `${cedula}_salario_base`, () => Number(emp.salario_base || emp.salario || 0));
 
       // Allow global overrides for the summed hours
       const finalDiurnas = resolveValue(overrides, `${cedula}_horas_diurnas`, () => sumDiurnas);
@@ -283,50 +324,12 @@ export default function NominaPage() {
       const finalExtFesDiu = resolveValue(overrides, `${cedula}_extras_festivas`, () => sumExtFesDiu);
       const finalExtFesNoc = resolveValue(overrides, `${cedula}_extras_festivas_nocturnas`, () => sumExtFesNoc);
 
-      // 2. Cálculo de Valores (Fórmulas Excel Columnas N a R)
       const extraDiurnaNeto = finalExtDiu - horasDebe > 0 ? finalExtDiu - horasDebe : 0;
       const horasPendientes = extraDiurnaNeto + finalExtNoc + finalExtFesDiu + finalExtFesNoc;
-
-      // Nota: Usamos las variables de DIVISOR y FACTOR importadas de constants.js (240 por defecto)
-      const valRecargoNocturno = resolveValue(overrides, `${cedula}_recargo_nocturno`, () => parseLocalNumber((salarioBase / DIVISOR_RECARGOS_NOCTURNOS) * FACTOR_RECARGO_NOCTURNO * finalNocturnas));
-      const valExtDiurna = resolveValue(overrides, `${cedula}_val_extras_diurnas`, () => parseLocalNumber((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_DIURNA * extraDiurnaNeto));
-      const valExtNocturna = resolveValue(overrides, `${cedula}_val_extras_nocturnas`, () => parseLocalNumber((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_NOCTURNA * finalExtNoc));
       
-      const valExtFesDiuRaw = (salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_FESTIVA * finalExtFesDiu;
-      const valExtFesTotal = resolveValue(overrides, `${cedula}_val_extras_festivas`, () => parseLocalNumber(valExtFesDiuRaw));
-      
-      const valExtFesNocRaw = (salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_FESTIVA_NOCTURNA * finalExtFesNoc;
-      const valExtFesNocTotal = resolveValue(overrides, `${cedula}_val_extras_festivas_nocturnas`, () => parseLocalNumber(valExtFesNocRaw));
-
       const comisiones = resolveValue(overrides, `${cedula}_comisiones`, () => 0);
-      
-      // Auxilio de Transporte (Columna S: =SI(F<=(SMLV*2);(AUX_TRANSPORTE/30)*G;0))
-      let auxTransporteCalculado = 0;
-      if (salarioBase <= (SMLV * 2)) {
-         auxTransporteCalculado = (AUX_TRANSPORTE / 30) * diasPagados;
-      }
-      // Respetar si hay un aux_transporte fijo en el perfil (para excepciones)
-      const auxTransporteFinal = resolveValue(overrides, `${cedula}_transporte`, () => parseLocalNumber(Number(emp.aux_transporte) > 0 ? Number(emp.aux_transporte) : auxTransporteCalculado));
-      
       const rodamiento = resolveValue(overrides, `${cedula}_rodamiento`, () => parseLocalNumber(Number(emp.rodamiento || 0)));
       const diasIncapacidad = resolveValue(overrides, `${cedula}_dias_incapacidad`, () => parseLocalNumber(Number(emp.dias_incapacidad || 0)));
-      const valDiarioIncap = ((salarioBase / 30) / 3) * 2;
-      const minDiario = SMLV / 30;
-      const calcIncap = diasIncapacidad > 0 ? diasIncapacidad * (valDiarioIncap > minDiario ? valDiarioIncap : minDiario) : 0;
-      const incapacidad = resolveValue(overrides, `${cedula}_incapacidad`, () => parseLocalNumber(calcIncap));
-      const bonificacion = resolveValue(overrides, `${cedula}_bonificacion`, () => 0);
-
-      // 3. Total Devengado (Columna W)
-      const totalDevengado = resolveValue(overrides, `${cedula}_total_devengados`, () => parseLocalNumber(sueldoBasico + valRecargoNocturno + valExtDiurna + valExtNocturna + valExtFesTotal + valExtFesNocTotal + comisiones + auxTransporteFinal + rodamiento + incapacidad));
-
-      // 4. Deducciones Base (Columnas X, Y, Z)
-      // Base para seguridad social (no incluye transporte ni rodamiento)
-      const baseSeguridadSocial = totalDevengado - auxTransporteFinal - rodamiento; 
-      const salud = resolveValue(overrides, `${cedula}_salud`, () => parseLocalNumber(baseSeguridadSocial * 0.04));
-      const pension = resolveValue(overrides, `${cedula}_pension`, () => parseLocalNumber(baseSeguridadSocial * 0.04));
-      const solidaridad = resolveValue(overrides, `${cedula}_solidaridad`, () => parseLocalNumber(salarioBase >= (SMLV * 4) ? (baseSeguridadSocial * 0.01) : 0));
-
-      // 5. Deducciones Fijas de la BD (Columnas AA a AH)
       const prestamos = resolveValue(overrides, `${cedula}_prestamos`, () => parseLocalNumber(Number(emp.prestamos || 0)));
       const polizaBolivar = resolveValue(overrides, `${cedula}_poliza_bolivar`, () => parseLocalNumber(Number(emp.poliza_bolivar || 0)));
       const polizaPlenitud = resolveValue(overrides, `${cedula}_poliza_plenitud`, () => parseLocalNumber(Number(emp.poliza_plenitud || 0)));
@@ -335,10 +338,68 @@ export default function NominaPage() {
       const optica = resolveValue(overrides, `${cedula}_optica`, () => parseLocalNumber(Number(emp.optica || 0)));
       const celular = resolveValue(overrides, `${cedula}_celular`, () => parseLocalNumber(Number(emp.celular || 0)));
       const retencion = resolveValue(overrides, `${cedula}_retencion`, () => parseLocalNumber(Number(emp.retencion || 0)));
+      const bonificacion = resolveValue(overrides, `${cedula}_bonificacion`, () => 0);
+      
+      // MOTOR MATEMÁTICO EN CASCADA
+      let variables = {
+        salario_base: salarioBase,
+        smlv: SMLV,
+        aux_transporte_base: Number(emp.aux_transporte) > 0 ? Number(emp.aux_transporte) : AUX_TRANSPORTE,
+        valor_diario_base: MINIMO_DIARIO_INCAPACIDAD,
+        dias_pagados: diasPagados,
+        horas_diurnas: finalDiurnas,
+        horas_nocturnas: finalNocturnas,
+        extras_diurnas: extraDiurnaNeto,
+        extras_nocturnas: finalExtNoc,
+        extras_festivas: finalExtFesDiu + finalExtFesNoc, // Agrupadas en una bolsa
+        dias_incapacidad: diasIncapacidad,
+        comisiones: comisiones,
+        rodamiento: rodamiento,
+        prestamos: prestamos,
+        poliza_bolivar: polizaBolivar,
+        poliza_plenitud: polizaPlenitud,
+        libranza_comfama: libranzaComfama,
+        poliza_sura: polizaSura,
+        optica: optica,
+        celular: celular,
+        retencion: retencion,
+        bonificacion: bonificacion,
+        bonificacion_no_salarial: bonificacion
+      };
 
-      // 6. Total Deducido y Neto (Columnas AI, AJ)
-      const totalDeducciones = resolveValue(overrides, `${cedula}_total_deducciones`, () => parseLocalNumber(salud + pension + solidaridad + prestamos + polizaBolivar + polizaPlenitud + libranzaComfama + polizaSura + optica + celular + retencion));
-      const netoPagar = resolveValue(overrides, `${cedula}_neto_pagar`, () => parseLocalNumber(totalDevengado - totalDeducciones + bonificacion)); // bonificacion no salarial
+      // Helper para evaluar, respetar overrides y guardar en scope variables
+      const computeField = (fieldId, formulaFallback = '') => {
+        const formulaStr = activeFormulas[fieldId] || formulaFallback;
+        const calcVal = evaluateFormula(formulaStr, variables);
+        // Fallback robusto al override
+        const finalVal = resolveValue(overrides, `${cedula}_${fieldId}`, () => parseLocalNumber(calcVal));
+        variables[fieldId] = finalVal;
+        return finalVal;
+      };
+
+      // Fase 1: Devengados Base
+      const sueldoBasico = computeField('sueldo');
+      const valRecargoNocturno = computeField('recargo_nocturno');
+      const valExtDiurna = computeField('val_extras_diurnas');
+      const valExtNocturna = computeField('val_extras_nocturnas');
+      const valExtFesTotal = computeField('val_extras_festivas'); 
+      const valExtFesNocTotal = resolveValue(overrides, `${cedula}_val_extras_festivas_nocturnas`, () => 0); // Descontinuada
+      const auxTransporteFinal = computeField('transporte');
+      const incapacidad = computeField('incapacidad');
+      
+      // Fase 2: Total Devengado
+      const totalDevengado = computeField('total_devengados');
+      
+      // Fase 3: Deducciones Base
+      const salud = computeField('salud');
+      const pension = computeField('pension');
+      const solidaridad = computeField('solidaridad');
+      
+      // Fase 4: Total Deducido y Neto
+      const totalDeducciones = computeField('total_deducciones');
+      const totalPagar = computeField('total_pagar');
+      const netoPagar = computeField('neto_pagar');
+      const verificacion = computeField('verificacion');
 
       return {
         masterRow: emp,
@@ -386,7 +447,7 @@ export default function NominaPage() {
         }
       };
     });
-  }, [nominaRows, attendanceLogs, overrides]);
+  }, [nominaRows, attendanceLogs, overrides, activeFormulas, startDate, endDate]);
 
   // Filtering based on SearchTerm and Position selector
   const filteredPayrollData = useMemo(() => {
@@ -987,14 +1048,41 @@ const handleSaveToCloud = async () => {
              const workerData = filteredPayrollData.find(d => d.masterRow.nombre === detailsWorkerName) || filteredPayrollData[0];
              if (!workerData) return null;
              
+             // 1. Campos que vienen de la pestaña Liquidación (Horas y Días)
+             const camposLiquidacion = [
+               'horas_diurnas', 'horas_nocturnas', 'extras_diurnas', 'extras_nocturnas', 'extras_festivas'
+             ];
+
+             // 2. Campos con fórmulas matemáticas en la nómina (Dinero y Totales)
+             const camposFormulados = [
+               'sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 
+               'transporte', 'incapacidad', 'total_devengados', 'salud', 'pension', 'solidaridad', 
+               'total_deducciones', 'total_pagar', 'neto_pagar', 'verificacion'
+             ];
+
              return PLANILLA_COLUMNS.map(col => {
                 const cKey = `${workerData.masterRow.cedula}_${col.key}`;
                 let val = overrides[cKey] !== undefined ? overrides[cKey] : (workerData[col.key] !== undefined ? workerData[col.key] : "");
                 if (col.isCurrency && val !== "") val = Math.round(Number(val));
                 
+                const isLiquidacion = camposLiquidacion.includes(col.key);
+                const isFormulated = camposFormulados.includes(col.key);
+                const hasBadge = isLiquidacion || isFormulated;
+
                 return (
-                  <div key={col.key} className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
-                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-emerald-600 transition-colors" title={col.label}>
+                  <div key={col.key} className="relative bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
+                     {isLiquidacion && (
+                       <div className="absolute top-2 right-2 text-[10px] text-amber-600 flex items-center gap-1 mb-1 justify-end font-semibold" title="Viene de Liquidación">
+                         <span>⏱️ Liquidación</span>
+                       </div>
+                     )}
+                     {isFormulated && (
+                       <div className="absolute top-2 right-2 text-[10px] text-indigo-500 flex items-center gap-1 mb-1 justify-end font-semibold">
+                          <span>✨ Formulado</span>
+                          <button onClick={() => handleOpenFormulaEditor(col.key)} className="hover:text-indigo-700 transition-colors p-1 rounded hover:bg-indigo-50" title="Editar Fórmula">⚙️</button>
+                        </div>
+                     )}
+                     <span className={`text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-emerald-600 transition-colors ${hasBadge ? 'pr-24' : ''}`} title={col.label}>
                        {col.label}
                      </span>
                      <EditableCell
@@ -1014,6 +1102,14 @@ const handleSaveToCloud = async () => {
     </div>
   </div>
 )}
+
+  <FormulaEditorModal
+    isOpen={formulaConfig.isOpen}
+    onClose={() => setFormulaConfig({ ...formulaConfig, isOpen: false })}
+    campoId={formulaConfig.fieldId}
+    currentFormula={formulaConfig.currentFormula}
+    onSave={handleSaveFormula}
+  />
   </>
 );
 }

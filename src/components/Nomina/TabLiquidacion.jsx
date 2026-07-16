@@ -351,8 +351,8 @@ export default function TabLiquidacion({
                    
                    <div className="space-y-4 mb-6">
                       {(() => {
-                         const sueldo = Number(overrides[`${selectedWorkerData.cedula}_sueldo`] !== undefined ? overrides[`${selectedWorkerData.cedula}_sueldo`] : (selectedWorkerData.salario || 0));
-                         const calcValor = (horas, porcentaje) => Math.round((sueldo / 240) * (porcentaje / 100) * (horas || 0));
+                         const salarioBase = Number(overrides[`${selectedWorkerData.cedula}_salario_base`] !== undefined ? overrides[`${selectedWorkerData.cedula}_salario_base`] : (selectedWorkerData.masterRow?.salario_base || selectedWorkerData.salario_base || selectedWorkerData.salario || 0));
+                         const calcValor = (horas, porcentaje) => Math.round((salarioBase / 240) * (porcentaje / 100) * (horas || 0));
                          
                          const horasDebe = Number(overrides[`${selectedWorkerData.cedula}_horas_que_debe`] !== undefined ? overrides[`${selectedWorkerData.cedula}_horas_que_debe`] : (selectedWorkerData.horas_debe || 0));
                          
@@ -409,8 +409,8 @@ export default function TabLiquidacion({
                                   <div className="w-28">
                                      <input
                                         type="number"
-                                        value={overrides[`${selectedWorkerData.cedula}_sueldo`] !== undefined ? overrides[`${selectedWorkerData.cedula}_sueldo`] : (selectedWorkerData.salario || "")}
-                                        onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_sueldo`, e.target.value)}
+                                        value={overrides[`${selectedWorkerData.cedula}_salario_base`] !== undefined ? overrides[`${selectedWorkerData.cedula}_salario_base`] : (selectedWorkerData.masterRow?.salario_base || selectedWorkerData.salario_base || selectedWorkerData.salario || "")}
+                                        onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_salario_base`, e.target.value)}
                                         className="w-full bg-slate-800 text-emerald-400 border-slate-700 text-sm font-bold rounded-lg px-3 py-1.5 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-right transition-all"
                                      />
                                   </div>

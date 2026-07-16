@@ -192,3 +192,34 @@ export const LIQUIDATION_CONCEPTS = [
   { key: "h_extra_festiva_nocturna", label: "Extras Festivas Nocturnas", pctKey: "h_extra_festiva_nocturna_pct", hrKey: "h_extra_festiva_nocturna_hr", valKey: "h_extra_festiva_nocturna_val", defaultPct: 2.5, textClass: "text-rose-900" }
 ];
 
+export const DEFAULT_FORMULAS = {
+  sueldo: '(salario_base / 30) * dias_pagados',
+  recargo_nocturno: '((salario_base / 230) * 0.35) * horas_nocturnas',
+  val_extras_diurnas: '(salario_base / 230) * 1.25 * extras_diurnas',
+  val_extras_nocturnas: '(salario_base / 230) * 1.75 * extras_nocturnas',
+  val_extras_festivas: '(salario_base / 230) * 2 * extras_festivas',
+  transporte: 'salario_base <= (smlv * 2) ? (aux_transporte_base / 30) * dias_pagados : 0',
+  incapacidad: '((salario_base / 30) / 3 * 2) > valor_diario_base ? ((salario_base / 30) / 3 * 2) * dias_incapacidad : valor_diario_base * dias_incapacidad',
+  total_devengados: 'sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + comisiones + transporte + rodamiento + incapacidad',
+  salud: '(sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + comisiones + incapacidad) * 0.04',
+  pension: '(sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + comisiones + incapacidad) * 0.04',
+  solidaridad: '(sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + comisiones + incapacidad) * 0.01',
+  total_deducciones: 'salud + pension + solidaridad + prestamos + poliza_bolivar + poliza_plenitud + libranza_comfama + poliza_sura + optica + celular + retencion',
+  total_pagar: 'total_devengados - total_deducciones',
+  neto_pagar: 'total_pagar + bonificacion_no_salarial',
+  verificacion: '(total_devengados + bonificacion_no_salarial) * 0.40'
+};
+
+export const evaluateFormula = (formulaStr, variables) => {
+  if (!formulaStr) return 0;
+  try {
+    const keys = Object.keys(variables);
+    const values = Object.values(variables);
+    const func = new Function(...keys, `return ${formulaStr};`);
+    const result = func(...values);
+    return isNaN(result) ? 0 : result;
+  } catch (e) {
+    console.error("Error evaluando fórmula:", formulaStr, e);
+    return 0;
+  }
+};

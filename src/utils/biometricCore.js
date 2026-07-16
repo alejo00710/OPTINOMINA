@@ -300,7 +300,14 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
       
       if (diffHours < (5 / 60)) continue; // Ignorar marcaciones dobles (menos de 5 mins)
 
-      if (diffHours > 8) {
+      // PRE-PROCESADOR DE TOLERANCIA NOCTURNA:
+      // Si el turno empezó después de las 17:00, y esta marca es de la mañana siguiente (hasta las 10:00)
+      // no partimos el turno, sino que lo emparejamos (moviendo lógicamente la marca al día D)
+      const shiftStartHour = new Date(currentShift[0].timestamp).getHours();
+      const pDate = new Date(p.timestamp);
+      const isNextMorning = pDate.getHours() <= 10 && (p.timestamp - currentShift[0].timestamp) <= 17 * 3600000;
+
+      if (diffHours > 8 && !(shiftStartHour >= 17 && isNextMorning)) {
         shifts.push([...currentShift]);
         currentShift = [p];
       } else {
