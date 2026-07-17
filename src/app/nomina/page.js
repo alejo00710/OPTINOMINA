@@ -16,10 +16,19 @@ import { timeStrToDecimal, decimalToTimeStr, diffTimeStr, getDecimalHours, getHo
 import { supabase, savePayrollToCloud, loadPayrollFromCloud, loadEmployeesFromCloud, uploadEmployeesBulk } from "@/utils/supabase";
 import { detectShiftTemplate, emptyAttendanceDay, cleanWorkerPunches, parseBiometricCSV, findEmployeeMatch } from "@/utils/biometricCore";
 
-// Helper to look up overridden state values
+const safeParseNumber = (val) => {
+  if (val === undefined || val === null || val === '') return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  // Quitar TODO excepto números, signos menos y puntos decimales
+  const cleanStr = String(val).replace(/[^0-9.-]+/g, "");
+  const parsed = parseFloat(cleanStr);
+  return isNaN(parsed) ? 0 : parsed;
+};
+
+// Helper to look up overridden state values and ensure they are parsed as numbers for math formulas
 const resolveValue = (overrides, key, formulaFn) => {
-  if (overrides[key] !== undefined) {
-    const val = overrides[key];
+  if (overrides[key] !== undefined && overrides[key] !== "") {
+    const val = typeof overrides[key] === "string" ? parseLocalNumber(overrides[key]) : overrides[key];
     if (typeof val === "number" && isNaN(val)) {
       return 0;
     }
@@ -369,37 +378,84 @@ export default function NominaPage() {
 
       // Helper para evaluar, respetar overrides y guardar en scope variables
       const computeField = (fieldId, formulaFallback = '') => {
+        const aliasMap = {
+          'total_devengados': ['total_devengados', 'total_devengado'],
+          'total_deducciones': ['total_deducciones', 'total_deducido'],
+          'total_pagar': ['total_pagar', 'total_a_pagar']
+        };
+
+        // 1. REVISAR OVERRIDES PRIMERO
+        let manualValue = overrides[`${cedula}_${fieldId}`];
+        // Buscar en alias si no está en la llave directa
+        for (const [key, aliases] of Object.entries(aliasMap)) {
+            if (aliases.includes(fieldId) || key === fieldId) {
+                aliases.forEach(a => { if (overrides[`${cedula}_${a}`] !== undefined) manualValue = overrides[`${cedula}_${a}`]; });
+            }
+        }
+
+        // 2. SI HAY OVERRIDE, GANA EL USUARIO (Cortocircuito)
+        if (manualValue !== undefined && manualValue !== '') {
+            const cleanNum = safeParseNumber(manualValue);
+            
+            // Inyectar en todas las formas posibles para que ninguna fórmula falle
+            variables[fieldId] = cleanNum;
+            if (aliasMap[fieldId]) {
+                aliasMap[fieldId].forEach(a => variables[a] = cleanNum);
+            }
+            // Búsqueda inversa para inyectar
+            for (const [key, aliases] of Object.entries(aliasMap)) {
+                if (aliases.includes(fieldId)) {
+                    variables[key] = cleanNum;
+                    aliases.forEach(a => variables[a] = cleanNum);
+                }
+            }
+            return cleanNum;
+        }
+
+        // 3. SI NO HAY OVERRIDE, EVALUAR MATEMÁTICAMENTE
         const formulaStr = activeFormulas[fieldId] || formulaFallback;
-        const calcVal = evaluateFormula(formulaStr, variables);
-        // Fallback robusto al override
-        const finalVal = resolveValue(overrides, `${cedula}_${fieldId}`, () => parseLocalNumber(calcVal));
+        // Si no hay fórmula explícita, preservamos el valor que ya exista en variables (cargado de emp)
+        const calcVal = formulaStr ? evaluateFormula(formulaStr, variables) : (variables[fieldId] || 0);
+        const finalVal = parseLocalNumber(calcVal);
+
         variables[fieldId] = finalVal;
+        
+        // Asignación de alias estándar si el objeto es un key directo de aliasMap
+        if (aliasMap[fieldId]) {
+            aliasMap[fieldId].forEach(a => variables[a] = finalVal);
+        }
+        for (const [key, aliases] of Object.entries(aliasMap)) {
+            if (aliases.includes(fieldId)) {
+                variables[key] = finalVal;
+                aliases.forEach(a => variables[a] = finalVal);
+            }
+        }
+        
         return finalVal;
       };
 
-      // Fase 1: Devengados Base
-      const sueldoBasico = computeField('sueldo');
-      const valRecargoNocturno = computeField('recargo_nocturno');
-      const valExtDiurna = computeField('val_extras_diurnas');
-      const valExtNocturna = computeField('val_extras_nocturnas');
-      const valExtFesTotal = computeField('val_extras_festivas'); 
-      const valExtFesNocTotal = resolveValue(overrides, `${cedula}_val_extras_festivas_nocturnas`, () => 0); // Descontinuada
-      const auxTransporteFinal = computeField('transporte');
-      const incapacidad = computeField('incapacidad');
-      
-      // Fase 2: Total Devengado
-      const totalDevengado = computeField('total_devengados');
-      
-      // Fase 3: Deducciones Base
-      const salud = computeField('salud');
-      const pension = computeField('pension');
-      const solidaridad = computeField('solidaridad');
-      
-      // Fase 4: Total Deducido y Neto
-      const totalDeducciones = computeField('total_deducciones');
-      const totalPagar = computeField('total_pagar');
-      const netoPagar = computeField('neto_pagar');
-      const verificacion = computeField('verificacion');
+      // FASE 1: Devengados Base
+      const fase1 = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento'];
+      // FASE 2: Suma de Devengados (SOLO LLAVES OFICIALES)
+      const fase2 = ['total_devengados'];
+      // FASE 3: Deducciones Base
+      const fase3 = ['salud', 'pension', 'solidaridad', 'prestamos', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'poliza_sura', 'optica', 'celular', 'retencion'];
+      // FASE 4: Suma de Deducciones (SOLO LLAVES OFICIALES)
+      const fase4 = ['total_deducciones'];
+      // FASE 5: Totales Finales (Dependen obligatoriamente de la Fase 2 y Fase 4 completadas)
+      const fase5 = ['total_pagar', 'neto_pagar', 'verificacion'];
+
+      // Ejecución en cascada garantizada
+      [fase1, fase2, fase3, fase4, fase5].forEach(fase => {
+          fase.forEach(campoId => {
+              computeField(campoId); 
+          });
+      });
+
+      // Si después de todo, total_pagar es 0 o NaN, FUERZA la resta matemática:
+      if (!variables['total_pagar']) {
+          variables['total_pagar'] = safeParseNumber(variables['total_devengados']) - safeParseNumber(variables['total_deducciones']);
+      }
 
       return {
         masterRow: emp,
@@ -414,36 +470,39 @@ export default function NominaPage() {
         extras_diurnas: finalExtDiu,
         extras_nocturnas: finalExtNoc,
         extras_festivas: finalExtFesDiu,
-        extras_festivas_nocturnas: finalExtFesNoc,
-        sueldo: sueldoBasico,
-        recargo_nocturno: valRecargoNocturno,
-        val_extras_diurnas: valExtDiurna,
-        val_extras_nocturnas: valExtNocturna,
-        val_extras_festivas: valExtFesTotal,
-        val_extras_festivas_nocturnas: valExtFesNocTotal,
-        comisiones,
-        transporte: auxTransporteFinal,
-        rodamiento,
+        extras_festivas_nocturnas: resolveValue(overrides, `${cedula}_val_extras_festivas_nocturnas`, () => 0),
+        sueldo: variables['sueldo'] || 0,
+        recargo_nocturno: variables['recargo_nocturno'] || 0,
+        val_extras_diurnas: variables['val_extras_diurnas'] || 0,
+        val_extras_nocturnas: variables['val_extras_nocturnas'] || 0,
+        val_extras_festivas: variables['val_extras_festivas'] || 0,
+        comisiones: variables['comisiones'] || 0,
+        transporte: variables['transporte'] || 0,
+        rodamiento: variables['rodamiento'] || 0,
         dias_incapacidad: diasIncapacidad,
-        incapacidad,
-        total_devengados: totalDevengado,
-        salud,
-        pension,
-        solidaridad,
-        prestamos,
-        poliza_bolivar: polizaBolivar,
-        poliza_plenitud: polizaPlenitud,
-        libranza_comfama: libranzaComfama,
-        poliza_sura: polizaSura,
-        optica,
-        celular,
-        retencion,
-        total_deducciones: totalDeducciones,
-        bonificacion,
-        neto_pagar: netoPagar,
+        incapacidad: variables['incapacidad'] || 0,
+        total_devengados: variables['total_devengados'] || 0,
+        total_devengado: variables['total_devengados'] || 0, // Alias para UI
+        salud: variables['salud'] || 0,
+        pension: variables['pension'] || 0,
+        solidaridad: variables['solidaridad'] || 0,
+        prestamos: variables['prestamos'] || 0,
+        poliza_bolivar: variables['poliza_bolivar'] || 0,
+        poliza_plenitud: variables['poliza_plenitud'] || 0,
+        libranza_comfama: variables['libranza_comfama'] || 0,
+        poliza_sura: variables['poliza_sura'] || 0,
+        optica: variables['optica'] || 0,
+        celular: variables['celular'] || 0,
+        retencion: variables['retencion'] || 0,
+        total_deducciones: variables['total_deducciones'] || 0,
+        total_deducido: variables['total_deducciones'] || 0, // Alias para UI
+        bonificacion: variables['bonificacion'] || 0,
+        total_pagar: variables['total_pagar'] || 0,
+        neto_pagar: variables['neto_pagar'] || 0,
+        verificacion: variables['verificacion'] || 0,
         workerDays: processedLogs,
         liquidation: {
-            total_extra_val: valRecargoNocturno + valExtDiurna + valExtNocturna + valExtFesTotal + valExtFesNocTotal
+            total_extra_val: (variables['recargo_nocturno']||0) + (variables['val_extras_diurnas']||0) + (variables['val_extras_nocturnas']||0) + (variables['val_extras_festivas']||0) + resolveValue(overrides, `${cedula}_val_extras_festivas_nocturnas`, () => 0)
         }
       };
     });
@@ -541,10 +600,37 @@ export default function NominaPage() {
   }, [payrollData, selectedWorkerName]);
 
   const handleCellEdit = (cellKey, val) => {
-    setOverrides(prev => ({
-      ...prev,
-      [cellKey]: val
-    }));
+    setOverrides(prev => {
+      const newOverrides = { ...prev, [cellKey]: val };
+      
+      // Limpieza de Overrides en Cascada (Cache Invalidation)
+      const parts = cellKey.split('_');
+      const cedula = parts[0];
+      const campoEditado = parts.slice(1).join('_');
+
+      const devengadosBase = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento'];
+      const deduccionesBase = ['salud', 'pension', 'solidaridad', 'prestamos', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'poliza_sura', 'optica', 'celular', 'retencion'];
+      const totalesIntermedios = ['total_devengados', 'total_devengado', 'total_deducciones', 'total_deducido'];
+
+      if (devengadosBase.includes(campoEditado)) {
+          delete newOverrides[`${cedula}_total_devengados`];
+          delete newOverrides[`${cedula}_total_devengado`];
+          delete newOverrides[`${cedula}_total_pagar`];
+          delete newOverrides[`${cedula}_neto_pagar`];
+      }
+      if (deduccionesBase.includes(campoEditado)) {
+          delete newOverrides[`${cedula}_total_deducciones`];
+          delete newOverrides[`${cedula}_total_deducido`];
+          delete newOverrides[`${cedula}_total_pagar`];
+          delete newOverrides[`${cedula}_neto_pagar`];
+      }
+      if (totalesIntermedios.includes(campoEditado)) {
+          delete newOverrides[`${cedula}_total_pagar`];
+          delete newOverrides[`${cedula}_neto_pagar`];
+      }
+
+      return newOverrides;
+    });
   };
   
   const handleClearAll = async () => {
@@ -956,10 +1042,7 @@ const handleSaveToCloud = async () => {
             selectedWorkerData={filteredPayrollData.find(d => d.masterRow.nombre === selectedWorkerName) || null}
             overrides={overrides}
             handleCellEdit={(key, value) => {
-               setOverrides(prev => ({
-                  ...prev,
-                  [key]: value === "" ? undefined : (isNaN(Number(value)) ? value : Number(value))
-               }));
+               handleCellEdit(key, value === "" ? undefined : (isNaN(Number(value)) ? value : Number(value)));
             }}
             startDate={startDate}
             setStartDate={setStartDate}

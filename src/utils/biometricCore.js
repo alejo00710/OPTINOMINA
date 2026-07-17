@@ -295,19 +295,19 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
     if (currentShift.length === 0) {
       currentShift.push(p);
     } else {
+      const MAX_SHIFT_DURATION_HOURS = 14;
+      const first = currentShift[0];
       const last = currentShift[currentShift.length - 1];
       const diffHours = (p.timestamp - last.timestamp) / 3600000;
+      const totalHours = (p.timestamp - first.timestamp) / 3600000;
       
       if (diffHours < (5 / 60)) continue; // Ignorar marcaciones dobles (menos de 5 mins)
 
-      // PRE-PROCESADOR DE TOLERANCIA NOCTURNA:
-      // Si el turno empezó después de las 17:00, y esta marca es de la mañana siguiente (hasta las 10:00)
-      // no partimos el turno, sino que lo emparejamos (moviendo lógicamente la marca al día D)
-      const shiftStartHour = new Date(currentShift[0].timestamp).getHours();
-      const pDate = new Date(p.timestamp);
-      const isNextMorning = pDate.getHours() <= 10 && (p.timestamp - currentShift[0].timestamp) <= 17 * 3600000;
-
-      if (diffHours > 8 && !(shiftStartHour >= 17 && isNextMorning)) {
+      // Regla de Agrupamiento Robusto:
+      // 1. Se rompe el turno si excede la duración máxima (14h) desde la primera marca.
+      // 2. Se rompe el turno si hay un descanso > 8 horas Y ya tenemos más de una marca 
+      //    (esto protege los turnos de 12h con solo 2 marcaciones de ser divididos erróneamente).
+      if (totalHours > MAX_SHIFT_DURATION_HOURS || (diffHours > 8 && currentShift.length >= 2)) {
         shifts.push([...currentShift]);
         currentShift = [p];
       } else {
