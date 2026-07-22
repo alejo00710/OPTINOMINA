@@ -1,11 +1,11 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/utils/supabase';
+import * as XLSX from 'xlsx';
 
 export default function TabHistorico() {
   const [historial, setHistorial] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [expandedRows, setExpandedRows] = useState({});
 
   useEffect(() => {
     async function fetchHistorial() {
@@ -26,13 +26,6 @@ export default function TabHistorico() {
     fetchHistorial();
   }, []);
 
-  const toggleRow = (id) => {
-    setExpandedRows(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
-  };
-
   const formatDate = (dateString) => {
     if (!dateString) return '-';
     const d = new Date(dateString);
@@ -40,6 +33,104 @@ export default function TabHistorico() {
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit'
     });
+  };
+
+  const exportarNominaAExcel = (registro) => {
+    try {
+      const payload = registro.payload_json;
+      if (!payload || !payload.nomina_calculada) {
+        alert("El registro no contiene datos de nómina calculada.");
+        return;
+      }
+
+      const nominaCalculada = payload.nomina_calculada;
+      const wb = XLSX.utils.book_new();
+
+      // HOJA 1: Sábana General
+      const sabanaData = nominaCalculada.map(emp => ({
+        "Nombre": emp.nombre,
+        "Cédula": emp.cedula,
+        "Cargo": emp.cargo,
+        "Total Devengado": emp.total_devengados || emp.total_devengado || 0,
+        "Total Deducido": emp.total_deducciones || emp.total_deducido || 0,
+        "Neto a Pagar": emp.neto_pagar || 0
+      }));
+      const wsSabana = XLSX.utils.json_to_sheet(sabanaData);
+      XLSX.utils.book_append_sheet(wb, wsSabana, "Sábana General");
+
+      // HOJAS INDIVIDUALES
+      nominaCalculada.forEach(emp => {
+        let rawName = emp.nombre ? String(emp.nombre) : String(emp.cedula || 'Empleado');
+        // Quitar caracteres no permitidos en nombres de hojas y limitar a 31 caracteres
+        let sheetName = rawName.replace(/[\\/?*[\]]/g, '').trim().substring(0, 31);
+
+        const safeNumber = (val) => isNaN(Number(val)) ? 0 : Number(val);
+        const polizas = safeNumber(emp.poliza_bolivar) + safeNumber(emp.poliza_sura) + safeNumber(emp.poliza_plenitud);
+
+        const aoaData = [
+          ['--- INFORMACIÓN DEL EMPLEADO ---', ''],
+          ['Nombre', emp.nombre || ''],
+          ['Cédula', emp.cedula || ''],
+          ['Cargo', emp.cargo || ''],
+          ['Salario Base', emp.salario || emp.salario_base || 0],
+          ['Banco', emp.banco || ''],
+          ['', ''],
+          ['--- TIEMPOS Y HORAS ---', ''],
+          ['Días Pagados', safeNumber(emp.dias_pagados)],
+          ['Horas Diurnas', safeNumber(emp.horas_diurnas)],
+          ['Horas Nocturnas', safeNumber(emp.horas_nocturnas)],
+          ['Extras Diurnas', safeNumber(emp.extras_diurnas)],
+          ['Extras Nocturnas', safeNumber(emp.extras_nocturnas)],
+          ['Extras Festivas', safeNumber(emp.extras_festivas)],
+          ['Días Incapacidad', safeNumber(emp.dias_incapacidad)],
+          ['', ''],
+          ['--- DEVENGADOS ---', ''],
+          ['Sueldo', safeNumber(emp.sueldo)],
+          ['Auxilio de Transporte', safeNumber(emp.aux_transporte || emp.transporte)],
+          ['Recargo Nocturno', safeNumber(emp.recargo_nocturno)],
+          ['Valor Extras Diurnas', safeNumber(emp.val_extras_diurnas)],
+          ['Valor Extras Nocturnas', safeNumber(emp.val_extras_nocturnas)],
+          ['Valor Extras Festivas', safeNumber(emp.val_extras_festivas)],
+          ['Comisiones', safeNumber(emp.comisiones)],
+          ['Incapacidades (Valor)', safeNumber(emp.incapacidad)],
+          ['', ''],
+          ['--- DEDUCCIONES ---', ''],
+          ['Salud', safeNumber(emp.salud)],
+          ['Pensión', safeNumber(emp.pension)],
+          ['Solidaridad', safeNumber(emp.solidaridad)],
+          ['Préstamos', safeNumber(emp.prestamos)],
+          ['Pólizas / Seguros', polizas],
+          ['Óptica', safeNumber(emp.optica)],
+          ['Retención', safeNumber(emp.retencion)],
+          ['Libranzas / Otros', safeNumber(emp.libranza_comfama)],
+          ['', ''],
+          ['--- RESUMEN FINAL ---', ''],
+          ['TOTAL DEVENGADO', safeNumber(emp.total_devengados || emp.total_devengado)],
+          ['TOTAL DEDUCIDO', safeNumber(emp.total_deducciones || emp.total_deducido)],
+          ['NETO A PAGAR', safeNumber(emp.neto_pagar)]
+        ];
+        
+        const wsEmp = XLSX.utils.aoa_to_sheet(aoaData);
+        // Manejar posibles nombres duplicados de hojas
+        let finalSheetName = sheetName;
+        let counter = 1;
+        while (wb.SheetNames.includes(finalSheetName)) {
+           const suffix = `_${counter}`;
+           finalSheetName = sheetName.substring(0, 31 - suffix.length) + suffix;
+           counter++;
+        }
+        XLSX.utils.book_append_sheet(wb, wsEmp, finalSheetName);
+      });
+
+      // Generar archivo
+      const fecha = registro.created_at ? registro.created_at.split('T')[0] : new Date().toISOString().split('T')[0];
+      const fileName = `Nomina_Historico_${fecha}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+    } catch (err) {
+      console.error("Error exportando a Excel:", err);
+      alert("Hubo un error al generar el Excel.");
+    }
   };
 
   return (
@@ -70,30 +161,19 @@ export default function TabHistorico() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {historial.map((item) => (
-                <React.Fragment key={item.id}>
-                  <tr className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-6 text-sm text-slate-600 font-medium">{formatDate(item.created_at)}</td>
-                    <td className="py-3 px-6 text-sm text-slate-900 font-bold">{item.identificador || 'Nómina General'}</td>
-                    <td className="py-3 px-6 text-sm text-slate-600">{item.rango_fechas || '-'}</td>
-                    <td className="py-3 px-6 text-center">
-                      <button
-                        onClick={() => toggleRow(item.id)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors"
-                      >
-                        👁️ {expandedRows[item.id] ? 'Ocultar Detalle' : 'Ver Detalle'}
-                      </button>
-                    </td>
-                  </tr>
-                  {expandedRows[item.id] && (
-                    <tr>
-                      <td colSpan="4" className="bg-slate-50 p-4 border-t border-slate-200">
-                        <pre className="bg-slate-900 text-green-400 p-4 rounded-xl text-xs overflow-auto max-h-96 custom-scrollbar shadow-inner">
-                          {JSON.stringify(item.payload_json, null, 2)}
-                        </pre>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
+                <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="py-3 px-6 text-sm text-slate-600 font-medium">{formatDate(item.created_at)}</td>
+                  <td className="py-3 px-6 text-sm text-slate-900 font-bold">{item.identificador || 'Nómina General'}</td>
+                  <td className="py-3 px-6 text-sm text-slate-600">{item.rango_fechas || '-'}</td>
+                  <td className="py-3 px-6 text-center">
+                    <button
+                      onClick={() => exportarNominaAExcel(item)}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-sm font-bold transition-all shadow-sm"
+                    >
+                      📊 Descargar Excel
+                    </button>
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Info } from 'lucide-react';
+import { Info, Printer } from 'lucide-react';
 
 const fmtCOP = (num) => {
   return new Intl.NumberFormat('es-CO').format(num || 0);
@@ -97,6 +97,7 @@ export default function TabLiquidacion({
 
   return (
     <div className="space-y-6">
+       
        {/* LOCAL TOOLBAR */}
        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-end justify-between animate-stitch">
           <div className="flex gap-4 items-center flex-wrap">
@@ -118,6 +119,12 @@ export default function TabLiquidacion({
                   className="bg-rose-100 hover:bg-rose-600 text-rose-600 hover:text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-lg transition-colors shadow-sm"
                 >
                    Limpiar Biométrico
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="bg-sky-100 hover:bg-sky-600 text-sky-600 hover:text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-lg transition-colors shadow-sm flex items-center gap-1"
+                >
+                   <Printer size={16} /> Imprimir Colilla
                 </button>
              </div>
           </div>
