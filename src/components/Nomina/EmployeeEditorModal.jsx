@@ -81,7 +81,7 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         biometric_id: formData.biometric_id,
         nombre: formData.nombre.toUpperCase(),
         cargo: formData.cargo.toUpperCase(),
-        categoria: formData.categoria.toUpperCase(),
+        categoria: formData.categoria,
         salario_base: parseLocalNumber(formData.salario_base),
         aux_transporte: parseLocalNumber(formData.aux_transporte),
         rodamiento: parseLocalNumber(formData.rodamiento),
@@ -189,19 +189,25 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
                 placeholder="Ej: OPERARIO"
               />
             </div>
-
             <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col shadow-sm">
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Categoría</span>
               <select
+                required
                 value={formData.categoria}
                 onChange={(e) => setFormData({...formData, categoria: e.target.value})}
                 className="w-full text-right text-sm font-medium text-slate-900 focus:ring-0 outline-none bg-transparent appearance-none"
                 dir="rtl"
               >
-                <option value="INYECCIÓN">INYECCIÓN</option>
-                <option value="TALLER">TALLER</option>
-                <option value="OTROS">OTROS</option>
-                <option value="NUEVOS">NUEVOS</option>
+                <option value="">Seleccione una categoría...</option>
+                <option value="Operario de produccion">Operario de produccion</option>
+                <option value="Monitor">Monitor</option>
+                <option value="Montador">Montador</option>
+                <option value="Calidad">Calidad</option>
+                <option value="Supernumerario">Supernumerario</option>
+                <option value="Mecanico">Mecanico</option>
+                <option value="Programador">Programador</option>
+                <option value="Operador">Operador</option>
+                <option value="Administrativo">Administrativo</option>
               </select>
             </div>
 

@@ -10,6 +10,7 @@ import TabPanelGeneral from "@/components/Nomina/TabPanelGeneral";
 import TabColillas from "@/components/Nomina/TabColillas";
 import TabLiquidacion from "@/components/Nomina/TabLiquidacion";
 import TabHistorico from "@/components/Nomina/TabHistorico";
+import TabHorarios from "@/components/Nomina/TabHorarios";
 import FormulaEditorModal from "@/components/Nomina/FormulaEditorModal";
 import { NOMINA_DATE_RANGE_KEY, loadPersistedDateRange, savePersistedDateRange, PLANILLA_COLUMNS, DAILY_COLUMNS, LIQUIDATION_CONCEPTS, DEFAULT_FORMULAS, SMLV, AUX_TRANSPORTE, MINIMO_DIARIO_INCAPACIDAD, evaluateFormula, DIVISOR_RECARGOS_NOCTURNOS, DIVISOR_HORAS_EXTRAS, FACTOR_RECARGO_NOCTURNO, FACTOR_EXTRA_DIURNA, FACTOR_EXTRA_NOCTURNA, FACTOR_EXTRA_FESTIVA, FACTOR_EXTRA_FESTIVA_NOCTURNA, HORA_INICIO_DIURNA, HORA_FIN_DIURNA } from "@/utils/constants";
 import { timeStrToDecimal, decimalToTimeStr, diffTimeStr, getDecimalHours, getHourDist, fmtCOP, fmtDec, parseLocalNumber, calculateDailyRecord } from "@/utils/mathNomina";
@@ -933,6 +934,12 @@ const handleSaveToCloud = async () => {
             📇 DIRECTORIO
           </button>
           <button
+            onClick={() => setActiveTab("horarios")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === "horarios" ? "bg-indigo-600 text-white shadow-md" : "text-slate-500 hover:bg-slate-200/50"}`}
+          >
+            🗓️ HORARIOS
+          </button>
+          <button
             onClick={() => setActiveTab("colilla")}
             className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === "colilla" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
           >
@@ -1070,6 +1077,11 @@ const handleSaveToCloud = async () => {
       {/* --- TAB: HISTÓRICO --- */}
       {activeTab === "historico" && (
         <TabHistorico />
+      )}
+
+      {/* --- TAB: HORARIOS --- */}
+      {activeTab === "horarios" && (
+        <TabHorarios empleados={nominaRows} />
       )}
       {/* Info Alert footer bar */}
       <div className="p-6 bg-slate-100 rounded-[1.5rem] border border-slate-200/60 flex items-start gap-4 shadow-sm mt-6">
