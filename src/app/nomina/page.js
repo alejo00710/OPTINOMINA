@@ -62,7 +62,7 @@ export default function NominaPage() {
   const [activeFormulas, setActiveFormulas] = useState(DEFAULT_FORMULAS);
 
   useEffect(() => {
-    const savedFormulas = localStorage.getItem('optinomina_global_formulas');
+    const savedFormulas = localStorage.getItem('optinomina_global_formulas_v4');
     if (savedFormulas) {
       setActiveFormulas({ ...DEFAULT_FORMULAS, ...JSON.parse(savedFormulas) });
     }
@@ -79,7 +79,7 @@ export default function NominaPage() {
     const campoId = formulaConfig.fieldId;
     const updatedFormulas = { ...activeFormulas, [campoId]: newFormula };
     setActiveFormulas(updatedFormulas);
-    localStorage.setItem('optinomina_global_formulas', JSON.stringify(updatedFormulas));
+    localStorage.setItem('optinomina_global_formulas_v4', JSON.stringify(updatedFormulas));
     
     setToast({
       message: "¡Fórmula global actualizada!",
@@ -106,6 +106,9 @@ export default function NominaPage() {
   // Prevent hydration mismatch by using same initial state on server and client, then updating after mount
   const [startDate, setStartDate] = useState("2026-05-01");
   const [endDate, setEndDate] = useState("2026-05-15");
+
+  const [globalSmmlv, setGlobalSmmlv] = useState(1750905);
+  const [globalAuxTransporte, setGlobalAuxTransporte] = useState(249095);
 
   const [isClient, setIsClient] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
@@ -181,7 +184,6 @@ export default function NominaPage() {
             banco: emp.banco || "",
             tipo_vinculacion: emp.tipo_vinculacion || "",
             salario: Number(emp.salario_base || emp.salario || 0),
-            aux_transporte: Number(emp.aux_transporte || 0),
             rodamiento: Number(emp.rodamiento || 0),
             comisiones: 0,
             poliza_bolivar: Number(emp.poliza_bolivar || 0),
@@ -340,7 +342,11 @@ export default function NominaPage() {
       const comisiones = resolveValue(overrides, `${cedula}_comisiones`, () => 0);
       const rodamiento = resolveValue(overrides, `${cedula}_rodamiento`, () => parseLocalNumber(Number(emp.rodamiento || 0)));
       const diasIncapacidad = resolveValue(overrides, `${cedula}_dias_incapacidad`, () => parseLocalNumber(Number(emp.dias_incapacidad || 0)));
-      const prestamos = resolveValue(overrides, `${cedula}_prestamos`, () => parseLocalNumber(Number(emp.prestamos || 0)));
+      
+      const basePrestamo = parseLocalNumber(Number(emp.prestamos || 0));
+      const prestamos = resolveValue(overrides, `${cedula}_prestamos`, () => 0);
+      const saldoPrestamo = basePrestamo - prestamos;
+
       const polizaBolivar = resolveValue(overrides, `${cedula}_poliza_bolivar`, () => parseLocalNumber(Number(emp.poliza_bolivar || 0)));
       const polizaPlenitud = resolveValue(overrides, `${cedula}_poliza_plenitud`, () => parseLocalNumber(Number(emp.poliza_plenitud || 0)));
       const libranzaComfama = resolveValue(overrides, `${cedula}_libranza_comfama`, () => parseLocalNumber(Number(emp.libranza_comfama || 0)));
@@ -353,8 +359,8 @@ export default function NominaPage() {
       // MOTOR MATEMÁTICO EN CASCADA
       let variables = {
         salario_base: salarioBase,
-        smlv: SMLV,
-        aux_transporte_base: Number(emp.aux_transporte) > 0 ? Number(emp.aux_transporte) : AUX_TRANSPORTE,
+        smlv_base: globalSmmlv,
+        aux_transporte_base: globalAuxTransporte,
         valor_diario_base: MINIMO_DIARIO_INCAPACIDAD,
         dias_pagados: diasPagados,
         horas_diurnas: finalDiurnas,
@@ -366,6 +372,7 @@ export default function NominaPage() {
         comisiones: comisiones,
         rodamiento: rodamiento,
         prestamos: prestamos,
+        saldo_prestamo: saldoPrestamo,
         poliza_bolivar: polizaBolivar,
         poliza_plenitud: polizaPlenitud,
         libranza_comfama: libranzaComfama,
@@ -488,6 +495,7 @@ export default function NominaPage() {
         pension: variables['pension'] || 0,
         solidaridad: variables['solidaridad'] || 0,
         prestamos: variables['prestamos'] || 0,
+        saldo_prestamo: variables['saldo_prestamo'] || 0,
         poliza_bolivar: variables['poliza_bolivar'] || 0,
         poliza_plenitud: variables['poliza_plenitud'] || 0,
         libranza_comfama: variables['libranza_comfama'] || 0,
@@ -644,8 +652,8 @@ export default function NominaPage() {
         cargo: emp.cargo,
         categoria: emp.categoria,
         salario: Number(emp.salario_base || emp.salario || 0),
-        aux_transporte: Number(emp.aux_transporte || 0),
         rodamiento: Number(emp.rodamiento || 0),
+        comisiones: 0,
         prestamos: Number(emp.prestamos || 0),
         poliza_bolivar: Number(emp.poliza_bolivar || 0),
         poliza_sura: Number(emp.poliza_sura || 0),
@@ -1034,6 +1042,10 @@ const handleSaveToCloud = async () => {
              handleClearAll={handleClearAll}
              overrides={overrides}
              fmtCOP={fmtCOP}
+             globalSmmlv={globalSmmlv}
+             setGlobalSmmlv={setGlobalSmmlv}
+             globalAuxTransporte={globalAuxTransporte}
+             setGlobalAuxTransporte={setGlobalAuxTransporte}
           />
 
           

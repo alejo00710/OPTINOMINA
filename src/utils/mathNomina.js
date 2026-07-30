@@ -196,8 +196,13 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
      if (hrLab < 0) hrLab = 0;
   }
   
-  // Col M: Des = SI(L3>8.9; 0.5; 0)
-  const des = hrLab > 8.9 ? 0.5 : 0;
+  // Col M: Descuento
+  let des = 0;
+  if (hrLab >= 12) {
+    des = 1.0;
+  } else if (hrLab >= 8) {
+    des = 0.5;
+  }
   
   // Col N: Hr. Pag = L3 - M3
   const hrPag = hrLab > 0 ? hrLab - des : 0;

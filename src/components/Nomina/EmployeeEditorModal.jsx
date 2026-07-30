@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, CheckCircle2 } from 'lucide-react';
 import { parseLocalNumber } from '@/utils/mathNomina';
-import { upsertEmployeeRecord } from '@/utils/supabase';
+import { upsertEmployeeRecord, supabase } from '@/utils/supabase';
 import EditableCell from './EditableCell';
 
 export default function EmployeeEditorModal({ isOpen, onClose, employee, refreshEmployees }) {
@@ -14,7 +14,6 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
     cargo: '',
     categoria: 'OTROS',
     salario_base: 0,
-    aux_transporte: 0,
     rodamiento: 0,
     poliza_bolivar: 0,
     poliza_sura: 0,
@@ -34,7 +33,6 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         cargo: employee.cargo || '',
         categoria: employee.categoria || 'OTROS',
         salario_base: employee.salario_base || employee.salario || 0,
-        aux_transporte: employee.aux_transporte || 0,
         rodamiento: employee.rodamiento || 0,
         poliza_bolivar: employee.poliza_bolivar || 0,
         poliza_sura: employee.poliza_sura || 0,
@@ -51,7 +49,6 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         cargo: '',
         categoria: 'OTROS',
         salario_base: 0,
-        aux_transporte: 0,
         rodamiento: 0,
         poliza_bolivar: 0,
         poliza_sura: 0,
@@ -83,7 +80,6 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         cargo: formData.cargo.toUpperCase(),
         categoria: formData.categoria,
         salario_base: parseLocalNumber(formData.salario_base),
-        aux_transporte: parseLocalNumber(formData.aux_transporte),
         rodamiento: parseLocalNumber(formData.rodamiento),
         poliza_bolivar: parseLocalNumber(formData.poliza_bolivar),
         poliza_sura: parseLocalNumber(formData.poliza_sura),
@@ -95,10 +91,25 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
       };
       
       console.log("Enviando a Supabase...", empData);
-      const result = await upsertEmployeeRecord(empData);
       
-      if (!result.success) {
-        throw new Error(result.error?.message || "Error desconocido de Supabase");
+      let errorSupabase;
+      if (employee) {
+        // Update existing record using the original cedula
+        const { error: updateError } = await supabase
+          .from('optimoldes_employees')
+          .update(empData)
+          .eq('cedula', employee.cedula);
+        errorSupabase = updateError;
+      } else {
+        // Insert new record
+        const { error: insertError } = await supabase
+          .from('optimoldes_employees')
+          .insert([empData]);
+        errorSupabase = insertError;
+      }
+      
+      if (errorSupabase) {
+        throw new Error(errorSupabase.message || "Error desconocido de Supabase");
       }
       
       alert("✅ GUARDADO CORRECTO");
@@ -148,8 +159,7 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
                 required
                 type="text"
                 value={formData.cedula}
-                onChange={(e) => setFormData({...formData, cedula: e.target.value})}
-                readOnly={!!employee}
+                onChange={(e) => setFormData({...formData, cedula: e.target.value.replace(/\D/g, '')})}
                 className="w-full text-right text-sm font-medium text-slate-900 focus:ring-0 outline-none"
                 placeholder="Ej: 10203040"
               />
@@ -240,15 +250,6 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
               <EditableCell
                 value={formData.salario_base}
                 onChange={(v) => handleNumChange('salario_base', v)}
-                isCurrency={true}
-              />
-            </div>
-
-            <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-emerald-600 transition-colors">Aux. Transporte</span>
-              <EditableCell
-                value={formData.aux_transporte}
-                onChange={(v) => handleNumChange('aux_transporte', v)}
                 isCurrency={true}
               />
             </div>

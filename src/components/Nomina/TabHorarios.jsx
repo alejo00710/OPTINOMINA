@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Save, Calendar as CalendarIcon } from 'lucide-react';
+import { supabase } from '@/utils/supabase';
 
 const CeldaTurno = ({ valor, onChange, getTurnColor }) => {
   const [showMenu, setShowMenu] = useState(false);
-  const oficiales = ['6AM A 2PM', '2PM A 10PM', '10PM A 6AM', '6AM A 6PM', '6PM A 6AM', '7:30 A 5PM', 'DESCANSO', 'VACACIONES', 'LICENCIA'];
+  const oficiales = ['6AM A 2PM', '2PM A 10PM', '10PM A 6AM', '6AM A 6PM', '6PM A 6AM', '7:30AM A 5PM', 'DESCANSO', 'VACACIONES', 'LICENCIA'];
 
   return (
     <div className="relative w-full h-full">
@@ -37,24 +38,115 @@ const CeldaTurno = ({ valor, onChange, getTurnColor }) => {
 };
 
 export default function TabHorarios({ empleados }) {
-  const [semana, setSemana] = useState('');
-  const [horarios, setHorarios] = useState({});
-  const [empleadosOcultos, setEmpleadosOcultos] = useState([]);
+  const [fechaInicioSemana, setFechaInicioSemana] = useState(() => {
+    if (typeof window !== 'undefined') {
+        return localStorage.getItem('fecha_inicio_draft') || '';
+    }
+    return '';
+  });
+  const [horarios, setHorarios] = useState(() => {
+    if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('horarios_draft');
+        return saved ? JSON.parse(saved) : {};
+    }
+    return {};
+  });
+  const [empleadosOcultos, setEmpleadosOcultos] = useState(() => {
+    if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('horarios_ocultos_draft');
+        return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
+  const [ordenPersonalizado, setOrdenPersonalizado] = useState(() => {
+    if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('orden_draft');
+        return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
+
+  const dragItem = React.useRef(null);
+  const dragOverItem = React.useRef(null);
 
   const dias = ['LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO', 'DOMINGO'];
 
-  const handleCellChange = (cedula, dia, valor) => {
+  const getIdUsar = (emp) => emp.id_biometrico || emp.biometric_id || emp.cedula;
+
+  const handleCellChange = (emp, dia, valor) => {
+    const idUsar = getIdUsar(emp);
     setHorarios(prev => ({
       ...prev,
-      [`${cedula}_${dia}`]: valor
+      [`${idUsar}_${dia}`]: valor
     }));
   };
 
-  const handleSave = () => {
+  // Save to local storage on change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+        localStorage.setItem('fecha_inicio_draft', fechaInicioSemana);
+        localStorage.setItem('horarios_draft', JSON.stringify(horarios));
+        localStorage.setItem('horarios_ocultos_draft', JSON.stringify(empleadosOcultos));
+        localStorage.setItem('orden_draft', JSON.stringify(ordenPersonalizado));
+    }
+  }, [fechaInicioSemana, horarios, empleadosOcultos, ordenPersonalizado]);
+
+  const handleSave = async () => {
+    if (!fechaInicioSemana) {
+      alert('Por favor, selecciona la fecha de inicio de la semana antes de guardar.');
+      return;
+    }
+    
     console.log('Guardando Programación Semanal...');
-    console.log('Semana:', semana);
-    console.log('Horarios:', horarios);
-    alert('Programación Semanal guardada (simulación). Verifica la consola.');
+    try {
+      const { error } = await supabase
+        .from('horarios_semanales')
+        .upsert({ 
+          id_semana: fechaInicioSemana,
+          datos_json: horarios, 
+          ocultos_json: empleadosOcultos 
+        }, { onConflict: 'id_semana' });
+        
+      if (error) throw error;
+      
+      alert('Horario guardado/actualizado exitosamente en la base de datos.');
+    } catch (err) {
+      console.error('Error guardando horario:', err);
+      alert('Error al guardar el horario: ' + err.message);
+    }
+  };
+
+  const cargarDesdeBD = async () => {
+    if (!fechaInicioSemana) {
+      alert('Por favor, selecciona la fecha de la semana para buscar.');
+      return;
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('horarios_semanales')
+        .select('*')
+        .eq('id_semana', fechaInicioSemana)
+        .single();
+        
+      if (error) {
+        if (error.code === 'PGRST116') {
+          alert('No se encontró un horario guardado para esa semana.');
+        } else {
+          throw error;
+        }
+        return;
+      }
+      
+      if (data) {
+        setHorarios(data.datos_json || {});
+        setEmpleadosOcultos(data.ocultos_json || []);
+        alert('Horario cargado exitosamente.');
+      }
+    } catch (err) {
+      console.error('Error cargando horario:', err);
+      alert('Error al cargar el horario: ' + err.message);
+    }
   };
 
   const jerarquiaCategorias = {
@@ -71,25 +163,32 @@ export default function TabHorarios({ empleados }) {
   const catProduccion = ['Monitor', 'Calidad', 'Operario de produccion', 'Montador', 'Supernumerario'];
   const catTaller = ['Mecanico', 'Programador', 'Operador'];
 
-  const baseFiltrados = empleados.filter(emp => emp.categoria !== 'Administrativo' && !empleadosOcultos.includes(emp.cedula));
+  const baseFiltrados = empleados.filter(emp => emp.categoria !== 'Administrativo' && !empleadosOcultos.includes(getIdUsar(emp)));
 
-  const sortEmployees = (arr) => arr.sort((a, b) => {
-    const pesoA = jerarquiaCategorias[a.categoria] || 99;
-    const pesoB = jerarquiaCategorias[b.categoria] || 99;
-    if (pesoA !== pesoB) return pesoA - pesoB;
-    return (a.nombre || '').localeCompare(b.nombre || '');
-  });
+  const sortEmployees = (arr) => {
+    let sorted = arr.sort((a, b) => {
+      const pesoA = jerarquiaCategorias[a.categoria] || 99;
+      const pesoB = jerarquiaCategorias[b.categoria] || 99;
+      if (pesoA !== pesoB) return pesoA - pesoB;
+      return (a.nombre || '').localeCompare(b.nombre || '');
+    });
+    
+    if (ordenPersonalizado.length > 0) {
+      sorted = sorted.sort((a, b) => {
+        const idxA = ordenPersonalizado.indexOf(getIdUsar(a));
+        const idxB = ordenPersonalizado.indexOf(getIdUsar(b));
+        if (idxA === -1 && idxB === -1) return 0;
+        if (idxA === -1) return 1;
+        if (idxB === -1) return -1;
+        return idxA - idxB;
+      });
+    }
+    return sorted;
+  };
 
   const addRowNumbers = (arr) => {
-    let categoriaActual = '';
-    let contador = 1;
-    return arr.map(emp => {
-        const cat = emp.categoria || '';
-        if (cat !== categoriaActual) {
-            categoriaActual = cat;
-            contador = 1;
-        }
-        return { ...emp, numeroFila: contador++ };
+    return arr.map((emp, idx) => {
+        return { ...emp, numeroFila: idx + 1 };
     });
   };
 
@@ -107,11 +206,12 @@ export default function TabHorarios({ empleados }) {
     if (t.includes('2PM A 10PM')) return 'bg-blue-200 text-black';
     if (t.includes('10PM A 6AM')) return 'bg-orange-200 text-black';
     if (t.includes('6AM A 6PM') || t.includes('6PM A 6AM')) return 'bg-yellow-300 text-black';
+    if (t.includes('7:30AM A 5PM') || t.includes('7:30 A 5PM')) return 'bg-teal-100 text-teal-900 font-semibold';
     if (t.includes('VACACIONES') || t.includes('LICENCIA')) return 'bg-yellow-400 font-bold text-black';
     if (t.includes('DESCANSO')) return 'bg-white font-bold text-black';
 
-    const oficiales = ['6AM A 2PM', '2PM A 10PM', '10PM A 6AM', '6AM A 6PM', '6PM A 6AM', '7:30 A 5PM', 'DESCANSO', 'VACACIONES', 'LICENCIA'];
-    if (t !== '' && !oficiales.includes(t)) {
+    const oficiales = ['6AM A 2PM', '2PM A 10PM', '10PM A 6AM', '6AM A 6PM', '6PM A 6AM', '7:30AM A 5PM', 'DESCANSO', 'VACACIONES', 'LICENCIA'];
+    if (t !== '' && !oficiales.includes(t) && t !== '7:30 A 5PM') {
       return 'bg-yellow-100 text-black font-semibold';
     }
 
@@ -121,32 +221,96 @@ export default function TabHorarios({ empleados }) {
   const handleFillDay = (dia) => {
     setHorarios(prev => {
       const next = { ...prev };
-      const allDescanso = todosVisibles.every(emp => next[`${emp.cedula}_${dia}`] === 'DESCANSO');
+      const allDescanso = todosVisibles.every(emp => next[`${getIdUsar(emp)}_${dia}`] === 'DESCANSO');
       
       todosVisibles.forEach(emp => {
-        next[`${emp.cedula}_${dia}`] = allDescanso ? '' : 'DESCANSO';
+        next[`${getIdUsar(emp)}_${dia}`] = allDescanso ? '' : 'DESCANSO';
       });
       return next;
     });
   };
 
-  const handleFillWeek = (cedula) => {
+  const handleFillWeek = (emp) => {
     setHorarios(prev => {
       const next = { ...prev };
-      const valorLunes = next[`${cedula}_LUNES`] || '';
+      const idUsar = getIdUsar(emp);
+      const valorLunes = next[`${idUsar}_LUNES`] || '';
       ['MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO'].forEach(dia => {
-        next[`${cedula}_${dia}`] = valorLunes;
+        next[`${idUsar}_${dia}`] = valorLunes;
       });
       return next;
     });
   };
 
-  const renderRow = (emp) => (
-    <tr key={emp.cedula} className="hover:bg-slate-50 transition-colors group">
+  const handleLimpiar = () => {
+    if (window.confirm('¿Estás seguro de que deseas limpiar TODOS los turnos de esta semana? Esta acción vaciará la cuadrícula.')) {
+        setHorarios({});
+    }
+  };
+
+  const handleSort = () => {
+    if (!dragItem.current || !dragOverItem.current || dragItem.current === dragOverItem.current) {
+        return;
+    }
+    
+    const currentVisibleOrder = todosVisibles.map(emp => getIdUsar(emp));
+    let baseOrder = ordenPersonalizado.length > 0 ? [...ordenPersonalizado] : [...currentVisibleOrder];
+    
+    currentVisibleOrder.forEach(idUsar => {
+        if (!baseOrder.includes(idUsar)) baseOrder.push(idUsar);
+    });
+
+    const fromIndex = baseOrder.indexOf(dragItem.current);
+    const toIndex = baseOrder.indexOf(dragOverItem.current);
+
+    if (fromIndex !== -1 && toIndex !== -1) {
+        const item = baseOrder.splice(fromIndex, 1)[0];
+        baseOrder.splice(toIndex, 0, item);
+        setOrdenPersonalizado(baseOrder);
+    }
+    
+    dragItem.current = null;
+    dragOverItem.current = null;
+  };
+
+  const obtenerFechasSemana = (fechaString) => {
+    if (!fechaString) return Array(7).fill('');
+    
+    const [year, month, day] = fechaString.split('-');
+    if (!year || !month || !day) return Array(7).fill('');
+    
+    const baseDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    
+    const fechas = [];
+    for (let i = 0; i < 7; i++) {
+        const currentDate = new Date(baseDate);
+        currentDate.setDate(baseDate.getDate() + i);
+        
+        const d = String(currentDate.getDate()).padStart(2, '0');
+        const m = String(currentDate.getMonth() + 1).padStart(2, '0');
+        fechas.push(`${d}/${m}`);
+    }
+    return fechas;
+  };
+  
+  const diasNumeros = obtenerFechasSemana(fechaInicioSemana);
+
+  const renderRow = (emp) => {
+    const idUsar = getIdUsar(emp);
+    return (
+    <tr 
+      key={emp.cedula || emp.id} 
+      className="hover:bg-slate-50 transition-colors group cursor-grab active:cursor-grabbing"
+      draggable={true}
+      onDragStart={() => (dragItem.current = idUsar)}
+      onDragEnter={() => (dragOverItem.current = idUsar)}
+      onDragEnd={handleSort}
+      onDragOver={(e) => e.preventDefault()}
+    >
       <td className="p-2 border border-gray-800 text-xs font-bold text-slate-400 text-center bg-white group-hover:bg-slate-50 sticky left-0 z-10">
         <div className="flex items-center justify-center gap-1">
           <button 
-            onClick={() => setEmpleadosOcultos(prev => [...prev, emp.cedula])}
+            onClick={() => setEmpleadosOcultos(prev => [...prev, idUsar])}
             className="text-[8px] text-red-500 hover:text-red-700 opacity-20 group-hover:opacity-100 transition-opacity"
             title="Ocultar trabajador"
           >
@@ -158,7 +322,7 @@ export default function TabHorarios({ empleados }) {
       <td className="p-2 border border-gray-800 text-xs font-black text-slate-700 bg-white group-hover:bg-slate-50 sticky left-12 z-10 flex items-center justify-between">
         <span>{emp.nombre}</span>
         <button 
-          onClick={() => handleFillWeek(emp.cedula)}
+          onClick={() => handleFillWeek(emp)}
           className="opacity-20 group-hover:opacity-100 transition-opacity hover:bg-slate-200 rounded p-1"
           title="Copiar Lunes a toda la semana"
         >
@@ -167,20 +331,21 @@ export default function TabHorarios({ empleados }) {
       </td>
       <td className="p-2 border border-gray-800 text-xs font-semibold text-slate-500 capitalize bg-white">{emp.categoria || emp.cargo || ''}</td>
       {dias.map(dia => {
-        const cellKey = `${emp.cedula}_${dia}`;
+        const cellKey = `${idUsar}_${dia}`;
         const valorActual = horarios[cellKey] || '';
         return (
           <td key={dia} className="p-0 border border-gray-800 bg-white relative min-w-[120px]">
             <CeldaTurno 
               valor={valorActual}
-              onChange={(val) => handleCellChange(emp.cedula, dia, val)}
+              onChange={(val) => handleCellChange(emp, dia, val)}
               getTurnColor={getTurnColor}
             />
           </td>
         );
       })}
     </tr>
-  );
+    );
+  };
 
   return (
     <div className="space-y-6 animate-stitch">
@@ -199,12 +364,27 @@ export default function TabHorarios({ empleados }) {
           <div className="flex items-center gap-2">
             <span className="text-xs font-black text-slate-400 uppercase tracking-wider">Semana:</span>
             <input 
-              type="week" 
-              value={semana}
-              onChange={(e) => setSemana(e.target.value)}
-              className="bg-slate-50 border border-slate-200 text-sm font-black text-slate-800 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+              type="date" 
+              value={fechaInicioSemana}
+              onChange={(e) => setFechaInicioSemana(e.target.value)}
+              title="Selecciona el Lunes de la semana a programar"
+              className="bg-slate-50 border border-slate-200 text-sm font-black text-slate-800 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none w-48"
             />
           </div>
+          <button 
+            onClick={cargarDesdeBD}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-sky-100 hover:bg-sky-200 text-sky-700 rounded-xl text-xs font-black transition-all shadow-sm active:scale-95"
+          >
+            <span>☁️</span>
+            Cargar desde BD
+          </button>
+          <button 
+            onClick={handleLimpiar}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl text-xs font-black transition-all shadow-sm active:scale-95"
+          >
+            <span>🧹</span>
+            Limpiar Todo
+          </button>
           <button 
             onClick={handleSave}
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all shadow-md active:scale-95"
@@ -223,10 +403,10 @@ export default function TabHorarios({ empleados }) {
                 <th className="p-3 border border-gray-800 text-center w-12 bg-blue-900 sticky left-0 z-20">N°</th>
                 <th className="p-3 border border-gray-800 sticky left-12 z-20 bg-blue-900 min-w-[200px]">PERSONAL</th>
                 <th className="p-3 border border-gray-800 min-w-[150px]">PUESTO</th>
-                {dias.map(dia => (
+                {dias.map((dia, idx) => (
                   <th key={dia} className="p-3 border border-gray-800 text-center min-w-[120px]">
                     <div className="flex flex-col items-center gap-1">
-                      <span>{dia}</span>
+                      <span>{dia} {diasNumeros[idx] ? `(${diasNumeros[idx]})` : ''}</span>
                       <button 
                         onClick={() => handleFillDay(dia)}
                         className="text-[10px] bg-white/20 hover:bg-white/40 px-2 py-0.5 rounded-full transition-colors flex items-center gap-1"
@@ -294,9 +474,9 @@ export default function TabHorarios({ empleados }) {
             }}
           >
             <option value="">Selecciona para restaurar...</option>
-            {empleadosOcultos.map(ced => {
-              const emp = empleados.find(e => e.cedula === ced);
-              return <option key={ced} value={ced}>{emp?.nombre} ({emp?.categoria})</option>;
+            {empleadosOcultos.map(idOculto => {
+              const emp = empleados.find(e => getIdUsar(e) === idOculto);
+              return <option key={idOculto} value={idOculto}>{emp?.nombre} ({emp?.categoria})</option>;
             })}
           </select>
         </div>

@@ -5,6 +5,50 @@ const fmtCOP = (num) => {
   return new Intl.NumberFormat('es-CO').format(num || 0);
 };
 
+const STATUS_OPTIONS = [
+  "Normal",
+  "Licencia no remunerada",
+  "Calamidad",
+  "Vacaciones",
+  "Incapacidad General",
+  "Incapacidad Accidente laboral",
+  "Votacion",
+  "Descanso",
+  "No marcacion",
+  "Novedad"
+];
+
+const getStatusColor = (status) => {
+  switch (status) {
+    case "Normal": return "bg-green-100 text-green-800";
+    case "Licencia no remunerada": return "bg-gray-100 text-gray-800";
+    case "Calamidad": return "bg-red-100 text-red-800";
+    case "Vacaciones": return "bg-yellow-100 text-yellow-800";
+    case "Incapacidad General": return "bg-purple-100 text-purple-800";
+    case "Incapacidad Accidente laboral": return "bg-rose-100 text-rose-800";
+    case "Votacion": return "bg-cyan-100 text-cyan-800";
+    case "Descanso": return "bg-blue-100 text-blue-800";
+    case "No marcacion": return "bg-slate-200 text-slate-800";
+    case "Novedad": return "bg-orange-100 text-orange-800";
+    default: return "bg-gray-50 text-gray-600";
+  }
+};
+
+const getRowColor = (status) => {
+  switch (status) {
+    case "Normal": return "hover:bg-slate-50 transition-colors";
+    case "Licencia no remunerada": return "bg-gray-100 hover:bg-gray-200 transition-colors";
+    case "Calamidad": return "bg-red-100 hover:bg-red-200 transition-colors";
+    case "Vacaciones": return "bg-yellow-100 hover:bg-yellow-200 transition-colors";
+    case "Incapacidad General": return "bg-purple-100 hover:bg-purple-200 transition-colors";
+    case "Incapacidad Accidente laboral": return "bg-rose-100 hover:bg-rose-200 transition-colors";
+    case "Votacion": return "bg-cyan-100 hover:bg-cyan-200 transition-colors";
+    case "Descanso": return "bg-blue-100 hover:bg-blue-200 transition-colors";
+    case "No marcacion": return "bg-slate-200 hover:bg-slate-300 transition-colors";
+    case "Novedad": return "bg-orange-100 hover:bg-orange-200 transition-colors";
+    default: return "hover:bg-slate-50 transition-colors";
+  }
+};
 
 const GridInput = ({ globalValue, fallback, onSave, className, decimals = 1 }) => {
   const [localVal, setLocalVal] = React.useState(() => {
@@ -217,32 +261,30 @@ export default function TabLiquidacion({
   };
 
   const isAnomalo = day.estado === 'incompleto';
-  const defaultStatus = isAnomalo ? 'ANÓMALO' : 'NORMAL';
-  const statusVal = overrides[`${prefix}_novedad_status`] || defaultStatus;
+  const defaultStatus = isAnomalo ? 'Novedad' : 'Normal';
+  let statusVal = overrides[`${prefix}_novedad_status`] || defaultStatus;
   
-  let rowBg = "hover:bg-slate-50 transition-colors";
-  if (statusVal === "CALAMIDAD") rowBg = "bg-red-500 text-white hover:bg-red-600";
-  else if (statusVal === "INCAPACIDAD EG") rowBg = "bg-orange-400 text-white hover:bg-orange-500";
-  else if (statusVal === "NO MARCÓ RELOJ") rowBg = "bg-yellow-300 text-black hover:bg-yellow-400";
-  else if (statusVal === "DESCANSO") rowBg = "bg-green-200 text-black hover:bg-green-300";
-  else if (statusVal === "ANÓMALO") rowBg = "bg-amber-50/80 outline outline-1 outline-amber-200";
+  // Legacy mapping
+  if (statusVal === 'NORMAL') statusVal = 'Normal';
+  if (statusVal === 'ANÓMALO') statusVal = 'Novedad';
+  if (statusVal === 'INCAPACIDAD EG') statusVal = 'Incapacidad General';
+  if (statusVal === 'NO MARCÓ RELOJ') statusVal = 'No marcacion';
+  if (statusVal === 'CALAMIDAD') statusVal = 'Calamidad';
+  if (statusVal === 'DESCANSO') statusVal = 'Descanso';
 
   return (
-                            <tr key={displayDate} className={`${rowBg}`}>
+                            <tr key={displayDate} className={`${getRowColor(statusVal)}`}>
                                <td className="px-2 py-2 whitespace-nowrap flex items-center gap-1">
-                                  <span className={statusVal === 'NORMAL' || statusVal === 'ANÓMALO' ? "text-slate-400" : "opacity-80"}>{dayName}</span> 
+                                  <span className="text-slate-400">{dayName}</span> 
                                   {displayDate}
                                   <select 
                                      value={statusVal} 
                                      onChange={(e) => handleCellEdit(`${prefix}_novedad_status`, e.target.value)} 
-                                     className={`ml-1 appearance-none rounded-full px-2 py-1 text-xs font-bold uppercase tracking-wider outline-none cursor-pointer text-center ${statusVal === 'NORMAL' ? 'bg-slate-200 text-slate-500 hover:bg-slate-300' : statusVal === 'ANÓMALO' ? 'bg-amber-100 text-amber-700 animate-pulse hover:bg-amber-200' : 'bg-white/40 text-current hover:bg-white/60'}`}
+                                     className={`ml-1 appearance-none rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider outline-none cursor-pointer text-center ${getStatusColor(statusVal)} hover:opacity-80`}
                                   >
-                                     <option value="NORMAL">NORMAL</option>
-                                     <option value="ANÓMALO">ANÓMALO</option>
-                                     <option value="CALAMIDAD">CALAMIDAD</option>
-                                     <option value="INCAPACIDAD EG">INCAPACIDAD EG</option>
-                                     <option value="NO MARCÓ RELOJ">NO MARCÓ RELOJ</option>
-                                     <option value="DESCANSO">DESCANSO</option>
+                                     {STATUS_OPTIONS.map(opt => (
+                                       <option key={opt} value={opt}>{opt}</option>
+                                     ))}
                                   </select>
                                </td>
                                <td className="px-1 py-1">
@@ -568,12 +610,11 @@ export default function TabLiquidacion({
                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 overflow-hidden break-words">
                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-900 mb-4 border-b border-slate-100 pb-2">NOVEDADES:</h3>
                    <div className="flex flex-wrap gap-2 mb-6">
-                      <span className="flex items-center gap-1 text-[10px] font-bold"><span className="w-3 h-3 bg-slate-200 rounded-sm"></span> NORMAL</span>
-                      <span className="flex items-center gap-1 text-[10px] font-bold"><span className="w-3 h-3 bg-amber-100 border border-amber-300 rounded-sm"></span> ANÓMALO</span>
-                      <span className="flex items-center gap-1 text-[10px] font-bold"><span className="w-3 h-3 bg-red-500 rounded-sm"></span> CALAMIDAD</span>
-                      <span className="flex items-center gap-1 text-[10px] font-bold"><span className="w-3 h-3 bg-orange-400 rounded-sm"></span> INCAPACIDAD</span>
-                      <span className="flex items-center gap-1 text-[10px] font-bold"><span className="w-3 h-3 bg-yellow-300 rounded-sm border border-slate-200"></span> NO MARCÓ</span>
-                      <span className="flex items-center gap-1 text-[10px] font-bold"><span className="w-3 h-3 bg-green-200 rounded-sm border border-slate-200"></span> DESCANSO</span>
+                      {STATUS_OPTIONS.map(opt => (
+                         <span key={opt} className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md ${getStatusColor(opt)}`}>
+                            {opt}
+                         </span>
+                      ))}
                    </div>
                    
                    <div className="space-y-1.5 text-sm font-semibold text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100">

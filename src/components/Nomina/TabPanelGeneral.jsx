@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import EditableCell from '@/components/Nomina/EditableCell';
+import SaitempModal from '@/components/Nomina/SaitempModal';
 import { PLANILLA_COLUMNS } from '@/utils/constants';
 
 export default function TabPanelGeneral({
@@ -12,9 +13,15 @@ export default function TabPanelGeneral({
   handleCellEdit,
   handleClearAll,
   overrides,
-  fmtCOP
+  fmtCOP,
+  globalSmmlv,
+  setGlobalSmmlv,
+  globalAuxTransporte,
+  setGlobalAuxTransporte
 }) {
   const [vinculacionFiltro, setVinculacionFiltro] = useState('Empresa');
+  const [isSaitempModalOpen, setIsSaitempModalOpen] = useState(false);
+  const [empleadoSaitemp, setEmpleadoSaitemp] = useState(null);
 
   const COLUMNAS_ESENCIALES = ['salario', 'total_devengados', 'total_deducciones', 'neto_pagar'];
   const COLUMNAS_FIJAS = ['consecutivo', 'cedula', 'nombre', 'cargo'];
@@ -44,13 +51,13 @@ export default function TabPanelGeneral({
              onClick={() => setVinculacionFiltro('Empresa')}
              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${vinculacionFiltro === 'Empresa' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-800'}`}
            >
-             🏢 Planta / Empresa
+             🏢 Vinculados
            </button>
            <button
              onClick={() => setVinculacionFiltro('Temporal')}
              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${vinculacionFiltro === 'Temporal' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-800'}`}
            >
-             ⏱️ Temporal
+             ⏱️ En Misión
            </button>
          </div>
 
@@ -62,6 +69,36 @@ export default function TabPanelGeneral({
             Limpiar Quincena
          </button>
       </div>
+
+      <div className="p-4 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-6 items-center">
+        <div className="flex flex-col">
+          <label className="text-[10px] font-bold text-slate-400 uppercase mb-1">SMMLV Actual</label>
+          <input 
+            type="number"
+            value={globalSmmlv}
+            onChange={(e) => setGlobalSmmlv(Number(e.target.value))}
+            className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-bold text-slate-700 bg-white shadow-inner focus:outline-none focus:ring-2 focus:ring-indigo-500 w-32"
+          />
+        </div>
+        <div className="flex flex-col">
+          <label className="text-[10px] font-bold text-slate-400 uppercase mb-1">Auxilio de Transporte</label>
+          <input 
+            type="number"
+            value={globalAuxTransporte}
+            onChange={(e) => setGlobalAuxTransporte(Number(e.target.value))}
+            className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-bold text-slate-700 bg-white shadow-inner focus:outline-none focus:ring-2 focus:ring-indigo-500 w-32"
+          />
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">Valor Día Mínimo</span>
+          <span className="text-sm font-black text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">{Math.round(globalSmmlv / 30)}</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">Tope Auxilio (2 SMMLV)</span>
+          <span className="text-sm font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100">{globalSmmlv * 2}</span>
+        </div>
+      </div>
+
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-x-auto custom-scrollbar">
          <table className="w-full text-left table-auto">
             <thead className="bg-slate-50/90 backdrop-blur-sm sticky top-0 z-20">
@@ -119,6 +156,24 @@ export default function TabPanelGeneral({
                           >
                              Liquidar
                           </button>
+                          {vinculacionFiltro === 'Temporal' && (
+                             <button
+                               onClick={() => {
+                                 const mergedData = {
+                                    ...row,
+                                    horas_nocturnas: overrides[`${row.cedula}_horas_nocturnas`] !== undefined ? overrides[`${row.cedula}_horas_nocturnas`] : row.horas_nocturnas,
+                                    extras_diurnas: overrides[`${row.cedula}_extras_diurnas`] !== undefined ? overrides[`${row.cedula}_extras_diurnas`] : row.extras_diurnas,
+                                    extras_nocturnas: overrides[`${row.cedula}_extras_nocturnas`] !== undefined ? overrides[`${row.cedula}_extras_nocturnas`] : row.extras_nocturnas,
+                                    extras_festivas: overrides[`${row.cedula}_extras_festivas`] !== undefined ? overrides[`${row.cedula}_extras_festivas`] : row.extras_festivas
+                                 };
+                                 setEmpleadoSaitemp(mergedData);
+                                 setIsSaitempModalOpen(true);
+                               }}
+                               className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-3 rounded text-xs transition-colors whitespace-nowrap"
+                             >
+                               📋 FORMATO SAITEMP
+                             </button>
+                           )}
                        </div>
                     </td>
                  </tr>
@@ -134,6 +189,12 @@ export default function TabPanelGeneral({
             </tbody>
          </table>
       </div>
+
+      <SaitempModal 
+        isOpen={isSaitempModalOpen} 
+        onClose={() => setIsSaitempModalOpen(false)} 
+        employee={empleadoSaitemp} 
+      />
     </section>
   );
 }
