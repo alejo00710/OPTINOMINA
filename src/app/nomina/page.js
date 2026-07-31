@@ -445,7 +445,7 @@ export default function NominaPage() {
       // FASE 1: Devengados Base
       const fase1 = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento'];
       // FASE 2: Suma de Devengados (SOLO LLAVES OFICIALES)
-      const fase2 = ['total_devengados'];
+      const fase2 = ['total_devengados', 'ibc_seguridad_social', 'ibc_fsp'];
       // FASE 3: Deducciones Base
       const fase3 = ['salud', 'pension', 'solidaridad', 'prestamos', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'poliza_sura', 'optica', 'celular', 'retencion'];
       // FASE 4: Suma de Deducciones (SOLO LLAVES OFICIALES)
@@ -491,6 +491,8 @@ export default function NominaPage() {
         incapacidad: variables['incapacidad'] || 0,
         total_devengados: variables['total_devengados'] || 0,
         total_devengado: variables['total_devengados'] || 0, // Alias para UI
+        ibc_seguridad_social: variables['ibc_seguridad_social'] || 0,
+        ibc_fsp: variables['ibc_fsp'] || 0,
         salud: variables['salud'] || 0,
         pension: variables['pension'] || 0,
         solidaridad: variables['solidaridad'] || 0,
