@@ -20,6 +20,49 @@ export default function TabColillas({
 
   const selectedWorkerData = payrollData.find(d => d.masterRow && d.masterRow.nombre === selectedWorkerName) || payrollData.find(d => d.nombre === selectedWorkerName) || null;
 
+  const handleDownloadColillasPNG = async () => {
+    const element = document.getElementById('colilla-imprimible');
+    if (!element) return;
+    
+    // Guardar estado original
+    const originalWidth = element.style.width;
+    const originalMaxWidth = element.style.maxWidth;
+    const originalMargin = element.style.margin;
+    
+    // Forzar un ancho amplio para que la colilla se vea "horizontal" y no tan delgada
+    element.style.width = '1100px';
+    element.style.maxWidth = 'none';
+    element.style.margin = '0';
+    
+    // Dynamically import to avoid SSR issues
+    const { toPng } = await import('html-to-image');
+    
+    try {
+      // Tomar la foto en alta resolución (escala 2)
+      const dataUrl = await toPng(element, { 
+        quality: 1.0,
+        pixelRatio: 2,
+        backgroundColor: '#ffffff'
+      });
+      
+      // Crear un enlace invisible para forzar la descarga nativa
+      const link = document.createElement('a');
+      link.download = `Colilla_${selectedWorkerName.replace(/\s+/g, '_')}.png`;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+    } catch (error) {
+      console.error("Error generando PNG:", error);
+    } finally {
+      // Restaurar el DOM a la normalidad
+      element.style.width = originalWidth;
+      element.style.maxWidth = originalMaxWidth;
+      element.style.margin = originalMargin;
+    }
+  };
+
   return (
     <div className="space-y-6 animate-stitch">
       <section className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/60 shadow-md print:hidden">
@@ -58,10 +101,10 @@ export default function TabColillas({
           </div>
           <div className="flex flex-col justify-end h-full">
             <button 
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-emerald-600 text-white rounded-xl text-xs font-black transition-all shadow-md active:scale-95 h-[38px] mt-auto"
+              onClick={handleDownloadColillasPNG}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all shadow-md active:scale-95 h-[38px] mt-auto"
             >
-              Imprimir Colilla
+              🖼️ Descargar Colilla (PNG)
             </button>
           </div>
         </div>

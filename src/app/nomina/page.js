@@ -645,57 +645,62 @@ export default function NominaPage() {
   };
   
   const handleClearAll = async () => {
-    if (window.confirm("¿Seguro de iniciar una nueva quincena? (Se conservarán datos fijos y se borrarán horas/extras).")) {
-      const freshRows = nominaRows.map(emp => ({
-        ...emp,
-        consecutivo: emp.consecutivo,
-        cedula: emp.cedula,
-        nombre: emp.nombre,
-        cargo: emp.cargo,
-        categoria: emp.categoria,
-        salario: Number(emp.salario_base || emp.salario || 0),
-        rodamiento: Number(emp.rodamiento || 0),
-        comisiones: 0,
-        prestamos: Number(emp.prestamos || 0),
-        poliza_bolivar: Number(emp.poliza_bolivar || 0),
-        poliza_sura: Number(emp.poliza_sura || 0),
-        optica: Number(emp.optica || 0),
-        dias_pagados: 0,
-        horas_diurnas: 0,
-        horas_nocturnas: 0,
-        extras_diurnas: 0,
-        extras_nocturnas: 0,
-        extras_festivas: 0,
-        total_devengados: 0,
-        total_deducciones: 0,
-        neto_pagar: 0
-      }));
-      setNominaRows(freshRows);
-      setAttendanceLogs({});
-      setOverrides({});
-      localStorage.removeItem('optinomina_draft');
-      
-      try {
-        await supabase
-          .from('optimoldes_payroll')
-          .upsert({
-            id: 'quincena_activa',
-            start_date: startDate,
-            end_date: endDate,
-            nomina_rows: freshRows,
-            attendance_logs: {},
-            overrides: {},
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'id' });
-          
-        alert("Planilla reseteada en la nube. Lista para nuevo biométrico.");
-      } catch (err) {
-        console.error("Error limpiando quincena en la nube:", err);
-        alert("Error al limpiar en la nube. Revisa tu conexión.");
-      }
+    if (!window.confirm("¿Estás seguro de limpiar las novedades? Esto borrará el borrador actual en la base de datos.")) return;
+    
+    try {
+        // 1. Limpiar biométrico
+        if (typeof setAttendanceLogs === 'function') setAttendanceLogs({});
+        
+        // 2. Limpiar manuales
+        let newOverrides = { ...overrides };
+        const camposABorrar = [
+          'dias_pagados', 'horas_diurnas', 'horas_nocturnas', 'extras_diurnas',
+          'extras_nocturnas', 'extras_festivas', 'comisiones', 'rodamiento',
+          'dias_incapacidad', 'bonificacion_no_salarial', 'bonificacion', 
+          'tot_hr_', 'vr_', 'horas_que_debe'
+        ];
+        
+        Object.keys(newOverrides).forEach(key => {
+            if (camposABorrar.some(campo => key.includes(campo))) {
+                // Inyectamos 0 (o vacío) explícitamente para tapar datos que puedan venir del Excel base
+                newOverrides[key] = key.includes('dias_pagados') ? '' : 0;
+            }
+        });
+        
+        // Limpiar también los datos crudos originales por si vinieron de un Excel
+        const freshRows = nominaRows.map(emp => ({
+          ...emp,
+          dias_pagados: '', horas_diurnas: 0, horas_nocturnas: 0,
+          extras_diurnas: 0, extras_nocturnas: 0, extras_festivas: 0,
+          comisiones: 0, rodamiento: 0, dias_incapacidad: 0,
+          bonificacion: 0, bonificacion_no_salarial: 0,
+          total_devengados: 0, total_deducciones: 0, neto_pagar: 0
+        }));
+
+        setOverrides(newOverrides);
+        setNominaRows(freshRows);
+        
+        // 3. Destruir caché local
+        localStorage.removeItem('optinomina_draft');
+        
+        // 4. GUARDAR EN SUPABASE USANDO TU FUNCIÓN EXISTENTE SEGURA
+        await savePayrollToCloud({ 
+          startDate, 
+          endDate, 
+          nominaRows: freshRows, 
+          attendanceLogs: {}, 
+          overrides: newOverrides, 
+          hiddenColumns 
+        });
+        
+    } catch (err) {
+        console.error("Error en la limpieza:", err);
+        alert("Hubo un error limpiando la quincena.");
+    } finally {
+        // 5. RECARGA GARANTIZADA
+        window.location.reload();
     }
   };
-
 const handleSaveToCloud = async () => {
     setToast({ message: "Guardando en la nube...", type: "info" });
     try {
@@ -902,7 +907,7 @@ const handleSaveToCloud = async () => {
                 : "bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold transition-colors duration-300 active:scale-95 text-xs inline-flex items-center gap-2 shadow-md"
             }
           >
-            {isSaving ? "✅ ¡Guardado con éxito!" : "💾 Guardar Borrador"}
+            {isSaving ? "✅ ¡Guardado con éxito!" : "💾 Guardar Progreso"}
           </button>
 
           <button
@@ -914,7 +919,14 @@ const handleSaveToCloud = async () => {
                 : "bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded font-bold shadow-md text-xs inline-flex items-center gap-2 transition-all active:scale-95 duration-200"
             }
           >
-            {isClosing ? "⏳ Guardando en la nube..." : "✅ Cerrar Quincena"}
+            {isClosing ? "⏳ Guardando en la nube..." : "✅ Guardar Quincena"}
+          </button>
+          
+          <button
+            onClick={handleClearAll}
+            className="bg-rose-100 hover:bg-rose-600 text-rose-600 hover:text-white px-4 py-2 rounded font-bold transition-colors duration-300 active:scale-95 text-xs inline-flex items-center gap-2 shadow-md"
+          >
+            🗑️ Eliminar Quincena
           </button>
         </div>
       </div>

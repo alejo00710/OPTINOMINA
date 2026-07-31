@@ -1,7 +1,8 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/utils/supabase';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 
 export default function TabHistorico() {
   const [historial, setHistorial] = useState([]);
@@ -35,7 +36,7 @@ export default function TabHistorico() {
     });
   };
 
-  const exportarNominaAExcel = (registro) => {
+  const exportarNominaAExcel = async (registro) => {
     try {
       const payload = registro.payload_json;
       if (!payload || !payload.nomina_calculada) {
@@ -44,26 +45,46 @@ export default function TabHistorico() {
       }
 
       const nominaCalculada = payload.nomina_calculada;
-      const wb = XLSX.utils.book_new();
+      const workbook = new ExcelJS.Workbook();
 
       // HOJA 1: Sábana General
-      const sabanaData = nominaCalculada.map(emp => ({
-        "Nombre": emp.nombre,
-        "Cédula": emp.cedula,
-        "Cargo": emp.cargo,
-        "Total Devengado": emp.total_devengados || emp.total_devengado || 0,
-        "Total Deducido": emp.total_deducciones || emp.total_deducido || 0,
-        "Neto a Pagar": emp.neto_pagar || 0
-      }));
-      const wsSabana = XLSX.utils.json_to_sheet(sabanaData);
-      XLSX.utils.book_append_sheet(wb, wsSabana, "Sábana General");
+      const wsSabana = workbook.addWorksheet("Sábana General");
+      wsSabana.columns = [
+        { header: 'Nombre', key: 'nombre', width: 30 },
+        { header: 'Cédula', key: 'cedula', width: 15 },
+        { header: 'Cargo', key: 'cargo', width: 25 },
+        { header: 'Total Devengado', key: 'devengado', width: 20 },
+        { header: 'Total Deducido', key: 'deducido', width: 20 },
+        { header: 'Neto a Pagar', key: 'neto', width: 20 }
+      ];
+      
+      nominaCalculada.forEach(emp => {
+        wsSabana.addRow({
+          nombre: emp.nombre,
+          cedula: emp.cedula,
+          cargo: emp.cargo,
+          devengado: emp.total_devengados || emp.total_devengado || 0,
+          deducido: emp.total_deducciones || emp.total_deducido || 0,
+          neto: emp.neto_pagar || 0
+        });
+      });
 
       // HOJAS INDIVIDUALES
       nominaCalculada.forEach(emp => {
         let rawName = emp.nombre ? String(emp.nombre) : String(emp.cedula || 'Empleado');
         // Quitar caracteres no permitidos en nombres de hojas y limitar a 31 caracteres
         let sheetName = rawName.replace(/[\\/?*[\]]/g, '').trim().substring(0, 31);
-
+        
+        let finalSheetName = sheetName;
+        let counter = 1;
+        while (workbook.getWorksheet(finalSheetName)) {
+           const suffix = `_${counter}`;
+           finalSheetName = sheetName.substring(0, 31 - suffix.length) + suffix;
+           counter++;
+        }
+        
+        const wsEmp = workbook.addWorksheet(finalSheetName);
+        
         const safeNumber = (val) => isNaN(Number(val)) ? 0 : Number(val);
         const polizas = safeNumber(emp.poliza_bolivar) + safeNumber(emp.poliza_sura) + safeNumber(emp.poliza_plenitud);
 
@@ -110,22 +131,16 @@ export default function TabHistorico() {
           ['NETO A PAGAR', safeNumber(emp.neto_pagar)]
         ];
         
-        const wsEmp = XLSX.utils.aoa_to_sheet(aoaData);
-        // Manejar posibles nombres duplicados de hojas
-        let finalSheetName = sheetName;
-        let counter = 1;
-        while (wb.SheetNames.includes(finalSheetName)) {
-           const suffix = `_${counter}`;
-           finalSheetName = sheetName.substring(0, 31 - suffix.length) + suffix;
-           counter++;
-        }
-        XLSX.utils.book_append_sheet(wb, wsEmp, finalSheetName);
+        wsEmp.addRows(aoaData);
       });
 
       // Generar archivo
       const fecha = registro.created_at ? registro.created_at.split('T')[0] : new Date().toISOString().split('T')[0];
       const fileName = `Nomina_Historico_${fecha}.xlsx`;
-      XLSX.writeFile(wb, fileName);
+      
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      saveAs(blob, fileName);
 
     } catch (err) {
       console.error("Error exportando a Excel:", err);

@@ -1,5 +1,6 @@
 import React from "react";
 import NominaSummaryCards from "./NominaSummaryCards";
+import ConsolidadoSaitemp from "./ConsolidadoSaitemp";
 
 export default function TabReportes({ totals, filteredPayrollData, categorySegmentedData, bankTotals, fmtCOP }) {
   return (
@@ -27,6 +28,9 @@ export default function TabReportes({ totals, filteredPayrollData, categorySegme
           <h3 className="text-2xl font-black text-slate-900">${fmtCOP(bankTotals.cajaSocial)}</h3>
         </div>
       </section>
+
+      {/* Consolidado Global SAITEMP */}
+      <ConsolidadoSaitemp empleadosLiquidados={filteredPayrollData} />
     </div>
   );
 }

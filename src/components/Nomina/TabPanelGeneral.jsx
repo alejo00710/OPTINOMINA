@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import EditableCell from '@/components/Nomina/EditableCell';
 import SaitempModal from '@/components/Nomina/SaitempModal';
 import { PLANILLA_COLUMNS } from '@/utils/constants';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function TabPanelGeneral({
   nominaRows,
@@ -38,6 +42,181 @@ export default function TabPanelGeneral({
     return tipo === vinculacionFiltro;
   });
 
+  const handleDownloadSaitempExcel = async () => {
+    const empleadosMision = filteredPayrollData.filter(row => {
+      const tipo = (row.masterRow && row.masterRow.tipo_vinculacion) || 'Empresa';
+      return tipo === 'Temporal';
+    });
+
+    if (empleadosMision.length === 0) {
+      alert("No hay empleados en misión para generar el reporte.");
+      return;
+    }
+
+    const formatHour = (val) => (val && Number(val) > 0) ? Number(val).toFixed(1) : '';
+    const formatValue = (val) => (val && Number(val) > 0) ? Math.round(Number(val)) : '';
+    const formatNovedad = (val) => (val && Number(val) > 0) ? Number(val) : '';
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('NOVEDADES');
+
+    worksheet.columns = [
+      { header: 'No.', key: 'no', width: 5 },
+      { header: 'ÁREA/PROCESO', key: 'area', width: 20 },
+      { header: 'IDENTIFICACIÓN', key: 'id', width: 20 },
+      { header: 'NOMBRES Y APELLIDOS', key: 'nombres', width: 35 },
+      { header: 'FECHA INICIO NOVEDAD (DD-MM-AA)', key: 'inicio', width: 20 },
+      { header: 'FECHA FINAL NOVEDAD (DD-MM-AA)', key: 'fin', width: 20 },
+      { header: 'TOTAL DÍAS', key: 'dias', width: 10 },
+      { header: 'RECARGO NOCTURNO Hrs.', key: 'rn', width: 15 },
+      { header: 'HORAS EXTRAS DIURNAS', key: 'hed', width: 15 },
+      { header: 'HORAS EXTRAS NOCTURNAS', key: 'hen', width: 15 },
+      { header: 'HORAS EXTRAS FESTIVAS DIURNAS', key: 'hefd', width: 15 },
+      { header: 'AUXILIO DE RODAMIENTO A COMERCIAL', key: 'rodamiento', width: 20 },
+      { header: 'COMISIÓN DE VENTA (PRESTACIONAL)', key: 'comisiones', width: 20 },
+      { header: 'DESCUENTOS DE NÓMINA', key: 'descuentos', width: 20 },
+      { header: 'OBSERVACIONES', key: 'obs', width: 40 }
+    ];
+
+    const headerRow = worksheet.getRow(1);
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFBDD7EE' }
+      };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    });
+
+    empleadosMision.forEach((emp, index) => {
+      const deduccionesSaitemp = 
+        (Number(emp.prestamos) || 0) + 
+        (Number(emp.poliza_bolivar) || 0) + 
+        (Number(emp.poliza_plenitud) || 0) + 
+        (Number(emp.libranza_comfama) || 0) + 
+        (Number(emp.poliza_sura) || 0) + 
+        (Number(emp.optica) || 0) + 
+        (Number(emp.celular) || 0);
+
+      const obsArray = [];
+      if (Number(emp.prestamos) > 0) obsArray.push("Abono a Préstamo");
+      if (Number(emp.poliza_bolivar) > 0) obsArray.push("Póliza Bolívar");
+      if (Number(emp.poliza_plenitud) > 0) obsArray.push("Póliza Plenitud");
+      if (Number(emp.libranza_comfama) > 0) obsArray.push("Libranza Comfama");
+      if (Number(emp.poliza_sura) > 0) obsArray.push("Póliza Sura");
+      if (Number(emp.optica) > 0) obsArray.push("Óptica");
+      if (Number(emp.celular) > 0) obsArray.push("Celular");
+
+      worksheet.addRow({
+        no: index + 1,
+        area: (emp.cargo || '').toUpperCase(),
+        id: emp.cedula,
+        nombres: emp.nombre,
+        inicio: "",
+        fin: "",
+        dias: formatNovedad(emp.dias_incapacidad),
+        rn: formatHour(emp.horas_nocturnas),
+        hed: formatHour(emp.extras_diurnas),
+        hen: formatHour(emp.extras_nocturnas),
+        hefd: formatHour(emp.extras_festivas),
+        rodamiento: formatValue(emp.rodamiento),
+        comisiones: formatValue(emp.comisiones),
+        descuentos: formatValue(deduccionesSaitemp),
+        obs: obsArray.join(", ")
+      });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(blob, 'Reporte_SAITEMP.xlsx');
+  };
+
+  const handleDownloadSaitempPDF = () => {
+    const empleadosMision = filteredPayrollData.filter(row => {
+      const tipo = (row.masterRow && row.masterRow.tipo_vinculacion) || 'Empresa';
+      return tipo === 'Temporal';
+    });
+
+    if (empleadosMision.length === 0) {
+      alert("No hay empleados en misión para generar el reporte.");
+      return;
+    }
+
+    const formatHour = (val) => (val && Number(val) > 0) ? Number(val).toFixed(1) : '';
+    const formatValue = (val) => (val && Number(val) > 0) ? Math.round(Number(val)) : '';
+    const formatNovedad = (val) => (val && Number(val) > 0) ? Number(val) : '';
+
+    const bodyData = empleadosMision.map((emp, index) => {
+      const deduccionesSaitemp = 
+        (Number(emp.prestamos) || 0) + 
+        (Number(emp.poliza_bolivar) || 0) + 
+        (Number(emp.poliza_plenitud) || 0) + 
+        (Number(emp.libranza_comfama) || 0) + 
+        (Number(emp.poliza_sura) || 0) + 
+        (Number(emp.optica) || 0) + 
+        (Number(emp.celular) || 0);
+
+      const obsArray = [];
+      if (Number(emp.prestamos) > 0) obsArray.push("Abono a Préstamo");
+      if (Number(emp.poliza_bolivar) > 0) obsArray.push("Póliza Bolívar");
+      if (Number(emp.poliza_plenitud) > 0) obsArray.push("Póliza Plenitud");
+      if (Number(emp.libranza_comfama) > 0) obsArray.push("Libranza Comfama");
+      if (Number(emp.poliza_sura) > 0) obsArray.push("Póliza Sura");
+      if (Number(emp.optica) > 0) obsArray.push("Óptica");
+      if (Number(emp.celular) > 0) obsArray.push("Celular");
+
+      return [
+        index + 1,
+        (emp.cargo || '').toUpperCase(),
+        emp.cedula,
+        emp.nombre,
+        "", // Inicio
+        "", // Fin
+        formatNovedad(emp.dias_incapacidad),
+        formatHour(emp.horas_nocturnas),
+        formatHour(emp.extras_diurnas),
+        formatHour(emp.extras_nocturnas),
+        formatHour(emp.extras_festivas),
+        formatValue(emp.rodamiento),
+        formatValue(emp.comisiones),
+        formatValue(deduccionesSaitemp),
+        obsArray.join(", ")
+      ];
+    });
+
+    const doc = new jsPDF('landscape');
+    
+    autoTable(doc, {
+      head: [[
+        "No.", "ÁREA", "CÉDULA", "EMPLEADO", 
+        "INICIO", "FIN", "DÍAS", "R.N", 
+        "H.E.D", "H.E.N", "H.E.F.D", "RODAM.", 
+        "COMISIÓN", "DEDUC.", "OBSERV."
+      ]],
+      body: bodyData,
+      theme: 'grid',
+      headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold', halign: 'center' },
+      alternateRowStyles: { fillColor: [245, 247, 250] },
+      styles: { fontSize: 6, cellPadding: 1, textColor: 50, overflow: 'linebreak' },
+      margin: { left: 5, right: 5, top: 15 },
+      columnStyles: {
+        1: { cellWidth: 18 },
+        2: { cellWidth: 15 },
+        3: { cellWidth: 40 },
+        14: { cellWidth: 35 }
+      }
+    });
+
+    doc.save('Reporte_SAITEMP.pdf');
+  };
+
   return (
     <section className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl overflow-hidden rounded-3xl animate-stitch">
       <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-4">
@@ -61,13 +240,22 @@ export default function TabPanelGeneral({
            </button>
          </div>
 
-         <button
-            onClick={handleClearAll}
-            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs shadow-md shadow-rose-200 transition-all active:scale-95 flex items-center gap-2"
-         >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            Limpiar Quincena
-         </button>
+         <div className="flex gap-2 items-center">
+           <div className="flex rounded-xl overflow-hidden shadow-md">
+             <button
+               onClick={handleDownloadSaitempExcel}
+               className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs transition-all flex items-center gap-2 border-r border-emerald-600/30"
+             >
+               📊 Excel
+             </button>
+             <button
+               onClick={handleDownloadSaitempPDF}
+               className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs transition-all flex items-center gap-2"
+             >
+               📕 PDF
+             </button>
+           </div>
+         </div>
       </div>
 
       <div className="p-4 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-6 items-center">

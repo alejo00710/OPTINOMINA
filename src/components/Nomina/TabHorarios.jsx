@@ -69,7 +69,6 @@ export default function TabHorarios({ empleados }) {
   const dragItem = React.useRef(null);
   const dragOverItem = React.useRef(null);
 
-  const dias = ['LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO', 'DOMINGO'];
 
   const getIdUsar = (emp) => emp.id_biometrico || emp.biometric_id || emp.cedula;
 
@@ -274,10 +273,11 @@ export default function TabHorarios({ empleados }) {
   };
 
   const obtenerFechasSemana = (fechaString) => {
-    if (!fechaString) return Array(7).fill('');
+    const defaultDias = ['LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO', 'DOMINGO'];
+    if (!fechaString) return defaultDias.map(d => ({ nombre: d, fecha: '' }));
     
     const [year, month, day] = fechaString.split('-');
-    if (!year || !month || !day) return Array(7).fill('');
+    if (!year || !month || !day) return defaultDias.map(d => ({ nombre: d, fecha: '' }));
     
     const baseDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
     
@@ -286,14 +286,21 @@ export default function TabHorarios({ empleados }) {
         const currentDate = new Date(baseDate);
         currentDate.setDate(baseDate.getDate() + i);
         
+        const nombreDia = new Intl.DateTimeFormat('es-CO', { weekday: 'long' }).format(currentDate).toUpperCase();
         const d = String(currentDate.getDate()).padStart(2, '0');
         const m = String(currentDate.getMonth() + 1).padStart(2, '0');
-        fechas.push(`${d}/${m}`);
+        
+        fechas.push({
+            nombre: nombreDia,
+            fecha: `${d}/${m}`
+        });
     }
     return fechas;
   };
-  
-  const diasNumeros = obtenerFechasSemana(fechaInicioSemana);
+
+  const diasData = obtenerFechasSemana(fechaInicioSemana);
+  const dias = diasData.map(d => d.nombre);
+  const diasNumeros = diasData.map(d => d.fecha);
 
   const renderRow = (emp) => {
     const idUsar = getIdUsar(emp);

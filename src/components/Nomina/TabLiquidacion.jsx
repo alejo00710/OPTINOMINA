@@ -408,7 +408,7 @@ export default function TabLiquidacion({
                          const getTotHr = (field, defaultVal) => overrides[`${selectedWorkerData.cedula}_tot_hr_${field}`] !== undefined ? Number(overrides[`${selectedWorkerData.cedula}_tot_hr_${field}`]) : defaultVal;
                          
                          const tDiurnas = getTotHr('diurnas', Number(selectedWorkerData.horas_diurnas || 0));
-                         const tNocturnas = getTotHr('nocturnas', Number(selectedWorkerData.horas_nocturnas || 0));
+                         const tNocturnas = overrides[`${selectedWorkerData.cedula}_horas_nocturnas`] !== undefined ? Number(overrides[`${selectedWorkerData.cedula}_horas_nocturnas`]) : Number(selectedWorkerData.horas_nocturnas || 0);
                          const tFesDiu = getTotHr('fes_diu', Number(selectedWorkerData.festivas_diurnas || 0));
                          const tFesNoc = getTotHr('fes_noc', Number(selectedWorkerData.festivas_nocturnas || 0));
                          
@@ -423,7 +423,7 @@ export default function TabLiquidacion({
                          
                          const getVr = (field, defaultVal) => overrides[`${selectedWorkerData.cedula}_vr_${field}`] !== undefined && overrides[`${selectedWorkerData.cedula}_vr_${field}`] !== "" ? overrides[`${selectedWorkerData.cedula}_vr_${field}`] : defaultVal;
                          
-                         const vNocturnas = getVr('nocturnas', calcValor(tNocturnas, 35));
+                         const vNocturnas = overrides[`${selectedWorkerData.cedula}_recargo_nocturno`] !== undefined && overrides[`${selectedWorkerData.cedula}_recargo_nocturno`] !== "" ? Number(overrides[`${selectedWorkerData.cedula}_recargo_nocturno`]) : Number(selectedWorkerData.recargo_nocturno || 0);
                          const vFesDiu = getVr('fes_diu', calcValor(tFesDiu, 75));
                          const vFesNoc = getVr('fes_noc', calcValor(tFesNoc, 210));
                          const vExtDiu = getVr('ext_diu', calcValor(horasExtraDiurnaReal, 150));
@@ -492,13 +492,13 @@ export default function TabLiquidacion({
                                         <tr className="hover:bg-slate-800/50 transition-colors">
                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">29. Nocturnas</td>
                                            <td className="py-2 px-2 text-center text-indigo-300">
-                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_nocturnas`]} fallback={tNocturnas} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_nocturnas`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
+                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_horas_nocturnas`]} fallback={tNocturnas} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_horas_nocturnas`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
                                            </td>
                                            <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">35%</span></td>
                                            <td className="py-2 px-2 text-right">
                                               <div className="flex justify-end items-center gap-1">
                                                  <span className="text-indigo-400">$</span>
-                                                 <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_nocturnas`]} fallback={vNocturnas} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_nocturnas`, val)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" decimals={0} />
+                                                 <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_recargo_nocturno`]} fallback={vNocturnas} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_recargo_nocturno`, val)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" decimals={0} />
                                               </div>
                                            </td>
                                         </tr>
