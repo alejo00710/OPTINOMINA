@@ -301,7 +301,7 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
       const diffHours = (p.timestamp - last.timestamp) / 3600000;
       const totalHours = (p.timestamp - first.timestamp) / 3600000;
       
-      if (diffHours < (5 / 60)) continue; // Ignorar marcaciones dobles (menos de 5 mins)
+      if (diffHours < (20 / 60)) continue; // Ignorar marcaciones dobles (menos de 20 mins)
 
       // Regla de Agrupamiento Robusto:
       // 1. Se rompe el turno si excede la duración máxima (14h) desde la primera marca.

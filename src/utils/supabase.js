@@ -113,3 +113,25 @@ export const toggleEmployeeStatus = async (cedula, currentStatus) => {
     return { success: false, error };
   }
 };
+
+export const loadWeeklySchedulesFromCloud = async (startDate, endDate) => {
+  try {
+    // Fetch weeks starting up to 7 days before startDate to cover overlapping weeks
+    const start = new Date(startDate);
+    start.setDate(start.getDate() - 7);
+    const startStr = start.toISOString().split('T')[0];
+
+    const { data, error } = await supabase
+      .from('horarios_semanales')
+      .select('*')
+      .gte('id_semana', startStr)
+      .lte('id_semana', endDate);
+      
+    if (error) throw error;
+    return { success: true, data };
+  } catch (error) {
+    console.error("Error cargando horarios_semanales:", error);
+    return { success: false, data: [] };
+  }
+};
+

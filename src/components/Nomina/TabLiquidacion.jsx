@@ -180,7 +180,7 @@ export default function TabLiquidacion({
                 onChange={(e) => setSelectedWorkerName(e.target.value)}
                 className="bg-emerald-50 border-2 border-emerald-500 text-emerald-900 text-sm font-bold px-3 py-1.5 rounded-lg outline-none min-w-[200px]"
              >
-               {nominaRows && nominaRows.map(member => (
+               {nominaRows && nominaRows.filter(m => m.categoria !== 'Administrativo' && m.cargo?.toUpperCase() !== 'ADMINISTRATIVO').map(member => (
                   <option key={member.nombre} value={member.nombre}>{member.nombre}</option>
                ))}
              </select>

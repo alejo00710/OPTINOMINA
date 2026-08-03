@@ -14,7 +14,7 @@ import TabHorarios from "@/components/Nomina/TabHorarios";
 import FormulaEditorModal from "@/components/Nomina/FormulaEditorModal";
 import { NOMINA_DATE_RANGE_KEY, loadPersistedDateRange, savePersistedDateRange, PLANILLA_COLUMNS, DAILY_COLUMNS, LIQUIDATION_CONCEPTS, DEFAULT_FORMULAS, SMLV, AUX_TRANSPORTE, MINIMO_DIARIO_INCAPACIDAD, evaluateFormula, DIVISOR_RECARGOS_NOCTURNOS, DIVISOR_HORAS_EXTRAS, FACTOR_RECARGO_NOCTURNO, FACTOR_EXTRA_DIURNA, FACTOR_EXTRA_NOCTURNA, FACTOR_EXTRA_FESTIVA, FACTOR_EXTRA_FESTIVA_NOCTURNA, HORA_INICIO_DIURNA, HORA_FIN_DIURNA } from "@/utils/constants";
 import { timeStrToDecimal, decimalToTimeStr, diffTimeStr, getDecimalHours, getHourDist, fmtCOP, fmtDec, parseLocalNumber, calculateDailyRecord } from "@/utils/mathNomina";
-import { supabase, savePayrollToCloud, loadPayrollFromCloud, loadEmployeesFromCloud, uploadEmployeesBulk } from "@/utils/supabase";
+import { supabase, savePayrollToCloud, loadPayrollFromCloud, loadEmployeesFromCloud, uploadEmployeesBulk, loadWeeklySchedulesFromCloud } from "@/utils/supabase";
 import { detectShiftTemplate, emptyAttendanceDay, cleanWorkerPunches, parseBiometricCSV, findEmployeeMatch } from "@/utils/biometricCore";
 
 const safeParseNumber = (val) => {
@@ -56,6 +56,7 @@ export default function NominaPage() {
   const [overrides, setOverrides] = useState({});
   const [hiddenColumns, setHiddenColumns] = useState({});
   const [showColumnManager, setShowColumnManager] = useState(false);
+  const [weeklySchedules, setWeeklySchedules] = useState([]);
 
   const [selectedWorkerName, setSelectedWorkerName] = useState("");
 
@@ -174,33 +175,36 @@ export default function NominaPage() {
         let masterEmployees = [];
         const empRes = await loadEmployeesFromCloud();
         if (empRes.success && empRes.data) {
-          masterEmployees = empRes.data.map((emp, index) => ({
-            consecutivo: index + 1,
-            cedula: emp.cedula,
-            biometric_id: emp.biometric_id || "",
-            nombre: emp.nombre,
-            cargo: emp.cargo,
-            categoria: emp.categoria,
-            banco: emp.banco || "",
-            tipo_vinculacion: emp.tipo_vinculacion || "",
-            salario: Number(emp.salario_base || emp.salario || 0),
-            rodamiento: Number(emp.rodamiento || 0),
-            comisiones: 0,
-            poliza_bolivar: Number(emp.poliza_bolivar || 0),
-            poliza_sura: Number(emp.poliza_sura || 0),
-            optica: Number(emp.optica || 0),
-            prestamos: Number(emp.prestamos || 0),
-            // Transaccionales inicializados en 0
-            dias_pagados: 0,
-            horas_diurnas: 0,
-            horas_nocturnas: 0,
-            extras_diurnas: 0,
-            extras_nocturnas: 0,
-            extras_festivas: 0,
-            total_devengados: 0,
-            total_deducciones: 0,
-            neto_pagar: 0
-          }));
+          masterEmployees = empRes.data.map((emp, index) => {
+            const esAdmin = emp.categoria === 'Administrativo' || emp.cargo?.toUpperCase() === 'ADMINISTRATIVO';
+            return {
+              consecutivo: index + 1,
+              cedula: emp.cedula,
+              biometric_id: emp.biometric_id || "",
+              nombre: emp.nombre,
+              cargo: emp.cargo,
+              categoria: emp.categoria,
+              banco: emp.banco || "",
+              tipo_vinculacion: emp.tipo_vinculacion || "",
+              salario: Number(emp.salario_base || emp.salario || 0),
+              rodamiento: Number(emp.rodamiento || 0),
+              comisiones: 0,
+              poliza_bolivar: Number(emp.poliza_bolivar || 0),
+              poliza_sura: Number(emp.poliza_sura || 0),
+              optica: Number(emp.optica || 0),
+              prestamos: Number(emp.prestamos || 0),
+              // Transaccionales inicializados en 0
+              dias_pagados: esAdmin ? 15 : 0,
+              horas_diurnas: esAdmin ? 88 : 0,
+              horas_nocturnas: 0,
+              extras_diurnas: 0,
+              extras_nocturnas: 0,
+              extras_festivas: 0,
+              total_devengados: 0,
+              total_deducciones: 0,
+              neto_pagar: 0
+            };
+          });
         }
 
         // TAREA 3: Iniciar en blanco (solo cargar masterEmployees y estados vacíos)
@@ -268,6 +272,15 @@ export default function NominaPage() {
     } catch {
       /* ignore */
     }
+    
+    // Load weekly schedules
+    const fetchSchedules = async () => {
+       const res = await loadWeeklySchedulesFromCloud(startDate, endDate);
+       if (res.success) {
+         setWeeklySchedules(res.data);
+       }
+    };
+    fetchSchedules();
   }, [startDate, endDate]);
 
   const getDatesInRange = (start, end) => {
@@ -291,6 +304,33 @@ export default function NominaPage() {
   // --- Central Payroll Calculation Engine ---
   const payrollData = useMemo(() => {
     console.log("RECALCULATING PAYROLL DATA. Attendance logs:", Object.keys(attendanceLogs).length, "employees");
+    
+    const getScheduledShift = (emp, dateStr, schedules) => {
+       const targetDate = new Date(dateStr + "T00:00:00");
+       const dayNames = ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO'];
+       const dayName = dayNames[targetDate.getDay()];
+       const targetTime = targetDate.getTime();
+       
+       let matchedWeek = null;
+       for (let week of schedules) {
+           const weekStart = new Date(week.id_semana + "T00:00:00");
+           const weekEnd = new Date(week.id_semana + "T00:00:00");
+           weekEnd.setDate(weekEnd.getDate() + 6);
+           
+           if (targetTime >= weekStart.getTime() && targetTime <= weekEnd.getTime()) {
+               matchedWeek = week;
+               break;
+           }
+       }
+       
+       if (matchedWeek && matchedWeek.datos_json) {
+           const idUsar = emp.biometric_id || emp.cedula;
+           const shift = matchedWeek.datos_json[`${idUsar}_${dayName}`];
+           return shift || null;
+       }
+       return null;
+    };
+
     return nominaRows.map(emp => {
       const cedula = emp.cedula;
       const logs = attendanceLogs[cedula] || [];
@@ -300,7 +340,8 @@ export default function NominaPage() {
          const existingLog = logs.find(l => l.dia === date);
          const dayLog = existingLog || { dia: date, hr_ent: "-", hr_sal: "-", hr_ent_desc1: "-", hr_sal_desc1: "-", hr_ent_desc2: "-", hr_sal_desc2: "-" };
          const prefix = `${cedula}_${date}`;
-         return calculateDailyRecord(dayLog, overrides, prefix, HORA_INICIO_DIURNA, HORA_FIN_DIURNA);
+         const scheduledShift = getScheduledShift(emp, date, weeklySchedules);
+         return calculateDailyRecord(dayLog, overrides, prefix, HORA_INICIO_DIURNA, HORA_FIN_DIURNA, scheduledShift);
       });
       
       // 1. Sumatorias del Biométrico (Equivalente a Fila 24 de hojas individuales)
@@ -321,7 +362,13 @@ export default function NominaPage() {
       });
 
       // Sobreescribir días pagados si el usuario lo editó manualmente (overrides) o usar los calculados
-      const diasPagados = resolveValue(overrides, `${cedula}_dias_pagados`, () => (diasLaborados > 0 ? diasLaborados : 15));
+      const diasPagados = resolveValue(overrides, `${cedula}_dias_pagados`, () => {
+         let dias = 15; // default
+         if (emp.dias_pagados === 0 || emp.dias_pagados === '0') dias = 0;
+         else if (emp.dias_pagados !== undefined && emp.dias_pagados !== '') dias = Number(emp.dias_pagados);
+         else if (diasLaborados > 0) dias = diasLaborados;
+         return dias;
+      });
       const horasDebe = resolveValue(overrides, `${cedula}_horas_que_debe`, () => Number(emp.horas_debe || 0));
       
       const salarioBase = resolveValue(overrides, `${cedula}_salario_base`, () => Number(emp.salario_base || emp.salario || 0));
@@ -465,7 +512,7 @@ export default function NominaPage() {
           variables['total_pagar'] = safeParseNumber(variables['total_devengados']) - safeParseNumber(variables['total_deducciones']);
       }
 
-      return {
+      const finalRow = {
         masterRow: emp,
         ...emp,
         dias_pagados: diasPagados,
@@ -516,6 +563,18 @@ export default function NominaPage() {
             total_extra_val: (variables['recargo_nocturno']||0) + (variables['val_extras_diurnas']||0) + (variables['val_extras_nocturnas']||0) + (variables['val_extras_festivas']||0) + resolveValue(overrides, `${cedula}_val_extras_festivas_nocturnas`, () => 0)
         }
       };
+
+      const esAdmin = emp.categoria === 'Administrativo' || emp.cargo?.toUpperCase() === 'ADMINISTRATIVO';
+      if (esAdmin) {
+          finalRow.horas_diurnas = 88;
+          finalRow.horas_nocturnas = 0;
+          finalRow.extras_diurnas = 0;
+          finalRow.extras_nocturnas = 0;
+          finalRow.extras_festivas = 0;
+          finalRow.dias_pagados = emp.dias_pagados !== '' && emp.dias_pagados !== undefined ? Number(emp.dias_pagados) : 15;
+      }
+
+      return finalRow;
     });
   }, [nominaRows, attendanceLogs, overrides, activeFormulas, startDate, endDate]);
 
@@ -662,21 +721,30 @@ export default function NominaPage() {
         
         Object.keys(newOverrides).forEach(key => {
             if (camposABorrar.some(campo => key.includes(campo))) {
-                // Inyectamos 0 (o vacío) explícitamente para tapar datos que puedan venir del Excel base
-                newOverrides[key] = key.includes('dias_pagados') ? '' : 0;
+                delete newOverrides[key];
             }
         });
         
-        // Limpiar también los datos crudos originales por si vinieron de un Excel
-        const freshRows = nominaRows.map(emp => ({
-          ...emp,
-          dias_pagados: '', horas_diurnas: 0, horas_nocturnas: 0,
-          extras_diurnas: 0, extras_nocturnas: 0, extras_festivas: 0,
-          comisiones: 0, rodamiento: 0, dias_incapacidad: 0,
-          bonificacion: 0, bonificacion_no_salarial: 0,
-          total_devengados: 0, total_deducciones: 0, neto_pagar: 0
-        }));
+        // 1. Crear una matriz completamente limpia a la fuerza
+        const freshRows = nominaRows.map(emp => {
+            const esAdmin = emp.categoria === 'Administrativo' || emp.cargo?.toUpperCase() === 'ADMINISTRATIVO';
+            return {
+                ...emp,
+                dias_pagados: esAdmin ? 15 : 0, // 0 estricto
+                horas_diurnas: esAdmin ? 88 : 0,
+                horas_nocturnas: 0,
+                extras_diurnas: 0,
+                extras_nocturnas: 0,
+                extras_festivas: 0,
+                comisiones: 0,
+                rodamiento: 0,
+                dias_incapacidad: 0,
+                bonificacion_no_salarial: 0
+                // PROTEGIDOS: No tocar salario_base, optica, celular, prestamos ni polizas.
+            };
+        });
 
+        // 2. Actualizar el estado visual
         setOverrides(newOverrides);
         setNominaRows(freshRows);
         

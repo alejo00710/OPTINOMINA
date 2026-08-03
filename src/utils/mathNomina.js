@@ -133,8 +133,63 @@ export const getTimeDifference = (start, end, allowMidnight = true) => {
 };
 
 
-export const getOfficialShiftTime = (timeStr, type) => {
+export const getOfficialShiftTime = (timeStr, type, turnoProgramadoDelDia = null) => {
   if (!timeStr || timeStr === "-") return "-";
+  
+  if (turnoProgramadoDelDia) {
+    const t = turnoProgramadoDelDia.toUpperCase().trim();
+    if (t !== 'DESCANSO' && t !== 'VACACIONES' && t !== 'LICENCIA') {
+       if (t.includes('-')) {
+          const parts = t.split('-');
+          if (parts.length === 2) {
+             const targetStr = type === 'ent' ? parts[0].trim() : parts[1].trim();
+             const partsTime = targetStr.split(':');
+             if (partsTime.length === 2) {
+                const hh = String(parseInt(partsTime[0], 10) || 0).padStart(2, "0");
+                const mm = String(parseInt(partsTime[1], 10) || 0).padStart(2, "0");
+                return `${hh}:${mm}`;
+             }
+          }
+       }
+
+       const regexAMPM = /(\d{1,2}(?::\d{2})?)\s*(AM|PM)\s+A\s+(\d{1,2}(?::\d{2})?)\s*(AM|PM)/i;
+       const match = t.match(regexAMPM);
+       if (match) {
+           const parseTo24 = (timeString, modifier) => {
+               let [hStr, mStr] = timeString.includes(':') ? timeString.split(':') : [timeString, '00'];
+               let hours = parseInt(hStr, 10);
+               if (hours === 12) {
+                   hours = modifier.toUpperCase() === 'AM' ? 0 : 12;
+               } else if (modifier.toUpperCase() === 'PM') {
+                   hours += 12;
+               }
+               return `${String(hours).padStart(2, '0')}:${String(mStr || '0').padStart(2, '0')}`;
+           };
+           const entTime = parseTo24(match[1], match[2]);
+           const salTime = parseTo24(match[3], match[4]);
+           return type === 'ent' ? entTime : salTime;
+       }
+
+       let entMin = null;
+       let salMin = null;
+       
+       if (t.includes('6AM A 2PM')) { entMin = 360; salMin = 840; }
+       else if (t.includes('2PM A 10PM')) { entMin = 840; salMin = 1320; }
+       else if (t.includes('10PM A 6AM')) { entMin = 1320; salMin = 360; }
+       else if (t.includes('6AM A 6PM')) { entMin = 360; salMin = 1080; }
+       else if (t.includes('6PM A 6AM')) { entMin = 1080; salMin = 360; }
+       else if (t.includes('7:30AM A 5PM') || t.includes('7:30 A 5PM')) { entMin = 450; salMin = 1020; }
+       
+       if (entMin !== null && salMin !== null) {
+          let targetMin = type === 'ent' ? entMin : salMin;
+          let targetHours = Math.floor(targetMin / 60);
+          let targetMinutes = targetMin % 60;
+          if (targetHours >= 24) targetHours -= 24;
+          return `${String(targetHours).padStart(2, "0")}:${String(targetMinutes).padStart(2, "0")}`;
+       }
+    }
+  }
+
   const parts = timeStr.split(":");
   if (parts.length !== 2) return timeStr;
   
@@ -167,7 +222,7 @@ export const getOfficialShiftTime = (timeStr, type) => {
   return `${hh}:${mm}`;
 };
 
-export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, horaFinDiurna) => {
+export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, horaFinDiurna, turnoProgramadoDelDia = null) => {
   const isTime = (t) => t && String(t).trim() !== "" && String(t).trim() !== "-" && String(t).trim() !== "00:00";
 
   // Descansos (F y I)
@@ -183,8 +238,8 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   const desc2Val = timeStrToDecimal(desc2);
 
   // Pago Ent (J) y Pago Sal (K)
-  const baseHrEnt = getOfficialShiftTime(day.hr_ent, "ent");
-  const baseHrSal = getOfficialShiftTime(day.hr_sal, "sal");
+  const baseHrEnt = getOfficialShiftTime(day.hr_ent, "ent", turnoProgramadoDelDia);
+  const baseHrSal = getOfficialShiftTime(day.hr_sal, "sal", turnoProgramadoDelDia);
 
   const hrEntPago = overrides[`${prefix}_hr_ent_pago`] !== undefined ? String(overrides[`${prefix}_hr_ent_pago`]) : baseHrEnt;
   const hrSalPago = overrides[`${prefix}_hr_sal_pago`] !== undefined ? String(overrides[`${prefix}_hr_sal_pago`]) : baseHrSal;
