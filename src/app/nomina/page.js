@@ -305,30 +305,42 @@ export default function NominaPage() {
   const payrollData = useMemo(() => {
     console.log("RECALCULATING PAYROLL DATA. Attendance logs:", Object.keys(attendanceLogs).length, "employees");
     
-    const getScheduledShift = (emp, dateStr, schedules) => {
+  const getScheduledShift = (emp, dateStr, schedules) => {
        const targetDate = new Date(dateStr + "T00:00:00");
-       const dayNames = ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO'];
-       const dayName = dayNames[targetDate.getDay()];
+       const nameMap = { 1: 'LUNES', 2: 'MARTES', 3: 'MIÉRCOLES', 4: 'JUEVES', 5: 'VIERNES', 6: 'SÁBADO', 0: 'DOMINGO' };
+       const diaSemanaMayuscula = nameMap[targetDate.getDay()];
        const targetTime = targetDate.getTime();
+       const getMonday = (d) => {
+         const date = new Date(d);
+         const day = date.getDay();
+         const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+         return new Date(date.setDate(diff)).toISOString().substring(0,10);
+       };
+
+       const targetMonday = getMonday(targetDate); 
+
+       const matchedWeek = schedules.find(w => {
+         const dbDate = w.id_semana || w.fecha || w.date || w.fecha_inicio || w.start_date || w.id; 
+         return String(dbDate).includes(targetMonday);
+       });
        
-       let matchedWeek = null;
-       for (let week of schedules) {
-           const weekStart = new Date(week.id_semana + "T00:00:00");
-           const weekEnd = new Date(week.id_semana + "T00:00:00");
-           weekEnd.setDate(weekEnd.getDate() + 6);
-           
-           if (targetTime >= weekStart.getTime() && targetTime <= weekEnd.getTime()) {
-               matchedWeek = week;
-               break;
+       const idUsar = emp.consecutivo || emp.id_biometrico || emp.biometric_id || emp.cedula;
+       const cleanStr = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+       const targetKey = cleanStr(`${idUsar}_${diaSemanaMayuscula}`);
+       let shiftEncontrado = null;
+
+       if (matchedWeek && matchedWeek.datos_json) {
+           for (const [k, v] of Object.entries(matchedWeek.datos_json)) {
+               if (cleanStr(k) === targetKey) {
+                   shiftEncontrado = v;
+                   break;
+               }
            }
        }
        
-       if (matchedWeek && matchedWeek.datos_json) {
-           const idUsar = emp.biometric_id || emp.cedula;
-           const shift = matchedWeek.datos_json[`${idUsar}_${dayName}`];
-           return shift || null;
-       }
-       return null;
+       const finalShift = shiftEncontrado || null;
+       
+       return finalShift;
     };
 
     return nominaRows.map(emp => {

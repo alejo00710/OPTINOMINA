@@ -136,60 +136,37 @@ export const getTimeDifference = (start, end, allowMidnight = true) => {
 export const getOfficialShiftTime = (timeStr, type, turnoProgramadoDelDia = null) => {
   if (!timeStr || timeStr === "-") return "-";
   
-  if (turnoProgramadoDelDia) {
-    const t = turnoProgramadoDelDia.toUpperCase().trim();
-    if (t !== 'DESCANSO' && t !== 'VACACIONES' && t !== 'LICENCIA') {
-       if (t.includes('-')) {
-          const parts = t.split('-');
-          if (parts.length === 2) {
-             const targetStr = type === 'ent' ? parts[0].trim() : parts[1].trim();
-             const partsTime = targetStr.split(':');
-             if (partsTime.length === 2) {
-                const hh = String(parseInt(partsTime[0], 10) || 0).padStart(2, "0");
-                const mm = String(parseInt(partsTime[1], 10) || 0).padStart(2, "0");
-                return `${hh}:${mm}`;
-             }
-          }
-       }
-
-       const regexAMPM = /(\d{1,2}(?::\d{2})?)\s*(AM|PM)\s+A\s+(\d{1,2}(?::\d{2})?)\s*(AM|PM)/i;
-       const match = t.match(regexAMPM);
-       if (match) {
-           const parseTo24 = (timeString, modifier) => {
-               let [hStr, mStr] = timeString.includes(':') ? timeString.split(':') : [timeString, '00'];
-               let hours = parseInt(hStr, 10);
-               if (hours === 12) {
-                   hours = modifier.toUpperCase() === 'AM' ? 0 : 12;
-               } else if (modifier.toUpperCase() === 'PM') {
-                   hours += 12;
-               }
-               return `${String(hours).padStart(2, '0')}:${String(mStr || '0').padStart(2, '0')}`;
-           };
-           const entTime = parseTo24(match[1], match[2]);
-           const salTime = parseTo24(match[3], match[4]);
-           return type === 'ent' ? entTime : salTime;
-       }
-
-       let entMin = null;
-       let salMin = null;
-       
-       if (t.includes('6AM A 2PM')) { entMin = 360; salMin = 840; }
-       else if (t.includes('2PM A 10PM')) { entMin = 840; salMin = 1320; }
-       else if (t.includes('10PM A 6AM')) { entMin = 1320; salMin = 360; }
-       else if (t.includes('6AM A 6PM')) { entMin = 360; salMin = 1080; }
-       else if (t.includes('6PM A 6AM')) { entMin = 1080; salMin = 360; }
-       else if (t.includes('7:30AM A 5PM') || t.includes('7:30 A 5PM')) { entMin = 450; salMin = 1020; }
-       
-       if (entMin !== null && salMin !== null) {
-          let targetMin = type === 'ent' ? entMin : salMin;
-          let targetHours = Math.floor(targetMin / 60);
-          let targetMinutes = targetMin % 60;
-          if (targetHours >= 24) targetHours -= 24;
-          return `${String(targetHours).padStart(2, "0")}:${String(targetMinutes).padStart(2, "0")}`;
-       }
-    }
+  // 1. Escudo Anti-Crash Inmediato
+  if (!turnoProgramadoDelDia || turnoProgramadoDelDia === 'null' || turnoProgramadoDelDia === 'undefined') {
+      const isEnt = String(type).toLowerCase().includes('ent') || String(type).toLowerCase().includes('in') || String(type).toLowerCase() === 'e';
+      return isEnt ? "06:00" : "14:00"; 
   }
 
+  let text = String(turnoProgramadoDelDia).toUpperCase().trim();
+
+  // 2. Escáner de Fuerza Bruta: Busca cualquier patrón de hora en el texto
+  // Captura ej: "6AM", "10:30 PM", "14:00" ignorando el texto intermedio
+  const timeRegex = /(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/g;
+  const matches = [...text.matchAll(timeRegex)];
+
+  if (matches.length >= 2) {
+      // Tolerancia extrema al nombre de la variable type (ent, in, entrada, e, etc)
+      const isEntrada = String(type).toLowerCase().includes('ent') || String(type).toLowerCase().includes('in') || String(type).toLowerCase() === 'e';
+      
+      // Selección directa: primer match para entrada, segundo para salida
+      const match = isEntrada ? matches[0] : matches[1];
+      
+      let hh = parseInt(match[1], 10);
+      const mm = match[2] || "00";
+      const modifier = match[3];
+
+      // Matemática absoluta de 24 hrs
+      if (modifier === 'PM' && hh < 12) hh += 12;
+      if (modifier === 'AM' && hh === 12) hh = 0;
+      
+      const finalHH = String(hh).padStart(2, "0");
+      return `${finalHH}:${mm}`;
+  }
   const parts = timeStr.split(":");
   if (parts.length !== 2) return timeStr;
   
@@ -222,6 +199,132 @@ export const getOfficialShiftTime = (timeStr, type, turnoProgramadoDelDia = null
   return `${hh}:${mm}`;
 };
 
+export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
+    // 1. Escudo de Día Vacío (Evita horas fantasma)
+    const isEmptyPunch = !realPunchIn || realPunchIn === '--:--' || realPunchIn === 'null' || String(realPunchIn).trim() === '' || realPunchIn === '-';
+    if (isEmptyPunch) return { officialIn: "-", officialOut: "-", lateMinutes: 0 };
+
+    const [realHH, realMM] = String(realPunchIn).split(':').map(Number);
+    const realTotalMins = (realHH * 60) + realMM;
+
+    let baseInHH = 6, baseInMM = 0, baseOutHH = 14, baseOutMM = 0;
+    let usedDB = false;
+
+    // 2. Prioridad 1: Leer Base de Datos
+    const isEmptyDB = !dbShiftText || dbShiftText === 'null' || dbShiftText === 'undefined' || String(dbShiftText).trim() === '{}' || String(dbShiftText).trim() === '';
+    if (!isEmptyDB) {
+        let textToParse = String(dbShiftText).toUpperCase();
+        const timeRegex = /\b(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?\b/g;
+        let matches = [...textToParse.matchAll(timeRegex)].filter(m => parseInt(m[1], 10) <= 24);
+        
+        if (matches.length >= 2) {
+            const formatTime = (match) => {
+                let hh = parseInt(match[1], 10);
+                const mm = parseInt(match[2] || "00", 10);
+                if (match[3] === 'PM' && hh < 12) hh += 12;
+                if (match[3] === 'AM' && hh === 12) hh = 0;
+                return { hh, mm };
+            };
+            const bIn = formatTime(matches[0]);
+            const bOut = formatTime(matches[matches.length - 1]);
+            baseInHH = bIn.hh; baseInMM = bIn.mm;
+            baseOutHH = bOut.hh; baseOutMM = bOut.mm;
+            usedDB = true;
+        }
+    }
+
+    // 3. Prioridad 2: Template Matching (Si BD falla o está vacía)
+    if (!usedDB) {
+        // Catálogo oficial de turnos de la planta (Entrada, Salida)
+        const templates = [
+            { in: 6, out: 14 },   // 6am a 2pm
+            { in: 6, out: 18 },   // 6am a 6pm (12h)
+            { in: 10, out: 18 },  // 10am a 6pm (nuevo)
+            { in: 10, out: 22 },  // 10am a 10pm (12h)
+            { in: 14, out: 22 },  // 2pm a 10pm
+            { in: 18, out: 6 },   // 6pm a 6am (12h)
+            { in: 22, out: 6 }    // 10pm a 6am
+        ];
+
+        const [outHH] = String(realPunchOut || "00:00").split(':').map(Number);
+        
+        let bestMatch = templates[0];
+        let minDiff = Infinity;
+
+        // Encontrar el turno que mejor encaje con la entrada y salida real
+        templates.forEach(t => {
+            let inDiff = Math.abs(realHH - t.in);
+            if (inDiff > 12) inDiff = 24 - inDiff; // Manejo de trasnoche
+            
+            let outDiff = Math.abs(outHH - t.out);
+            if (outDiff > 12) outDiff = 24 - outDiff;
+
+            const totalDiff = inDiff + outDiff;
+            if (totalDiff < minDiff) {
+                minDiff = totalDiff;
+                bestMatch = t;
+            }
+        });
+
+        baseInHH = bestMatch.in;
+        baseInMM = 0;
+        baseOutHH = bestMatch.out;
+        baseOutMM = 0;
+    }
+
+    // 4. Regla Industrial: Exigencia de 10 mins y Snapping
+    const baseTotalMins = (baseInHH * 60) + baseInMM;
+    const targetTotalMins = baseTotalMins - 10; 
+
+    let lateMins = 0;
+    let finalJ_HH = baseInHH;
+    let finalJ_MM = baseInMM;
+
+    if (realTotalMins > targetTotalMins) {
+        lateMins = realTotalMins - targetTotalMins; 
+        
+        if (realTotalMins > baseTotalMins) {
+            const diffFromBase = realTotalMins - baseTotalMins;
+            const extraMins = Math.ceil(diffFromBase / 30) * 30; // Bloques de 30 mins
+            
+            finalJ_HH = baseInHH + Math.floor(extraMins / 60);
+            finalJ_MM = baseInMM + (extraMins % 60);
+            if (finalJ_MM >= 60) { finalJ_HH += 1; finalJ_MM -= 60; }
+        }
+    }
+
+    // 5. Castigo de Salida (Snapping Dinámico para K)
+    let finalK_HH = baseOutHH;
+    let finalK_MM = baseOutMM;
+
+    if (realPunchOut && realPunchOut !== '--:--' && realPunchOut !== 'null') {
+        const [outHH, outMM] = String(realPunchOut).split(':').map(Number);
+        const realOutMins = (outHH * 60) + outMM;
+        
+        let adjRealOut = realOutMins;
+        let adjBaseOut = (baseOutHH * 60) + baseOutMM;
+        
+        // Ajuste para turnos que cruzan la medianoche
+        if (adjBaseOut <= baseTotalMins) adjBaseOut += 1440; 
+        if (adjRealOut <= realTotalMins && adjRealOut < 720) adjRealOut += 1440;
+
+        // REGLA: Si salió ANTES de la hora oficial, castigamos la K
+        if (adjRealOut < adjBaseOut) {
+            // Redondea hacia abajo al bloque de 30 mins que sí completó
+            const snappedMins = Math.floor(adjRealOut / 30) * 30;
+            finalK_HH = Math.floor(snappedMins / 60) % 24;
+            finalK_MM = snappedMins % 60;
+        }
+    }
+
+    const pad = (n) => String(n).padStart(2, '0');
+    return {
+        officialIn: `${pad(finalJ_HH)}:${pad(finalJ_MM)}`,
+        officialOut: `${pad(finalK_HH)}:${pad(finalK_MM)}`,
+        lateMinutes: lateMins
+    };
+};
+
 export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, horaFinDiurna, turnoProgramadoDelDia = null) => {
   const isTime = (t) => t && String(t).trim() !== "" && String(t).trim() !== "-" && String(t).trim() !== "00:00";
 
@@ -237,9 +340,10 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   const desc1Val = timeStrToDecimal(desc1);
   const desc2Val = timeStrToDecimal(desc2);
 
-  // Pago Ent (J) y Pago Sal (K)
-  const baseHrEnt = getOfficialShiftTime(day.hr_ent, "ent", turnoProgramadoDelDia);
-  const baseHrSal = getOfficialShiftTime(day.hr_sal, "sal", turnoProgramadoDelDia);
+  // Pago Ent (J) y Pago Sal (K) con Cerebro de Turnos
+  const smartShift = calculateSmartShift(turnoProgramadoDelDia, day.hr_ent, day.hr_sal);
+  const baseHrEnt = smartShift.officialIn;
+  const baseHrSal = smartShift.officialOut;
 
   const hrEntPago = overrides[`${prefix}_hr_ent_pago`] !== undefined ? String(overrides[`${prefix}_hr_ent_pago`]) : baseHrEnt;
   const hrSalPago = overrides[`${prefix}_hr_sal_pago`] !== undefined ? String(overrides[`${prefix}_hr_sal_pago`]) : baseHrSal;
@@ -279,12 +383,15 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   const extFesDiu = overrides[`${prefix}_ext_fes_diu`] !== undefined ? Number(overrides[`${prefix}_ext_fes_diu`]) : Number(day.ext_fes_diu || 0);
   const extFesNoc = overrides[`${prefix}_ext_fes_noc`] !== undefined ? Number(overrides[`${prefix}_ext_fes_noc`]) : Number(day.ext_fes_noc || 0);
   
-  const llegadaTarde = overrides[`${prefix}_llegada_tarde`] !== undefined ? Number(overrides[`${prefix}_llegada_tarde`]) : Number(day.llegada_tarde || 0);
-  const llegadaTardeMin = overrides[`${prefix}_llegada_tarde_min`] !== undefined ? Number(overrides[`${prefix}_llegada_tarde_min`]) : Number(day.llegada_tarde_min || 0);
+  const calcLlegadaTardeMin = smartShift.lateMinutes || 0;
+  const calcLlegadaTarde = calcLlegadaTardeMin > 0 ? 1 : 0;
+  
+  const llegadaTarde = overrides[`${prefix}_llegada_tarde`] !== undefined ? Number(overrides[`${prefix}_llegada_tarde`]) : calcLlegadaTarde;
+  const llegadaTardeMin = overrides[`${prefix}_llegada_tarde_min`] !== undefined ? Number(overrides[`${prefix}_llegada_tarde_min`]) : calcLlegadaTardeMin;
   
   // Col S: Ext. Diu = N3 - O3 - P3 - Q3 - R3 - T3 - U3 - V3
   const extDiuCalc = hrPag - diurn - noct - fesDiu - fesNoc - extNoc - extFesDiu - extFesNoc;
-  const extDiu = extDiuCalc > 0 ? extDiuCalc : 0;
+  const extDiu = extDiuCalc;
 
   // Let overrides take precedence on final values if the user edited them manually
   const finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : diurn;
