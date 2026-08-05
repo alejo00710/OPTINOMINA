@@ -139,6 +139,10 @@ export default function TabLiquidacion({
     return sum === 0 ? "0.0" : sum.toFixed(1);
   };
 
+  const empleadosParaLiquidar = [...(nominaRows || [])]
+    .filter(emp => emp.area !== 'Administrativo' && emp.categoria !== 'Administrativo' && emp.cargo?.toUpperCase() !== 'ADMINISTRATIVO')
+    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+
   return (
     <div className="space-y-6">
        
@@ -180,7 +184,7 @@ export default function TabLiquidacion({
                 onChange={(e) => setSelectedWorkerName(e.target.value)}
                 className="bg-emerald-50 border-2 border-emerald-500 text-emerald-900 text-sm font-bold px-3 py-1.5 rounded-lg outline-none min-w-[200px]"
              >
-               {nominaRows && nominaRows.filter(m => m.categoria !== 'Administrativo' && m.cargo?.toUpperCase() !== 'ADMINISTRATIVO').map(member => (
+               {empleadosParaLiquidar.map(member => (
                   <option key={member.nombre} value={member.nombre}>{member.nombre}</option>
                ))}
              </select>
@@ -215,6 +219,7 @@ export default function TabLiquidacion({
                             <th colSpan="5" className="py-2 bg-indigo-50/50 border-b border-indigo-100 text-indigo-600">Liquidación Base</th>
                             <th colSpan="8" className="py-2 bg-amber-50/50 border-b border-amber-100 text-amber-700">Clasificación Extras/Recargos</th>
                             <th colSpan="2" className="py-2 bg-rose-50/50 border-b border-rose-100 text-rose-600">Llegadas</th>
+                            <th colSpan="2" className="py-2 bg-orange-50/50 border-b border-orange-100 text-orange-600">Comidas</th>
                       </tr>
                       <tr className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-200">
                          <th className="px-2 py-2" title="Día/Fecha">A (Fecha)</th>
@@ -241,6 +246,8 @@ export default function TabLiquidacion({
                          <th className="px-2 py-2 text-right" title="Extra Fest Noc">V (Ex.FN)</th>
                          <th className="px-2 py-2 text-right text-rose-500" title="Llegada Tarde">W (Lleg.T)</th>
                          <th className="px-2 py-2 text-right text-rose-500" title="Llegada Tarde Min">X (Lleg.Min)</th>
+                         <th className="px-2 py-2 text-right text-orange-500" title="Comidas Excedidas Veces">Y (Comid.V)</th>
+                         <th className="px-2 py-2 text-right text-orange-500" title="Comidas Excedidas Min">Z (Comid.Min)</th>
                       </tr>
                    </thead>
                    <tbody className="divide-y divide-slate-100 text-[10px] font-semibold text-slate-700">
@@ -354,7 +361,13 @@ export default function TabLiquidacion({
                                   <GridInput globalValue={overrides[`${prefix}_llegada_tarde`]} fallback={day.llegada_tarde || 0} onSave={(val) => handleCellEdit(`${prefix}_llegada_tarde`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded text-rose-600" />
                                </td>
                                <td className="px-1 py-1">
-                                  <GridInput globalValue={overrides[`${prefix}_llegada_tarde_min`]} fallback={day.llegada_tarde_min || 0} onSave={(val) => handleCellEdit(`${prefix}_llegada_tarde_min`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded text-rose-600" />
+                                  <GridInput globalValue={overrides[`${prefix}_llegada_tarde_min`]} fallback={day.llegada_tarde_min || 0} onSave={(val) => handleCellEdit(`${prefix}_llegada_tarde_min`, val)} className={`w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded ${(day.llegada_tarde_min > 0 || overrides[`${prefix}_llegada_tarde_min`] > 0) ? 'text-rose-600' : 'text-slate-500'}`} />
+                               </td>
+                               <td className="px-1 py-1">
+                                  <GridInput globalValue={overrides[`${prefix}_comidas_excedidas_veces`]} fallback={day.comidas_excedidas_veces || 0} onSave={(val) => handleCellEdit(`${prefix}_comidas_excedidas_veces`, val)} className={`w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded ${(day.comidas_excedidas_veces > 0 || overrides[`${prefix}_comidas_excedidas_veces`] > 0) ? 'text-rose-600' : 'text-slate-500'}`} />
+                               </td>
+                               <td className="px-1 py-1">
+                                  <GridInput globalValue={overrides[`${prefix}_comidas_excedidas_min`]} fallback={day.comidas_excedidas_min || 0} onSave={(val) => handleCellEdit(`${prefix}_comidas_excedidas_min`, val)} className={`w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded ${(day.comidas_excedidas_min > 0 || overrides[`${prefix}_comidas_excedidas_min`] > 0) ? 'text-rose-600' : 'text-slate-500'}`} />
                                </td>
                             </tr>
                          )
@@ -384,8 +397,10 @@ export default function TabLiquidacion({
                           <td className="px-1 py-1 text-center">{getTotal('ext_noc')}</td>
                           <td className="px-1 py-1 text-center">{getTotal('ext_fes_diu')}</td>
                           <td className="px-1 py-1 text-center">{getTotal('ext_fes_noc')}</td>
-                          <td className="px-1 py-1 text-center text-red-600">{getTotal('llegada_tarde')}</td>
-                          <td className="px-1 py-1 text-center text-red-600">{getTotal('llegada_tarde_min')}</td>
+                          <td className="px-1 py-1 text-center bg-slate-100">{getTotal("llegada_tarde")}</td>
+                          <td className="px-1 py-1 text-center bg-slate-100">{getTotal("llegada_tarde_min")}</td>
+                          <td className="px-1 py-1 text-center bg-slate-100">{getTotal("comidas_excedidas_veces")}</td>
+                          <td className="px-1 py-1 text-center bg-slate-100">{getTotal("comidas_excedidas_min")}</td>
                        </tr>
                     </tfoot>
                 </table>

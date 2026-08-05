@@ -233,31 +233,37 @@ export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
         }
     }
 
-    // 3. Prioridad 2: Template Matching (Si BD falla o está vacía)
+    // 3. Prioridad 2: Template Matching en Minutos (Si BD falla o está vacía)
     if (!usedDB) {
-        // Catálogo oficial de turnos de la planta (Entrada, Salida)
+        // Catálogo Global de Turnos (Planta + Taller)
         const templates = [
-            { in: 6, out: 14 },   // 6am a 2pm
-            { in: 6, out: 18 },   // 6am a 6pm (12h)
-            { in: 10, out: 18 },  // 10am a 6pm (nuevo)
-            { in: 10, out: 22 },  // 10am a 10pm (12h)
-            { in: 14, out: 22 },  // 2pm a 10pm
-            { in: 18, out: 6 },   // 6pm a 6am (12h)
-            { in: 22, out: 6 }    // 10pm a 6am
+            { inHH: 6, inMM: 0, outHH: 14, outMM: 0 },
+            { inHH: 6, inMM: 0, outHH: 18, outMM: 0 },
+            { inHH: 7, inMM: 0, outHH: 17, outMM: 0 },   // TALLER 10h
+            { inHH: 7, inMM: 30, outHH: 17, outMM: 0 },  // TALLER 9.5h
+            { inHH: 7, inMM: 30, outHH: 18, outMM: 0 },  // TALLER 10.5h
+            { inHH: 10, inMM: 0, outHH: 18, outMM: 0 },
+            { inHH: 10, inMM: 0, outHH: 22, outMM: 0 },
+            { inHH: 14, inMM: 0, outHH: 22, outMM: 0 },
+            { inHH: 18, inMM: 0, outHH: 6, outMM: 0 },
+            { inHH: 22, inMM: 0, outHH: 6, outMM: 0 }
         ];
 
-        const [outHH] = String(realPunchOut || "00:00").split(':').map(Number);
+        const [outHH, outMM] = String(realPunchOut || "00:00").split(':').map(Number);
+        const realInMins = (realHH * 60) + (realMM || 0);
+        const realOutMins = (outHH * 60) + (outMM || 0);
         
         let bestMatch = templates[0];
         let minDiff = Infinity;
 
-        // Encontrar el turno que mejor encaje con la entrada y salida real
         templates.forEach(t => {
-            let inDiff = Math.abs(realHH - t.in);
-            if (inDiff > 12) inDiff = 24 - inDiff; // Manejo de trasnoche
+            let tInMins = (t.inHH * 60) + t.inMM;
+            let inDiff = Math.abs(realInMins - tInMins);
+            if (inDiff > 720) inDiff = 1440 - inDiff; // Tolerancia de trasnoche
             
-            let outDiff = Math.abs(outHH - t.out);
-            if (outDiff > 12) outDiff = 24 - outDiff;
+            let tOutMins = (t.outHH * 60) + t.outMM;
+            let outDiff = Math.abs(realOutMins - tOutMins);
+            if (outDiff > 720) outDiff = 1440 - outDiff;
 
             const totalDiff = inDiff + outDiff;
             if (totalDiff < minDiff) {
@@ -266,10 +272,10 @@ export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
             }
         });
 
-        baseInHH = bestMatch.in;
-        baseInMM = 0;
-        baseOutHH = bestMatch.out;
-        baseOutMM = 0;
+        baseInHH = bestMatch.inHH;
+        baseInMM = bestMatch.inMM;
+        baseOutHH = bestMatch.outHH;
+        baseOutMM = bestMatch.outMM;
     }
 
     // 4. Regla Industrial: Exigencia de 10 mins y Snapping
@@ -337,6 +343,27 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   const desc1 = getTimeDifferenceHHMM(hrEntDesc1, hrSalDesc1, false);
   const desc2 = getTimeDifferenceHHMM(hrEntDesc2, hrSalDesc2, false);
   
+  let comidasExcedidasVeces = 0;
+  let comidasExcedidasMin = 0;
+
+  if (desc1 !== "00:00" && desc1 !== "") {
+     const [h1, m1] = desc1.split(':').map(Number);
+     const totalMin1 = (h1 * 60) + m1;
+     if (totalMin1 > 30) {
+         comidasExcedidasVeces += 1;
+         comidasExcedidasMin += (totalMin1 - 30);
+     }
+  }
+
+  if (desc2 !== "00:00" && desc2 !== "") {
+     const [h2, m2] = desc2.split(':').map(Number);
+     const totalMin2 = (h2 * 60) + m2;
+     if (totalMin2 > 30) {
+         comidasExcedidasVeces += 1;
+         comidasExcedidasMin += (totalMin2 - 30);
+     }
+  }
+  
   const desc1Val = timeStrToDecimal(desc1);
   const desc2Val = timeStrToDecimal(desc2);
 
@@ -371,15 +398,15 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   const baseHoras = 44 / 6; // 7.333333
   
   // Cálculo Nocturnas (P):
-  const noct = (hrEntPago > finDia) ? baseHoras : 0;
+  let noct = (hrEntPago > finDia) ? baseHoras : 0;
   
   // Cálculo Diurnas (O):
-  const diurn = (hrEntPago >= inicioDia && hrEntPago <= finDia) ? (baseHoras - noct) : 0;
+  let diurn = (hrEntPago >= inicioDia && hrEntPago <= finDia) ? (baseHoras - noct) : 0;
   
   // Manuals overriding or defaults to 0
   const fesDiu = overrides[`${prefix}_fes_diu`] !== undefined ? Number(overrides[`${prefix}_fes_diu`]) : Number(day.fes_diu || 0);
   const fesNoc = overrides[`${prefix}_fes_noc`] !== undefined ? Number(overrides[`${prefix}_fes_noc`]) : Number(day.fes_noc || 0);
-  const extNoc = overrides[`${prefix}_ext_noc`] !== undefined ? Number(overrides[`${prefix}_ext_noc`]) : Number(day.ext_noc || 0);
+  let extNoc = overrides[`${prefix}_ext_noc`] !== undefined ? Number(overrides[`${prefix}_ext_noc`]) : Number(day.ext_noc || 0);
   const extFesDiu = overrides[`${prefix}_ext_fes_diu`] !== undefined ? Number(overrides[`${prefix}_ext_fes_diu`]) : Number(day.ext_fes_diu || 0);
   const extFesNoc = overrides[`${prefix}_ext_fes_noc`] !== undefined ? Number(overrides[`${prefix}_ext_fes_noc`]) : Number(day.ext_fes_noc || 0);
   
@@ -389,6 +416,14 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   const llegadaTarde = overrides[`${prefix}_llegada_tarde`] !== undefined ? Number(overrides[`${prefix}_llegada_tarde`]) : calcLlegadaTarde;
   const llegadaTardeMin = overrides[`${prefix}_llegada_tarde_min`] !== undefined ? Number(overrides[`${prefix}_llegada_tarde_min`]) : calcLlegadaTardeMin;
   
+  // REGLAS ESPECÍFICAS OBLIGATORIAS ANTES DE BALANCE (OVERRIDES CONDICIONALES)
+  if (hrSalPago === "22:00") {
+      noct = 3.0;
+  }
+  if (hrEntPago === "18:00" && hrSalPago === "06:00") {
+      extNoc = 3.0;
+  }
+
   // Col S: Ext. Diu = N3 - O3 - P3 - Q3 - R3 - T3 - U3 - V3
   const extDiuCalc = hrPag - diurn - noct - fesDiu - fesNoc - extNoc - extFesDiu - extFesNoc;
   const extDiu = extDiuCalc;
@@ -420,6 +455,8 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
     ext_fes_diu: extFesDiu,
     ext_fes_noc: extFesNoc,
     llegada_tarde: llegadaTarde,
-    llegada_tarde_min: llegadaTardeMin
+    llegada_tarde_min: llegadaTardeMin,
+    comidas_excedidas_veces: overrides[`${prefix}_comidas_excedidas_veces`] !== undefined ? Number(overrides[`${prefix}_comidas_excedidas_veces`]) : comidasExcedidasVeces,
+    comidas_excedidas_min: overrides[`${prefix}_comidas_excedidas_min`] !== undefined ? Number(overrides[`${prefix}_comidas_excedidas_min`]) : comidasExcedidasMin
   };
 };

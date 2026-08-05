@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import EditableCell from '@/components/Nomina/EditableCell';
 import SaitempModal from '@/components/Nomina/SaitempModal';
 import { PLANILLA_COLUMNS } from '@/utils/constants';
@@ -37,10 +37,65 @@ export default function TabPanelGeneral({
     return COLUMNAS_ESENCIALES.includes(c.key);
   });
 
-  const displayData = filteredPayrollData.filter(row => {
+  const displayDataRaw = filteredPayrollData.filter(row => {
     const tipo = (row.masterRow && row.masterRow.tipo_vinculacion) || 'Empresa';
     return tipo === vinculacionFiltro;
   });
+
+  const [sortConfig, setSortConfig] = useState({ key: 'nombre', direction: 'asc' });
+
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key) {
+      if (sortConfig.direction === 'asc') direction = 'desc';
+      else if (sortConfig.direction === 'desc') direction = 'normal';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const displayData = useMemo(() => {
+    let sortable = [...displayDataRaw];
+    if (sortConfig.direction !== 'normal') {
+      sortable.sort((a, b) => {
+        // Obtenemos los valores. Para dinámicos, considerar los overrides
+        const getVal = (row, key) => {
+            const cKey = `${row.cedula}_${key}`;
+            if (overrides[cKey] !== undefined) return overrides[cKey];
+            return row[key] !== undefined ? row[key] : '';
+        };
+
+        let valA = getVal(a, sortConfig.key);
+        let valB = getVal(b, sortConfig.key);
+        
+        const parseValue = (val) => {
+            const strVal = String(val);
+            const cleaned = strVal.replace(/[^0-9.-]+/g, "");
+            if (cleaned === "" || cleaned === "-" || cleaned === ".") return val;
+            const parsed = Number(cleaned);
+            return isNaN(parsed) ? val : parsed;
+        };
+
+        const parsedA = parseValue(valA);
+        const parsedB = parseValue(valB);
+
+        if (typeof parsedA === 'number' && typeof parsedB === 'number') {
+            return sortConfig.direction === 'asc' ? parsedA - parsedB : parsedB - parsedA;
+        }
+        
+        valA = String(valA).toLowerCase();
+        valB = String(valB).toLowerCase();
+        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return sortable;
+  }, [displayDataRaw, sortConfig, overrides]);
+
+  const getSortIcon = (key) => {
+    if (sortConfig.key !== key || sortConfig.direction === 'normal') return '';
+    return sortConfig.direction === 'asc' ? ' ▲' : ' ▼';
+  };
 
   const handleDownloadSaitempExcel = async () => {
     const empleadosMision = filteredPayrollData.filter(row => {
@@ -291,13 +346,15 @@ export default function TabPanelGeneral({
          <table className="w-full text-left table-auto">
             <thead className="bg-slate-50/90 backdrop-blur-sm sticky top-0 z-20">
               <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-200">
-                <th className="px-4 py-3 sticky left-0 bg-slate-50 z-30 shadow-[1px_0_0_0_#e2e8f0] w-[110px] min-w-[110px]">Cédula</th>
-                <th className="px-4 py-3 sticky left-[110px] bg-slate-50 z-30 shadow-[1px_0_0_0_#e2e8f0]">Nombre Completo</th>
-                <th className="px-4 py-3">Cargo</th>
+                <th className="px-4 py-3 sticky left-0 bg-slate-50 z-30 shadow-[1px_0_0_0_#e2e8f0] w-[110px] min-w-[110px] cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('cedula')}>Cédula{getSortIcon('cedula')}</th>
+                <th className="px-4 py-3 sticky left-[110px] bg-slate-50 z-30 shadow-[1px_0_0_0_#e2e8f0] cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('nombre')}>Nombre Completo{getSortIcon('nombre')}</th>
+                <th className="px-4 py-3 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('cargo')}>Cargo{getSortIcon('cargo')}</th>
                 
                 {/* Render dynamic columns from PLANILLA_COLUMNS based on visibility */}
                 {visibleColumns.map(col => (
-                   <th key={col.key} className="px-4 py-3 text-right whitespace-nowrap">{col.label}</th>
+                   <th key={col.key} className="px-4 py-3 text-right whitespace-nowrap cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort(col.key)}>
+                      {col.label}{getSortIcon(col.key)}
+                   </th>
                 ))}
                 
                 <th className="px-4 py-3 text-center sticky right-0 bg-slate-50 z-30 shadow-[-1px_0_0_0_#e2e8f0]">Acción</th>

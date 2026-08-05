@@ -148,26 +148,18 @@ export default function TabHorarios({ empleados }) {
     }
   };
 
-  const jerarquiaCategorias = {
-    'Monitor': 1,
-    'Calidad': 2,
-    'Montador': 3,
-    'Operario de produccion': 4,
-    'Operador': 5,
-    'Programador': 6,
-    'Mecanico': 7,
-    'Supernumerario': 8
+  const areaOrder = {
+    'Administrativo': 1,
+    'Planta': 2,
+    'Taller': 3
   };
 
-  const catProduccion = ['Monitor', 'Calidad', 'Operario de produccion', 'Montador', 'Supernumerario'];
-  const catTaller = ['Mecanico', 'Programador', 'Operador'];
-
-  const baseFiltrados = empleados.filter(emp => emp.categoria !== 'Administrativo' && !empleadosOcultos.includes(getIdUsar(emp)));
+  const baseFiltrados = empleados.filter(emp => emp.area !== 'Administrativo' && !empleadosOcultos.includes(getIdUsar(emp)));
 
   const sortEmployees = (arr) => {
     let sorted = arr.sort((a, b) => {
-      const pesoA = jerarquiaCategorias[a.categoria] || 99;
-      const pesoB = jerarquiaCategorias[b.categoria] || 99;
+      const pesoA = areaOrder[a.area] || 99;
+      const pesoB = areaOrder[b.area] || 99;
       if (pesoA !== pesoB) return pesoA - pesoB;
       return (a.nombre || '').localeCompare(b.nombre || '');
     });
@@ -191,9 +183,9 @@ export default function TabHorarios({ empleados }) {
     });
   };
 
-  const empleadosProduccion = addRowNumbers(sortEmployees(baseFiltrados.filter(emp => catProduccion.includes(emp.categoria))));
-  const empleadosTaller = addRowNumbers(sortEmployees(baseFiltrados.filter(emp => catTaller.includes(emp.categoria))));
-  const empleadosOtros = addRowNumbers(sortEmployees(baseFiltrados.filter(emp => !catProduccion.includes(emp.categoria) && !catTaller.includes(emp.categoria))));
+  const empleadosProduccion = addRowNumbers(sortEmployees(baseFiltrados.filter(emp => emp.area === 'Planta')));
+  const empleadosTaller = addRowNumbers(sortEmployees(baseFiltrados.filter(emp => emp.area === 'Taller')));
+  const empleadosOtros = addRowNumbers(sortEmployees(baseFiltrados.filter(emp => emp.area !== 'Planta' && emp.area !== 'Taller')));
 
   const todosVisibles = [...empleadosProduccion, ...empleadosTaller, ...empleadosOtros];
 
@@ -233,10 +225,30 @@ export default function TabHorarios({ empleados }) {
     setHorarios(prev => {
       const next = { ...prev };
       const idUsar = getIdUsar(emp);
-      const valorLunes = next[`${idUsar}_LUNES`] || '';
-      ['MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO'].forEach(dia => {
-        next[`${idUsar}_${dia}`] = valorLunes;
-      });
+      
+      const diasSemana = ['LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO', 'DOMINGO'];
+      let primerTurno = '';
+      
+      // 1. Encontrar el PRIMER día con turno asignado
+      for (const dia of diasSemana) {
+        if (next[`${idUsar}_${dia}`] && next[`${idUsar}_${dia}`].trim() !== '') {
+            primerTurno = next[`${idUsar}_${dia}`];
+            break;
+        }
+      }
+
+      // 2. Si se encontró un turno, copiar a los días vacíos posteriores
+      if (primerTurno) {
+        let foundFirst = false;
+        diasSemana.forEach(dia => {
+            if (next[`${idUsar}_${dia}`] === primerTurno && !foundFirst) {
+                foundFirst = true; 
+            } else if (foundFirst && (!next[`${idUsar}_${dia}`] || next[`${idUsar}_${dia}`].trim() === '')) {
+                next[`${idUsar}_${dia}`] = primerTurno;
+            }
+        });
+      }
+
       return next;
     });
   };

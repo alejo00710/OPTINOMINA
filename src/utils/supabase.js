@@ -40,11 +40,28 @@ export const loadEmployeesFromCloud = async () => {
   try {
     const { data, error } = await supabase
       .from('optimoldes_employees')
-      .select('cedula, biometric_id, nombre, cargo, categoria, banco, tipo_vinculacion, salario_base, aux_transporte, rodamiento, poliza_bolivar, poliza_sura, optica, prestamos')
-      .eq('is_active', true)
-      .order('nombre', { ascending: true });
+      .select('cedula, biometric_id, nombre, cargo, categoria, area, banco, tipo_vinculacion, salario_base, aux_transporte, rodamiento, poliza_bolivar, poliza_sura, optica, prestamos')
+      .eq('is_active', true);
 
     if (error) throw error;
+
+    const areaOrder = { 
+        "Administrativo": 1, 
+        "Planta": 2, 
+        "Taller": 3 
+    };
+
+    data.sort((a, b) => {
+        const orderA = areaOrder[a.area] || 99; 
+        const orderB = areaOrder[b.area] || 99;
+        
+        if (orderA !== orderB) {
+            return orderA - orderB;
+        }
+        // Fallback to sorting by name if areas are the same
+        return (a.nombre || '').localeCompare(b.nombre || '');
+    });
+
     return { success: true, data };
   } catch (error) {
     console.error("Error cargando empleados:", error);

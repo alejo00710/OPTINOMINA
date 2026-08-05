@@ -184,6 +184,7 @@ export default function NominaPage() {
               nombre: emp.nombre,
               cargo: emp.cargo,
               categoria: emp.categoria,
+              area: emp.area || "Administrativo",
               banco: emp.banco || "",
               tipo_vinculacion: emp.tipo_vinculacion || "",
               salario: Number(emp.salario_base || emp.salario || 0),
@@ -360,6 +361,8 @@ export default function NominaPage() {
       let sumDiurnas = 0, sumNocturnas = 0, sumFesDiu = 0, sumFesNoc = 0;
       let sumExtDiu = 0, sumExtNoc = 0, sumExtFesDiu = 0, sumExtFesNoc = 0;
       let diasLaborados = 0;
+      let sumLlegadasTarde = 0, sumLlegadasMin = 0;
+      let sumComidasVeces = 0, sumComidasMin = 0;
 
       processedLogs.forEach(day => {
         if (day.hr_lab > 0) diasLaborados++;
@@ -371,6 +374,10 @@ export default function NominaPage() {
         sumExtNoc += Number(day.ext_noc || 0);
         sumExtFesDiu += Number(day.ext_fes_diu || 0);
         sumExtFesNoc += Number(day.ext_fes_noc || 0);
+        sumLlegadasTarde += Number(day.llegada_tarde || 0);
+        sumLlegadasMin += Number(day.llegada_tarde_min || 0);
+        sumComidasVeces += Number(day.comidas_excedidas_veces || 0);
+        sumComidasMin += Number(day.comidas_excedidas_min || 0);
       });
 
       // Sobreescribir días pagados si el usuario lo editó manualmente (overrides) o usar los calculados
@@ -571,6 +578,10 @@ export default function NominaPage() {
         neto_pagar: variables['neto_pagar'] || 0,
         verificacion: variables['verificacion'] || 0,
         workerDays: processedLogs,
+        totalLlegadasVeces: sumLlegadasTarde,
+        totalLlegadasMin: sumLlegadasMin,
+        totalComidasVeces: sumComidasVeces,
+        totalComidasMin: sumComidasMin,
         liquidation: {
             total_extra_val: (variables['recargo_nocturno']||0) + (variables['val_extras_diurnas']||0) + (variables['val_extras_nocturnas']||0) + (variables['val_extras_festivas']||0) + resolveValue(overrides, `${cedula}_val_extras_festivas_nocturnas`, () => 0)
         }
@@ -603,7 +614,15 @@ export default function NominaPage() {
   // Auto-select first worker when entering liquidacion tab
   useEffect(() => {
     if (activeTab === "liquidacion" && !selectedWorkerName && filteredPayrollData.length > 0) {
-      setSelectedWorkerName(filteredPayrollData[0].masterRow.nombre);
+      const empleadosParaLiquidar = [...filteredPayrollData]
+        .filter(emp => emp.masterRow?.area !== 'Administrativo' && emp.masterRow?.categoria !== 'Administrativo' && emp.masterRow?.cargo?.toUpperCase() !== 'ADMINISTRATIVO')
+        .sort((a, b) => (a.masterRow?.nombre || "").localeCompare(b.masterRow?.nombre || ""));
+        
+      if (empleadosParaLiquidar.length > 0) {
+         setSelectedWorkerName(empleadosParaLiquidar[0].masterRow.nombre);
+      } else {
+         setSelectedWorkerName(filteredPayrollData[0].masterRow.nombre);
+      }
     }
   }, [activeTab, selectedWorkerName, filteredPayrollData]);
 
@@ -1244,6 +1263,44 @@ const handleSaveToCloud = async () => {
       
       {/* Cuerpo Scrollable con Grid de 40 columnas */}
       <div className="flex-1 overflow-y-auto p-6 sm:p-8 custom-scrollbar bg-slate-50/50">
+        
+        {/* SECCIÓN INDICADORES DE TIEMPO */}
+        {(() => {
+             const workerData = filteredPayrollData.find(d => d.masterRow.nombre === detailsWorkerName) || filteredPayrollData[0];
+             if (!workerData) return null;
+             
+             const llegadasVeces = Number(workerData.totalLlegadasVeces || 0);
+             const llegadasMin = Number(workerData.totalLlegadasMin || 0);
+             const comidasVeces = Number(workerData.totalComidasVeces || 0);
+             const comidasMin = Number(workerData.totalComidasMin || 0);
+
+             return (
+               <div className="bg-slate-900 rounded-2xl p-6 mb-6 shadow-xl border border-slate-800">
+                 <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
+                    <span className="text-indigo-400">⏱️</span> Indicadores de Tiempo (Quincena)
+                 </h4>
+                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50 shadow-inner">
+                       <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">Llegadas Tarde (Veces)</span>
+                       <span className={`text-2xl font-black tracking-tight ${llegadasVeces > 0 ? 'text-rose-500' : 'text-slate-300'}`}>{llegadasVeces}</span>
+                    </div>
+                    <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50 shadow-inner">
+                       <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">Llegadas Tarde (Mins)</span>
+                       <span className={`text-2xl font-black tracking-tight ${llegadasMin > 0 ? 'text-rose-500' : 'text-slate-300'}`}>{llegadasMin}</span>
+                    </div>
+                    <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50 shadow-inner">
+                       <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">Excesos Comida (Veces)</span>
+                       <span className={`text-2xl font-black tracking-tight ${comidasVeces > 0 ? 'text-orange-500' : 'text-slate-300'}`}>{comidasVeces}</span>
+                    </div>
+                    <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50 shadow-inner">
+                       <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">Excesos Comida (Mins)</span>
+                       <span className={`text-2xl font-black tracking-tight ${comidasMin > 0 ? 'text-orange-500' : 'text-slate-300'}`}>{comidasMin}</span>
+                    </div>
+                 </div>
+               </div>
+             );
+        })()}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {(() => {
              const workerData = filteredPayrollData.find(d => d.masterRow.nombre === detailsWorkerName) || filteredPayrollData[0];

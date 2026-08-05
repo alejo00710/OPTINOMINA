@@ -13,6 +13,7 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
     nombre: '',
     cargo: '',
     categoria: 'OTROS',
+    area: 'Administrativo',
     salario_base: 0,
     rodamiento: 0,
     poliza_bolivar: 0,
@@ -32,6 +33,7 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         nombre: employee.nombre || '',
         cargo: employee.cargo || '',
         categoria: employee.categoria || 'OTROS',
+        area: employee.area || 'Administrativo',
         salario_base: employee.salario_base || employee.salario || 0,
         rodamiento: employee.rodamiento || 0,
         poliza_bolivar: employee.poliza_bolivar || 0,
@@ -48,6 +50,7 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         nombre: '',
         cargo: '',
         categoria: 'OTROS',
+        area: 'Administrativo',
         salario_base: 0,
         rodamiento: 0,
         poliza_bolivar: 0,
@@ -79,6 +82,7 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         nombre: formData.nombre.toUpperCase(),
         cargo: formData.cargo.toUpperCase(),
         categoria: formData.categoria,
+        area: formData.area,
         salario_base: parseLocalNumber(formData.salario_base),
         rodamiento: parseLocalNumber(formData.rodamiento),
         poliza_bolivar: parseLocalNumber(formData.poliza_bolivar),
@@ -218,8 +222,27 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
                 <option value="Programador">Programador</option>
                 <option value="Operador">Operador</option>
                 <option value="Administrativo">Administrativo</option>
+                <option value="Practicante">Practicante</option>
+                <option value="Lider">Lider</option>
+                <option value="OTROS">OTROS</option>
               </select>
             </div>
+            
+            <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col shadow-sm">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Área</span>
+              <select
+                required
+                value={formData.area}
+                onChange={(e) => setFormData({...formData, area: e.target.value})}
+                className="w-full text-right text-sm font-medium text-slate-900 focus:ring-0 outline-none bg-transparent appearance-none"
+                dir="rtl"
+              >
+                <option value="Administrativo">Administrativo</option>
+                <option value="Planta">Planta</option>
+                <option value="Taller">Taller</option>
+              </select>
+            </div>
+
 
             <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col shadow-sm">
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Banco</span>
