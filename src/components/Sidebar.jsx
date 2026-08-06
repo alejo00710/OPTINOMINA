@@ -20,13 +20,13 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
  
 const menuItems = [
-  { name: "Portal (Inactivo)", icon: <LayoutDashboard size={20} />, path: "/", disabled: true },
-  { name: "Programación (Inactivo)", icon: <Calendar size={20} />, path: "/produccion/programacion", disabled: true },
-  { name: "Planta (Inactivo)", icon: <Hammer size={20} />, path: "/produccion", disabled: true },
-  { name: "Métricas KPI (Inactivo)", icon: <BarChart3 size={20} />, path: "/produccion/kpis", disabled: true },
-  { name: "Historial (Inactivo)", icon: <History size={20} />, path: "/produccion/terminadas", disabled: true },
-  { name: "Gastos (Inactivo)", icon: <BarChart3 size={20} />, path: "/gastos", disabled: true },
-  { name: "Logística (Inactivo)", icon: <Truck size={20} />, path: "/logistica", disabled: true },
+  // { name: "Portal (Inactivo)", icon: <LayoutDashboard size={20} />, path: "/", disabled: true },
+  // { name: "Programación (Inactivo)", icon: <Calendar size={20} />, path: "/produccion/programacion", disabled: true },
+  // { name: "Planta (Inactivo)", icon: <Hammer size={20} />, path: "/produccion", disabled: true },
+  // { name: "Métricas KPI (Inactivo)", icon: <BarChart3 size={20} />, path: "/produccion/kpis", disabled: true },
+  // { name: "Historial (Inactivo)", icon: <History size={20} />, path: "/produccion/terminadas", disabled: true },
+  // { name: "Gastos (Inactivo)", icon: <BarChart3 size={20} />, path: "/gastos", disabled: true },
+  // { name: "Logística (Inactivo)", icon: <Truck size={20} />, path: "/logistica", disabled: true },
   { name: "Nómina", icon: <Coins size={20} />, path: "/nomina", disabled: false },
 ];
  
@@ -41,16 +41,12 @@ export default function Sidebar() {
       }`}
     >
       {/* Brand Header */}
-      <div className="p-8 mb-4">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-[1.25rem] bg-slate-900 flex items-center justify-center shrink-0 shadow-xl shadow-slate-200">
-            <span className="text-white font-black text-2xl tracking-tighter">O</span>
-          </div>
-          {!collapsed && (
-            <div className="animate-in fade-in slide-in-from-left-4 duration-500">
-              <h1 className="font-extrabold text-xl text-slate-900 tracking-tight leading-none">Optimoldes</h1>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1.5 opacity-70">Nómina Standalone</p>
-            </div>
+      <div className="px-4 py-6 mb-4">
+        <div className="flex items-center justify-center">
+          {collapsed ? (
+              <img src="/logo-O.png" alt="Optimoldes Isotipo" className="w-10 h-10 mx-auto object-contain transition-all duration-300" />
+          ) : (
+              <img src="/logo-optimoldes.png" alt="Optimoldes Logo Completo" className="w-[85%] max-w-[220px] h-auto object-contain transition-all duration-300" />
           )}
         </div>
       </div>

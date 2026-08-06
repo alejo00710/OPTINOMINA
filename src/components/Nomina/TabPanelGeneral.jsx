@@ -120,6 +120,7 @@ export default function TabPanelGeneral({
       { header: 'ÁREA/PROCESO', key: 'area', width: 20 },
       { header: 'IDENTIFICACIÓN', key: 'id', width: 20 },
       { header: 'NOMBRES Y APELLIDOS', key: 'nombres', width: 35 },
+      { header: 'NOVEDAD', key: 'novedad', width: 25 },
       { header: 'FECHA INICIO NOVEDAD (DD-MM-AA)', key: 'inicio', width: 20 },
       { header: 'FECHA FINAL NOVEDAD (DD-MM-AA)', key: 'fin', width: 20 },
       { header: 'TOTAL DÍAS', key: 'dias', width: 10 },
@@ -174,6 +175,7 @@ export default function TabPanelGeneral({
         area: (emp.cargo || '').toUpperCase(),
         id: emp.cedula,
         nombres: emp.nombre,
+        novedad: emp.novedad || emp.incapacidad || "",
         inicio: "",
         fin: "",
         dias: formatNovedad(emp.dias_incapacidad),
@@ -232,6 +234,7 @@ export default function TabPanelGeneral({
         (emp.cargo || '').toUpperCase(),
         emp.cedula,
         emp.nombre,
+        emp.novedad || emp.incapacidad || "",
         "", // Inicio
         "", // Fin
         formatNovedad(emp.dias_incapacidad),
@@ -250,7 +253,7 @@ export default function TabPanelGeneral({
     
     autoTable(doc, {
       head: [[
-        "No.", "ÁREA", "CÉDULA", "EMPLEADO", 
+        "No.", "ÁREA", "CÉDULA", "EMPLEADO", "NOVEDAD", 
         "INICIO", "FIN", "DÍAS", "R.N", 
         "H.E.D", "H.E.N", "H.E.F.D", "RODAM.", 
         "COMISIÓN", "DEDUC.", "OBSERV."
@@ -264,8 +267,10 @@ export default function TabPanelGeneral({
       columnStyles: {
         1: { cellWidth: 18 },
         2: { cellWidth: 15 },
-        3: { cellWidth: 40 },
-        14: { cellWidth: 35 }
+        3: { cellWidth: 35 },
+        4: { cellWidth: 25 },
+        14: { cellWidth: 20 },
+        15: { cellWidth: 25 }
       }
     });
 
@@ -275,27 +280,33 @@ export default function TabPanelGeneral({
   return (
     <section className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl overflow-hidden rounded-3xl animate-stitch">
       <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-4">
-         <div>
+         {/* Hijo 1 (Izquierda): Título y subtítulo */}
+         <div className="flex-1 min-w-[250px]">
             <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider">Planilla General de Nómina</h4>
             <p className="text-xs font-bold text-slate-500 mt-1">Selecciona un operario para liquidar o edita sus valores</p>
          </div>
          
-         <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200">
-           <button
-             onClick={() => setVinculacionFiltro('Empresa')}
-             className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${vinculacionFiltro === 'Empresa' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-800'}`}
-           >
-             🏢 Vinculados
-           </button>
-           <button
-             onClick={() => setVinculacionFiltro('Temporal')}
-             className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${vinculacionFiltro === 'Temporal' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-800'}`}
-           >
-             ⏱️ En Misión
-           </button>
+         {/* Hijo 2 (Centro): Toggle Vinculados/Misión */}
+         <div className="flex-1 flex justify-center items-center min-w-[200px]">
+           <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200">
+             <button
+               onClick={() => setVinculacionFiltro('Empresa')}
+               className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${vinculacionFiltro === 'Empresa' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-800'}`}
+             >
+               🏢 Vinculados
+             </button>
+             <button
+               onClick={() => setVinculacionFiltro('Temporal')}
+               className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${vinculacionFiltro === 'Temporal' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-800'}`}
+             >
+               ⏱️ En Misión
+             </button>
+           </div>
          </div>
 
-         <div className="flex gap-2 items-center">
+         {/* Hijo 3 (Derecha): Botones de exportación */}
+         {vinculacionFiltro === 'Temporal' ? (
+         <div className="flex-1 flex justify-end min-w-[250px]">
            <div className="flex rounded-xl overflow-hidden shadow-md">
              <button
                onClick={handleDownloadSaitempExcel}
@@ -311,6 +322,9 @@ export default function TabPanelGeneral({
              </button>
            </div>
          </div>
+         ) : (
+         <div className="flex-1 min-w-[250px]"></div>
+         )}
       </div>
 
       <div className="p-4 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-6 items-center">

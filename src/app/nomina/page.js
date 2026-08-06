@@ -394,13 +394,25 @@ export default function NominaPage() {
 
       // Allow global overrides for the summed hours
       const finalDiurnas = resolveValue(overrides, `${cedula}_horas_diurnas`, () => sumDiurnas);
-      const finalNocturnas = resolveValue(overrides, `${cedula}_horas_nocturnas`, () => sumNocturnas);
-      const finalFesDiu = resolveValue(overrides, `${cedula}_festivas_diurnas`, () => sumFesDiu);
-      const finalFesNoc = resolveValue(overrides, `${cedula}_festivas_nocturnas`, () => sumFesNoc);
-      const finalExtDiu = resolveValue(overrides, `${cedula}_extras_diurnas`, () => sumExtDiu);
-      const finalExtNoc = resolveValue(overrides, `${cedula}_extras_nocturnas`, () => sumExtNoc);
-      const finalExtFesDiu = resolveValue(overrides, `${cedula}_extras_festivas`, () => sumExtFesDiu);
-      const finalExtFesNoc = resolveValue(overrides, `${cedula}_extras_festivas_nocturnas`, () => sumExtFesNoc);
+      let finalNocturnas = resolveValue(overrides, `${cedula}_horas_nocturnas`, () => sumNocturnas);
+      let finalFesDiu = resolveValue(overrides, `${cedula}_festivas_diurnas`, () => sumFesDiu);
+      let finalFesNoc = resolveValue(overrides, `${cedula}_festivas_nocturnas`, () => sumFesNoc);
+      let finalExtDiu = resolveValue(overrides, `${cedula}_extras_diurnas`, () => sumExtDiu);
+      let finalExtNoc = resolveValue(overrides, `${cedula}_extras_nocturnas`, () => sumExtNoc);
+      let finalExtFesDiu = resolveValue(overrides, `${cedula}_extras_festivas`, () => sumExtFesDiu);
+      let finalExtFesNoc = resolveValue(overrides, `${cedula}_extras_festivas_nocturnas`, () => sumExtFesNoc);
+
+      const esPersonalAdministrativo = emp.categoria === 'Administrativo' || emp.area === 'Administrativo';
+      if (esPersonalAdministrativo) {
+          finalNocturnas = 0;
+          finalFesDiu = 0;
+          finalFesNoc = 0;
+          finalExtDiu = 0;
+          finalExtNoc = 0;
+          finalExtFesDiu = 0;
+          finalExtFesNoc = 0;
+      }
+
 
       const extraDiurnaNeto = finalExtDiu - horasDebe > 0 ? finalExtDiu - horasDebe : 0;
       const horasPendientes = extraDiurnaNeto + finalExtNoc + finalExtFesDiu + finalExtFesNoc;
@@ -422,6 +434,19 @@ export default function NominaPage() {
       const retencion = resolveValue(overrides, `${cedula}_retencion`, () => parseLocalNumber(Number(emp.retencion || 0)));
       const bonificacion = resolveValue(overrides, `${cedula}_bonificacion`, () => 0);
       
+      // Extracción estricta del valor visual que renderiza el <input>
+      const getValExactoInput = (key, finalCalc) => {
+         const cKey = `${cedula}_${key}`;
+         let val = overrides[cKey] !== undefined ? overrides[cKey] : (finalCalc !== undefined ? finalCalc : "");
+         return Number(val) || 0;
+      };
+
+      const hrsDiurnasParaCalculo = getValExactoInput('horas_diurnas', finalDiurnas);
+      const hrsNocturnasParaCalculo = getValExactoInput('horas_nocturnas', finalNocturnas);
+      const extDiurnasParaCalculo = getValExactoInput('extras_diurnas', extraDiurnaNeto);
+      const extNocturnasParaCalculo = getValExactoInput('extras_nocturnas', finalExtNoc);
+      const extFestivasParaCalculo = getValExactoInput('extras_festivas', finalExtFesDiu + finalExtFesNoc);
+
       // MOTOR MATEMÁTICO EN CASCADA
       let variables = {
         salario_base: salarioBase,
@@ -429,11 +454,11 @@ export default function NominaPage() {
         aux_transporte_base: globalAuxTransporte,
         valor_diario_base: MINIMO_DIARIO_INCAPACIDAD,
         dias_pagados: diasPagados,
-        horas_diurnas: finalDiurnas,
-        horas_nocturnas: finalNocturnas,
-        extras_diurnas: extraDiurnaNeto,
-        extras_nocturnas: finalExtNoc,
-        extras_festivas: finalExtFesDiu + finalExtFesNoc, // Agrupadas en una bolsa
+        horas_diurnas: hrsDiurnasParaCalculo,
+        horas_nocturnas: hrsNocturnasParaCalculo,
+        extras_diurnas: extDiurnasParaCalculo,
+        extras_nocturnas: extNocturnasParaCalculo,
+        extras_festivas: extFestivasParaCalculo, // Agrupadas en una bolsa
         dias_incapacidad: diasIncapacidad,
         comisiones: comisiones,
         rodamiento: rodamiento,
@@ -980,22 +1005,15 @@ const handleSaveToCloud = async () => {
     <div className="w-full max-w-[98%] xl:max-w-[96%] mx-auto space-y-8 animate-stitch pb-12">
       
       {/* Header Banner - Sleek Glassmorphism */}
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-slate-200/80 bg-white/60 backdrop-blur-md p-6 rounded-3xl border border-white/20 shadow-xl">
-        <div className="space-y-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-900 text-white rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-800 shadow-sm">
-            <Coins size={12} className="text-yellow-400" />
-            NÓMINA DE ALTA FIDELIDAD
-          </div>
-          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight leading-none">Nómina y Asistencia</h2>
-          <p className="text-slate-500 font-medium text-sm">Cálculos salariales en cascada, marcaciones biométricas y recargos con edición manual estilo Excel.</p>
-        </div>
+      <header className="flex flex-col items-center justify-center text-center w-full pb-6 border-b border-slate-200/80 bg-white/60 backdrop-blur-md p-6 rounded-3xl border border-white/20 shadow-xl">
+        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight leading-none">Nómina Optimoldes</h2>
       </header>
 
       {/* Global Information Alert & Formula Reset Control */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white/70 backdrop-blur-md p-4 rounded-2xl border border-white/30 shadow-md">
         <div className="flex items-center gap-2.5 text-xs font-bold text-slate-500">
           <Info size={16} className="text-accent shrink-0" />
-          <span>Haz clic en cualquier celda para editar. Al escribir, la celda se congelará (color ámbar) anulando el cálculo automático de Excel.</span>
+          <span>Guarda tu progreso temporalmente, consolida la quincena final o elimina los registros actuales para reiniciar el proceso.</span>
         </div>
         <div className="flex gap-2 shrink-0 w-full md:w-auto justify-end flex-wrap">
           <button
@@ -1208,18 +1226,7 @@ const handleSaveToCloud = async () => {
       {activeTab === "horarios" && (
         <TabHorarios empleados={nominaRows} />
       )}
-      {/* Info Alert footer bar */}
-      <div className="p-6 bg-slate-100 rounded-[1.5rem] border border-slate-200/60 flex items-start gap-4 shadow-sm mt-6">
-        <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center text-white shrink-0 shadow-inner">
-          <Info size={20} className="text-yellow-400" />
-        </div>
-        <div className="space-y-1">
-          <p className="text-sm font-bold text-slate-900 leading-none mt-1">Garantía Legal de Cálculos Colombianos</p>
-          <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-            Las tasas de recargos (Nocturno 35%, Festivo Diurno 75%, Festivo Nocturno 210%, Extra Diurna 150%, Extra Nocturna 175%, Extra Festiva Diurna 200%, Extra Festiva Nocturna 250%), subsidios y deducciones del 4% corresponden estrictamente con la normativa vigente implementada para OPTIMOLDES S.A.S.
-          </p>
-        </div>
-      </div>
+
 
       </>
     )}

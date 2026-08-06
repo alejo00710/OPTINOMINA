@@ -416,35 +416,47 @@ export default function TabLiquidacion({
                    <div className="space-y-4 mb-6">
                       {(() => {
                          const salarioBase = Number(overrides[`${selectedWorkerData.cedula}_salario_base`] !== undefined ? overrides[`${selectedWorkerData.cedula}_salario_base`] : (selectedWorkerData.masterRow?.salario_base || selectedWorkerData.salario_base || selectedWorkerData.salario || 0));
-                         const calcValor = (horas, porcentaje) => Math.round((salarioBase / 240) * (porcentaje / 100) * (horas || 0));
+                         
+                         const calcValor = (horas, porcentaje) => {
+                             const hrs = parseFloat(horas) || 0;
+                             if (hrs === 0) return 0;
+                             return Math.round((salarioBase / 240) * (porcentaje / 100) * hrs);
+                         };
                          
                          const horasDebe = Number(overrides[`${selectedWorkerData.cedula}_horas_que_debe`] !== undefined ? overrides[`${selectedWorkerData.cedula}_horas_que_debe`] : (selectedWorkerData.horas_debe || 0));
                          
                          const getTotHr = (field, defaultVal) => overrides[`${selectedWorkerData.cedula}_tot_hr_${field}`] !== undefined ? Number(overrides[`${selectedWorkerData.cedula}_tot_hr_${field}`]) : defaultVal;
                          
-                         const tDiurnas = getTotHr('diurnas', Number(selectedWorkerData.horas_diurnas || 0));
-                         const tNocturnas = overrides[`${selectedWorkerData.cedula}_horas_nocturnas`] !== undefined ? Number(overrides[`${selectedWorkerData.cedula}_horas_nocturnas`]) : Number(selectedWorkerData.horas_nocturnas || 0);
-                         const tFesDiu = getTotHr('fes_diu', Number(selectedWorkerData.festivas_diurnas || 0));
-                         const tFesNoc = getTotHr('fes_noc', Number(selectedWorkerData.festivas_nocturnas || 0));
+                         const safeHrs = (val) => parseFloat(val) || 0;
+
+                         const tDiurnas = safeHrs(getTotHr('diurnas', selectedWorkerData.horas_diurnas));
+                         const tNocturnas = safeHrs(overrides[`${selectedWorkerData.cedula}_horas_nocturnas`] !== undefined ? overrides[`${selectedWorkerData.cedula}_horas_nocturnas`] : selectedWorkerData.horas_nocturnas);
+                         const tFesDiu = safeHrs(getTotHr('fes_diu', selectedWorkerData.festivas_diurnas));
+                         const tFesNoc = safeHrs(getTotHr('fes_noc', selectedWorkerData.festivas_nocturnas));
                          
-                         const baseExtraDiurna = Number(selectedWorkerData.extras_diurnas || 0);
-                         const horasExtraDiurnaReal = getTotHr('ext_diu', Math.max(0, baseExtraDiurna - horasDebe));
+                         const baseExtraDiurna = safeHrs(selectedWorkerData.extras_diurnas);
+                         const horasExtraDiurnaReal = safeHrs(getTotHr('ext_diu', Math.max(0, baseExtraDiurna - horasDebe)));
                          
-                         const totalExtraNoc = getTotHr('ext_noc', Number(selectedWorkerData.extras_nocturnas || 0));
-                         const totalExtFesDiu = getTotHr('ext_fes_diu', Number(selectedWorkerData.extras_festivas || 0));
-                         const totalExtFesNoc = getTotHr('ext_fes_noc', Number(selectedWorkerData.extras_festivas_nocturnas || 0));
+                         const totalExtraNoc = safeHrs(getTotHr('ext_noc', selectedWorkerData.extras_nocturnas));
+                         const totalExtFesDiu = safeHrs(getTotHr('ext_fes_diu', selectedWorkerData.extras_festivas));
+                         const totalExtFesNoc = safeHrs(getTotHr('ext_fes_noc', selectedWorkerData.extras_festivas_nocturnas));
                          
                          const horasPendientes = horasExtraDiurnaReal + totalExtraNoc + totalExtFesDiu + totalExtFesNoc;
                          
-                         const getVr = (field, defaultVal) => overrides[`${selectedWorkerData.cedula}_vr_${field}`] !== undefined && overrides[`${selectedWorkerData.cedula}_vr_${field}`] !== "" ? overrides[`${selectedWorkerData.cedula}_vr_${field}`] : defaultVal;
+                         const getVr = (field, defaultVal, hrs) => {
+                             if (hrs === 0) return 0;
+                             return overrides[`${selectedWorkerData.cedula}_vr_${field}`] !== undefined && overrides[`${selectedWorkerData.cedula}_vr_${field}`] !== "" ? Number(overrides[`${selectedWorkerData.cedula}_vr_${field}`]) : defaultVal;
+                         };
                          
-                         const vNocturnas = overrides[`${selectedWorkerData.cedula}_recargo_nocturno`] !== undefined && overrides[`${selectedWorkerData.cedula}_recargo_nocturno`] !== "" ? Number(overrides[`${selectedWorkerData.cedula}_recargo_nocturno`]) : Number(selectedWorkerData.recargo_nocturno || 0);
-                         const vFesDiu = getVr('fes_diu', calcValor(tFesDiu, 75));
-                         const vFesNoc = getVr('fes_noc', calcValor(tFesNoc, 210));
-                         const vExtDiu = getVr('ext_diu', calcValor(horasExtraDiurnaReal, 150));
-                         const vExtNoc = getVr('ext_noc', calcValor(totalExtraNoc, 150));
-                         const vExtFesDiu = getVr('ext_fes_diu', calcValor(totalExtFesDiu, 200));
-                         const vExtFesNoc = getVr('ext_fes_noc', calcValor(totalExtFesNoc, 200));
+                         const calcVNocturnas = calcValor(tNocturnas, 35);
+                         const vNocturnas = tNocturnas === 0 ? 0 : (overrides[`${selectedWorkerData.cedula}_recargo_nocturno`] !== undefined && overrides[`${selectedWorkerData.cedula}_recargo_nocturno`] !== "" ? Number(overrides[`${selectedWorkerData.cedula}_recargo_nocturno`]) : calcVNocturnas);
+                         
+                         const vFesDiu = getVr('fes_diu', calcValor(tFesDiu, 75), tFesDiu);
+                         const vFesNoc = getVr('fes_noc', calcValor(tFesNoc, 210), tFesNoc);
+                         const vExtDiu = getVr('ext_diu', calcValor(horasExtraDiurnaReal, 150), horasExtraDiurnaReal);
+                         const vExtNoc = getVr('ext_noc', calcValor(totalExtraNoc, 150), totalExtraNoc);
+                         const vExtFesDiu = getVr('ext_fes_diu', calcValor(totalExtFesDiu, 200), totalExtFesDiu);
+                         const vExtFesNoc = getVr('ext_fes_noc', calcValor(totalExtFesNoc, 200), totalExtFesNoc);
                          const vTotalExtras = Number(vNocturnas) + Number(vFesDiu) + Number(vFesNoc) + Number(vExtDiu) + Number(vExtNoc) + Number(vExtFesDiu) + Number(vExtFesNoc);
 
                          return (
