@@ -200,9 +200,13 @@ export const getOfficialShiftTime = (timeStr, type, turnoProgramadoDelDia = null
 };
 
 export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
-    // 1. Escudo de Día Vacío (Evita horas fantasma)
-    const isEmptyPunch = !realPunchIn || realPunchIn === '--:--' || realPunchIn === 'null' || String(realPunchIn).trim() === '' || realPunchIn === '-';
-    if (isEmptyPunch) return { officialIn: "-", officialOut: "-", lateMinutes: 0 };
+    // 1. Escudo de Día Vacío o Incompleto (Evita horas fantasma y adivinanza de turnos)
+    const isEmptyPunchIn = !realPunchIn || realPunchIn === '--:--' || realPunchIn === 'null' || String(realPunchIn).trim() === '' || realPunchIn === '-';
+    const isEmptyPunchOut = !realPunchOut || realPunchOut === '--:--' || realPunchOut === 'null' || String(realPunchOut).trim() === '' || realPunchOut === '-';
+    
+    if (isEmptyPunchIn || isEmptyPunchOut) {
+        return { officialIn: "-", officialOut: "-", lateMinutes: 0 };
+    }
 
     const [realHH, realMM] = String(realPunchIn).split(':').map(Number);
     const realTotalMins = (realHH * 60) + realMM;
@@ -323,10 +327,12 @@ export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
         }
     }
 
+    let isMissingOut = !realPunchOut || realPunchOut === '--:--' || realPunchOut === 'null' || String(realPunchOut).trim() === '';
+
     const pad = (n) => String(n).padStart(2, '0');
     return {
         officialIn: `${pad(finalJ_HH)}:${pad(finalJ_MM)}`,
-        officialOut: `${pad(finalK_HH)}:${pad(finalK_MM)}`,
+        officialOut: isMissingOut ? "" : `${pad(finalK_HH)}:${pad(finalK_MM)}`,
         lateMinutes: lateMins
     };
 };
@@ -340,8 +346,19 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   const hrEntDesc2 = overrides[`${prefix}_hr_ent_desc2`] !== undefined ? String(overrides[`${prefix}_hr_ent_desc2`]) : (day.hr_ent_desc2 || "-");
   const hrSalDesc2 = overrides[`${prefix}_hr_sal_desc2`] !== undefined ? String(overrides[`${prefix}_hr_sal_desc2`]) : (day.hr_sal_desc2 || "-");
 
-  const desc1 = getTimeDifferenceHHMM(hrEntDesc1, hrSalDesc1, false);
-  const desc2 = getTimeDifferenceHHMM(hrEntDesc2, hrSalDesc2, false);
+  let desc1 = "00:00";
+  if (isTime(hrEntDesc1) && !isTime(hrSalDesc1)) {
+      desc1 = "00:30";
+  } else {
+      desc1 = getTimeDifferenceHHMM(hrEntDesc1, hrSalDesc1, false);
+  }
+
+  let desc2 = "00:00";
+  if (isTime(hrEntDesc2) && !isTime(hrSalDesc2)) {
+      desc2 = "00:30";
+  } else {
+      desc2 = getTimeDifferenceHHMM(hrEntDesc2, hrSalDesc2, false);
+  }
   
   let comidasExcedidasVeces = 0;
   let comidasExcedidasMin = 0;
@@ -404,17 +421,17 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   let diurn = (hrEntPago >= inicioDia && hrEntPago <= finDia) ? (baseHoras - noct) : 0;
   
   // Manuals overriding or defaults to 0
-  const fesDiu = overrides[`${prefix}_fes_diu`] !== undefined ? Number(overrides[`${prefix}_fes_diu`]) : Number(day.fes_diu || 0);
-  const fesNoc = overrides[`${prefix}_fes_noc`] !== undefined ? Number(overrides[`${prefix}_fes_noc`]) : Number(day.fes_noc || 0);
+  let fesDiu = overrides[`${prefix}_fes_diu`] !== undefined ? Number(overrides[`${prefix}_fes_diu`]) : Number(day.fes_diu || 0);
+  let fesNoc = overrides[`${prefix}_fes_noc`] !== undefined ? Number(overrides[`${prefix}_fes_noc`]) : Number(day.fes_noc || 0);
   let extNoc = overrides[`${prefix}_ext_noc`] !== undefined ? Number(overrides[`${prefix}_ext_noc`]) : Number(day.ext_noc || 0);
-  const extFesDiu = overrides[`${prefix}_ext_fes_diu`] !== undefined ? Number(overrides[`${prefix}_ext_fes_diu`]) : Number(day.ext_fes_diu || 0);
-  const extFesNoc = overrides[`${prefix}_ext_fes_noc`] !== undefined ? Number(overrides[`${prefix}_ext_fes_noc`]) : Number(day.ext_fes_noc || 0);
+  let extFesDiu = overrides[`${prefix}_ext_fes_diu`] !== undefined ? Number(overrides[`${prefix}_ext_fes_diu`]) : Number(day.ext_fes_diu || 0);
+  let extFesNoc = overrides[`${prefix}_ext_fes_noc`] !== undefined ? Number(overrides[`${prefix}_ext_fes_noc`]) : Number(day.ext_fes_noc || 0);
   
   const calcLlegadaTardeMin = smartShift.lateMinutes || 0;
   const calcLlegadaTarde = calcLlegadaTardeMin > 0 ? 1 : 0;
   
-  const llegadaTarde = overrides[`${prefix}_llegada_tarde`] !== undefined ? Number(overrides[`${prefix}_llegada_tarde`]) : calcLlegadaTarde;
-  const llegadaTardeMin = overrides[`${prefix}_llegada_tarde_min`] !== undefined ? Number(overrides[`${prefix}_llegada_tarde_min`]) : calcLlegadaTardeMin;
+  let llegadaTarde = overrides[`${prefix}_llegada_tarde`] !== undefined ? Number(overrides[`${prefix}_llegada_tarde`]) : calcLlegadaTarde;
+  let llegadaTardeMin = overrides[`${prefix}_llegada_tarde_min`] !== undefined ? Number(overrides[`${prefix}_llegada_tarde_min`]) : calcLlegadaTardeMin;
   
   // REGLAS ESPECÍFICAS OBLIGATORIAS ANTES DE BALANCE (OVERRIDES CONDICIONALES)
   if (hrSalPago === "22:00") {
@@ -429,12 +446,32 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   const extDiu = extDiuCalc;
 
   // Let overrides take precedence on final values if the user edited them manually
-  const finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : diurn;
-  const finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : noct;
-  const finalExtDiu = overrides[`${prefix}_ext_diu`] !== undefined ? Number(overrides[`${prefix}_ext_diu`]) : extDiu;
+  let finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : diurn;
+  let finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : noct;
+  let finalExtDiu = overrides[`${prefix}_ext_diu`] !== undefined ? Number(overrides[`${prefix}_ext_diu`]) : extDiu;
+
+  // CORTACIRCUITOS (KILL SWITCH) PARA DÍAS INCOMPLETOS
+  const isValidPunch = (t) => t && String(t).trim() !== "" && String(t).trim() !== "-";
+  const diaIncompleto = !isValidPunch(hrEntPago) || !isValidPunch(hrSalPago);
+  
+  if (diaIncompleto) {
+      finalDiurnas = 0;
+      finalNocturnas = 0;
+      fesDiu = 0;
+      fesNoc = 0;
+      finalExtDiu = 0;
+      extNoc = 0;
+      extFesDiu = 0;
+      extFesNoc = 0;
+      llegadaTarde = 0;
+      llegadaTardeMin = 0;
+  }
+
+  const finalEstado = diaIncompleto ? day.estado : "normal";
 
   return {
     ...day,
+    estado: finalEstado,
     hr_ent_desc1: hrEntDesc1,
     hr_sal_desc1: hrSalDesc1,
     total_desc1: desc1,

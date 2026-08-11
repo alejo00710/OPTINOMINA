@@ -317,10 +317,10 @@ export default function TabLiquidacion({
                                
                                {/* Pago Entrada/Salida */}
                                <td className="px-1 py-1">
-                                  <input type="text" value={overrides[`${prefix}_hr_ent_pago`] !== undefined ? overrides[`${prefix}_hr_ent_pago`] : (day.hr_ent_pago || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_pago`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none text-purple-600" />
+                                  <input type="time" value={overrides[`${prefix}_hr_ent_pago`] !== undefined ? overrides[`${prefix}_hr_ent_pago`] : (day.hr_ent_pago && day.hr_ent_pago !== "-" ? day.hr_ent_pago : "")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_pago`, e.target.value)} className="w-full bg-transparent text-center font-mono outline-none focus:ring-1 focus:bg-slate-50 rounded text-purple-600" />
                                </td>
                                <td className="px-1 py-1">
-                                  <input type="text" value={overrides[`${prefix}_hr_sal_pago`] !== undefined ? overrides[`${prefix}_hr_sal_pago`] : (day.hr_sal_pago || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_pago`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none text-purple-600" />
+                                  <input type="time" value={overrides[`${prefix}_hr_sal_pago`] !== undefined ? overrides[`${prefix}_hr_sal_pago`] : (day.hr_sal_pago && day.hr_sal_pago !== "-" ? day.hr_sal_pago : "")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_pago`, e.target.value)} className="w-full bg-transparent text-center font-mono outline-none focus:ring-1 focus:bg-slate-50 rounded text-purple-600" />
                                </td>
 
                                <td className="px-1 py-1">

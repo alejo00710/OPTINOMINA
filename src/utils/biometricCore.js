@@ -301,7 +301,7 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
       const diffHours = (p.timestamp - last.timestamp) / 3600000;
       const totalHours = (p.timestamp - first.timestamp) / 3600000;
       
-      if (diffHours < (10 / 60)) continue; // Ignorar marcaciones dobles (menos de 10 mins)
+      if (diffHours < (15 / 60)) continue; // Ignorar marcaciones dobles (menos de 15 mins)
 
       // Regla de Agrupamiento Robusto:
       // 1. Se rompe el turno si excede la duración máxima (14h) desde la primera marca.
@@ -331,36 +331,114 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
 
     let hr_ent = "", hr_sal_desc1 = "", hr_ent_desc1 = "", hr_sal_desc2 = "", hr_ent_desc2 = "", hr_sal = "";
     let estado = "";
+    let novedad = "";
 
     const n = shift.length;
 
     hr_ent = shift[0].hora;
     
-    if (n === 2) {
+    if (n === 1) {
+      estado = "incompleto";
+      novedad = "FALTA SALIDA";
+    } else if (n === 2) {
       hr_sal = shift[1].hora;
-    } else if (n === 3) {
-      hr_ent_desc1 = shift[1].hora;
-      hr_sal = shift[2].hora;
-      estado = "incompleto";
-    } else if (n === 4) {
-      hr_ent_desc1 = shift[1].hora;
-      hr_sal_desc1 = shift[2].hora;
-      hr_sal = shift[3].hora;
-    } else if (n === 5) {
-      hr_ent_desc1 = shift[1].hora;
-      hr_sal_desc1 = shift[2].hora;
-      hr_ent_desc2 = shift[3].hora;
-      hr_sal = shift[4].hora;
-      estado = "incompleto";
-    } else if (n >= 6) {
-      hr_ent_desc1 = shift[1].hora;
-      hr_sal_desc1 = shift[2].hora;
-      hr_ent_desc2 = shift[3].hora;
-      hr_sal_desc2 = shift[4].hora;
-      hr_sal = shift[n - 1].hora;
-      if (n % 2 !== 0) estado = "incompleto";
-    } else if (n === 1) {
-      estado = "incompleto";
+    } else {
+      // Tenemos 3 o más marcas.
+      // Verificamos si la brecha entre la marca 2 y 3 es de 20 mins o más (Detección de Comida)
+      const gap1_mins = (shift[2].timestamp - shift[1].timestamp) / 60000;
+      
+      if (gap1_mins >= 20) {
+        hr_ent_desc1 = shift[1].hora;
+        hr_sal_desc1 = shift[2].hora;
+        
+        if (n === 3) {
+          // Freno de Emergencia - Salida Huérfana
+          hr_sal = "";
+          estado = "incompleto";
+          novedad = "FALTA SALIDA";
+        } else if (n === 4) {
+          hr_sal = shift[3].hora;
+        } else if (n >= 5) {
+          const gap2_mins = (shift[4].timestamp - shift[3].timestamp) / 60000;
+          if (gap2_mins >= 20) {
+            hr_ent_desc2 = shift[3].hora;
+            hr_sal_desc2 = shift[4].hora;
+            if (n === 5) {
+              hr_sal = "";
+              estado = "incompleto";
+              novedad = "FALTA SALIDA";
+            } else {
+              hr_sal = shift[n - 1].hora;
+            }
+          } else {
+            hr_ent_desc2 = shift[3].hora;
+            hr_sal_desc2 = "";
+            hr_sal = shift[n - 1].hora;
+          }
+        }
+      } else {
+        // Fallback original para otros patrones raros
+        if (n === 3) {
+          hr_ent_desc1 = shift[1].hora;
+          hr_sal = shift[2].hora;
+          estado = "incompleto";
+        } else if (n === 4) {
+          hr_ent_desc1 = shift[1].hora;
+          hr_sal_desc1 = shift[2].hora;
+          hr_sal = shift[3].hora;
+        } else if (n === 5) {
+          hr_ent_desc1 = shift[1].hora;
+          hr_sal_desc1 = shift[2].hora;
+          hr_ent_desc2 = shift[3].hora;
+          hr_sal = shift[4].hora;
+          estado = "incompleto";
+        } else if (n >= 6) {
+          hr_ent_desc1 = shift[1].hora;
+          hr_sal_desc1 = shift[2].hora;
+          hr_ent_desc2 = shift[3].hora;
+          hr_sal_desc2 = shift[4].hora;
+          hr_sal = shift[n - 1].hora;
+          if (n % 2 !== 0) estado = "incompleto";
+        }
+      }
+    }
+
+    // REGLA MATEMÁTICA ESTRICTA: Impares (Excepción de Brecha Larga)
+    const esImpar = n % 2 !== 0;
+    if (esImpar && n > 1) {
+      const minutosDiferencia = (shift[n - 1].timestamp - shift[n - 2].timestamp) / 60000;
+      
+      if (minutosDiferencia > 90) {
+        // ES UNA SALIDA
+        hr_sal = shift[n - 1].hora;
+        estado = "incompleto";
+        novedad = "FALTA FIN DESCANSO";
+        
+        if (n === 3) {
+          hr_ent_desc1 = shift[1].hora;
+          hr_sal_desc1 = "";
+        } else if (n === 5) {
+          hr_ent_desc1 = shift[1].hora;
+          hr_sal_desc1 = shift[2].hora;
+          hr_ent_desc2 = shift[3].hora;
+          hr_sal_desc2 = "";
+        }
+      } else {
+        // ES UN DESCANSO (La lógica estricta original)
+        hr_sal = "";
+        estado = "incompleto";
+        novedad = "FALTA SALIDA";
+        
+        if (n === 3) {
+          hr_ent_desc1 = shift[1].hora;
+          hr_sal_desc1 = shift[2].hora;
+        } else if (n === 5) {
+          hr_ent_desc1 = shift[1].hora;
+          hr_sal_desc1 = shift[2].hora;
+          hr_ent_desc2 = shift[3].hora;
+          hr_sal_desc2 = shift[4].hora;
+        }
+      }
     }
 
     attendanceRows[shiftLogicalDate] = {
@@ -371,7 +449,8 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
       hr_sal_desc2,
       hr_ent_desc2,
       hr_sal,
-      estado
+      estado,
+      novedad: novedad ? novedad : (attendanceRows[shiftLogicalDate].novedad || "")
     };
   });
 
