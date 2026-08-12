@@ -303,11 +303,9 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
       
       if (diffHours < (15 / 60)) continue; // Ignorar marcaciones dobles (menos de 15 mins)
 
-      // Regla de Agrupamiento Robusto:
-      // 1. Se rompe el turno si excede la duración máxima (14h) desde la primera marca.
-      // 2. Se rompe el turno si hay un descanso > 8 horas Y ya tenemos más de una marca 
-      //    (esto protege los turnos de 12h con solo 2 marcaciones de ser divididos erróneamente).
-      if (totalHours > MAX_SHIFT_DURATION_HOURS || (diffHours > 8 && currentShift.length >= 2)) {
+      // Regla de Agrupamiento por Sesiones:
+      // Si la diferencia entre la marca actual y la anterior es MAYOR a 7 horas, es un turno nuevo.
+      if (diffHours > 7) {
         shifts.push([...currentShift]);
         currentShift = [p];
       } else {
@@ -324,8 +322,8 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
   shifts.forEach(shift => {
     if (shift.length === 0) return;
     
-    // El "Día Lógico" del turno corresponde a su fecha de entrada
-    const shiftLogicalDate = shift[0].fecha; 
+    // El "Día Lógico" del turno corresponde a su fecha de salida (última marca)
+    const shiftLogicalDate = shift[shift.length - 1].fecha; 
     
     if (!attendanceRows[shiftLogicalDate]) return;
 
@@ -344,63 +342,52 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
       hr_sal = shift[1].hora;
     } else {
       // Tenemos 3 o más marcas.
-      // Verificamos si la brecha entre la marca 2 y 3 es de 20 mins o más (Detección de Comida)
-      const gap1_mins = (shift[2].timestamp - shift[1].timestamp) / 60000;
-      
-      if (gap1_mins >= 20) {
-        hr_ent_desc1 = shift[1].hora;
-        hr_sal_desc1 = shift[2].hora;
-        
-        if (n === 3) {
-          // Freno de Emergencia - Salida Huérfana
-          hr_sal = "";
-          estado = "incompleto";
-          novedad = "FALTA SALIDA";
-        } else if (n === 4) {
-          hr_sal = shift[3].hora;
-        } else if (n >= 5) {
-          const gap2_mins = (shift[4].timestamp - shift[3].timestamp) / 60000;
-          if (gap2_mins >= 20) {
-            hr_ent_desc2 = shift[3].hora;
-            hr_sal_desc2 = shift[4].hora;
-            if (n === 5) {
-              hr_sal = "";
-              estado = "incompleto";
-              novedad = "FALTA SALIDA";
-            } else {
-              hr_sal = shift[n - 1].hora;
-            }
-          } else {
-            hr_ent_desc2 = shift[3].hora;
-            hr_sal_desc2 = "";
-            hr_sal = shift[n - 1].hora;
+      // Extraemos las marcas intermedias ignorando la entrada [0] y la salida real/falsa [n-1]
+      // Nota: Si es impar y faltó la salida, 'n-1' será el descanso y se resolverá abajo, pero primero intentamos agrupar.
+      let middleMarks = shift.slice(1, -1);
+
+      if (shift.length >= 3) {
+          // Calcula los minutos entre la marca 1 y la marca 2
+          const firstGap = (shift[1].timestamp - shift[0].timestamp) / 60000;
+          
+          if (firstGap <= 90) {
+              // Si el tiempo es corto, la marca 1 y 2 son realmente un descanso.
+              // Por ende, olvidó marcar la ENTRADA real.
+              hr_ent = ""; // Deja la entrada vacía
+              // Reajusta las marcas intermedias para que el evaluador de descansos procese la primera marca
+              middleMarks = shift.slice(0, -1); 
           }
-        }
-      } else {
-        // Fallback original para otros patrones raros
-        if (n === 3) {
-          hr_ent_desc1 = shift[1].hora;
-          hr_sal = shift[2].hora;
-          estado = "incompleto";
-        } else if (n === 4) {
-          hr_ent_desc1 = shift[1].hora;
-          hr_sal_desc1 = shift[2].hora;
-          hr_sal = shift[3].hora;
-        } else if (n === 5) {
-          hr_ent_desc1 = shift[1].hora;
-          hr_sal_desc1 = shift[2].hora;
-          hr_ent_desc2 = shift[3].hora;
-          hr_sal = shift[4].hora;
-          estado = "incompleto";
-        } else if (n >= 6) {
-          hr_ent_desc1 = shift[1].hora;
-          hr_sal_desc1 = shift[2].hora;
-          hr_ent_desc2 = shift[3].hora;
-          hr_sal_desc2 = shift[4].hora;
-          hr_sal = shift[n - 1].hora;
-          if (n % 2 !== 0) estado = "incompleto";
-        }
       }
+      
+      let i = 0;
+      
+      if (middleMarks.length > 0) {
+          hr_ent_desc1 = middleMarks[i].hora; // Inicia D1
+          // Si hay una siguiente marca y la brecha es menor a 90 mins (1.5 horas)
+          if (middleMarks[i+1] && (middleMarks[i+1].timestamp - middleMarks[i].timestamp) / 60000 <= 90) {
+              hr_sal_desc1 = middleMarks[i+1].hora;
+              i += 2; // Avanza 2 posiciones
+          } else {
+              hr_sal_desc1 = ""; // Olvidó marcar el regreso
+              estado = "incompleto";
+              novedad = "FALTA FIN DESCANSO";
+              i += 1; // Avanza solo 1 posición
+          }
+      }
+      
+      if (i < middleMarks.length) {
+          hr_ent_desc2 = middleMarks[i].hora; // Inicia D2
+          if (middleMarks[i+1] && (middleMarks[i+1].timestamp - middleMarks[i].timestamp) / 60000 <= 90) {
+              hr_sal_desc2 = middleMarks[i+1].hora;
+          } else {
+              hr_sal_desc2 = ""; // Olvidó marcar el regreso del D2
+              estado = "incompleto";
+              novedad = "FALTA FIN DESCANSO";
+          }
+      }
+
+      // La última marca del array es la salida, a menos que la Regla de Impares diga lo contrario
+      hr_sal = shift[n - 1].hora;
     }
 
     // REGLA MATEMÁTICA ESTRICTA: Impares (Excepción de Brecha Larga)
@@ -409,29 +396,24 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
       const minutosDiferencia = (shift[n - 1].timestamp - shift[n - 2].timestamp) / 60000;
       
       if (minutosDiferencia > 90) {
-        // ES UNA SALIDA
+        // ES UNA SALIDA (La lógica de arriba ya asignó hr_sal a la última marca, solo corregimos novedad si acaso)
         hr_sal = shift[n - 1].hora;
-        estado = "incompleto";
-        novedad = "FALTA FIN DESCANSO";
-        
-        if (n === 3) {
-          hr_ent_desc1 = shift[1].hora;
-          hr_sal_desc1 = "";
-        } else if (n === 5) {
-          hr_ent_desc1 = shift[1].hora;
-          hr_sal_desc1 = shift[2].hora;
-          hr_ent_desc2 = shift[3].hora;
-          hr_sal_desc2 = "";
+        if (!hr_sal_desc1 && hr_ent_desc1) {
+            estado = "incompleto";
+            novedad = "FALTA FIN DESCANSO";
         }
       } else {
-        // ES UN DESCANSO (La lógica estricta original)
+        // ES UN DESCANSO (La última marca no es salida, es el inicio de un descanso huerfano)
         hr_sal = "";
         estado = "incompleto";
         novedad = "FALTA SALIDA";
         
+        // Limpiamos las variables de descanso y reasignamos usando la lógica estricta para impares sin salida
+        hr_ent_desc1 = ""; hr_sal_desc1 = ""; hr_ent_desc2 = ""; hr_sal_desc2 = "";
+        
         if (n === 3) {
           hr_ent_desc1 = shift[1].hora;
-          hr_sal_desc1 = shift[2].hora;
+          hr_sal_desc1 = shift[2].hora; // Ojo, si es muy largo, ya se atrapó arriba. Si es corto, asume q es el descanso entero y olvidó salir.
         } else if (n === 5) {
           hr_ent_desc1 = shift[1].hora;
           hr_sal_desc1 = shift[2].hora;
@@ -439,6 +421,44 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
           hr_sal_desc2 = shift[4].hora;
         }
       }
+    }
+
+    let estadoFinal = estado || "normal";
+    let novedadFinal = novedad || "";
+
+    // Calcular tiempo en planta para no penalizar medios turnos donde no comen (ej. sábados de 4h)
+    let horasFisicas = 0;
+    if (shift.length >= 2) {
+        horasFisicas = (shift[shift.length - 1].timestamp - shift[0].timestamp) / 3600000;
+    }
+
+    // 1. Reglas inquebrantables de Entrada y Salida
+    if (!hr_ent || hr_ent === "") {
+        estadoFinal = "incompleto";
+        novedadFinal = "FALTA ENTRADA";
+    } else if (!hr_sal || hr_sal === "") {
+        estadoFinal = "incompleto";
+        novedadFinal = "FALTA SALIDA";
+    } 
+    // 2. Protocolo estricto de descansos para turnos estándar (> 6 horas)
+    else if (horasFisicas >= 6) { 
+        if (!hr_ent_desc1 || hr_ent_desc1 === "") {
+            estadoFinal = "incompleto";
+            novedadFinal = "FALTA INICIO COMIDA";
+        } else if (!hr_sal_desc1 || hr_sal_desc1 === "") {
+            estadoFinal = "incompleto";
+            novedadFinal = "FALTA FIN COMIDA";
+        } 
+        // 3. Protocolo estricto para turnos largos (> 10.5 horas) que exigen un segundo descanso
+        else if (horasFisicas >= 10.5) {
+            if (!hr_ent_desc2 || hr_ent_desc2 === "") {
+                estadoFinal = "incompleto";
+                novedadFinal = "FALTA INICIO DES. 2";
+            } else if (!hr_sal_desc2 || hr_sal_desc2 === "") {
+                estadoFinal = "incompleto";
+                novedadFinal = "FALTA FIN DES. 2";
+            }
+        }
     }
 
     attendanceRows[shiftLogicalDate] = {
@@ -449,8 +469,8 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
       hr_sal_desc2,
       hr_ent_desc2,
       hr_sal,
-      estado,
-      novedad: novedad ? novedad : (attendanceRows[shiftLogicalDate].novedad || "")
+      estado: estadoFinal,
+      novedad: novedadFinal
     };
   });
 

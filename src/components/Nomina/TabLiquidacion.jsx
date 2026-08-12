@@ -1,5 +1,6 @@
 import React from 'react';
 import { Info, Printer } from 'lucide-react';
+import { isFestivoColombia } from '@/utils/festivosColombia';
 
 const fmtCOP = (num) => {
   return new Intl.NumberFormat('es-CO').format(num || 0);
@@ -252,10 +253,15 @@ export default function TabLiquidacion({
                    </thead>
                    <tbody className="divide-y divide-slate-100 text-[10px] font-semibold text-slate-700">
                       {selectedWorkerData.workerDays.map((day) => {
-                         const dateObj = new Date(day.dia + "T00:00:00");
+                         const dateObj = new Date(day.dia + "T12:00:00");
                          const dayName = dateObj.toLocaleDateString("es-CO", { weekday: "short" });
                          const displayDate = day.dia;
                          const prefix = `${selectedWorkerData.cedula}_${displayDate}`;
+
+                         const isDomingo = dateObj.getDay() === 0;
+                         const isSabado = dateObj.getDay() === 6;
+                         const isFestivo = isFestivoColombia(day.dia);
+                         const isDiaDescanso = isDomingo || isSabado || isFestivo;
 
                          const getTotal = (field) => {
     if (!selectedWorkerData || !selectedWorkerData.workerDays) return "0.0";
@@ -280,7 +286,7 @@ export default function TabLiquidacion({
   if (statusVal === 'DESCANSO') statusVal = 'Descanso';
 
   return (
-                            <tr key={displayDate} className={`${getRowColor(statusVal)}`}>
+                            <tr key={displayDate} className={`${getRowColor(statusVal)} ${isDiaDescanso ? 'bg-red-50/60 border-l-4 border-red-300' : ''}`}>
                                <td className="px-2 py-2 whitespace-nowrap flex items-center gap-1">
                                   <span className="text-slate-400">{dayName}</span> 
                                   {displayDate}

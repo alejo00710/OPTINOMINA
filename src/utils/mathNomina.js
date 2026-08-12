@@ -399,12 +399,22 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
      if (hrLab < 0) hrLab = 0;
   }
   
-  // Col M: Descuento
-  let des = 0;
-  if (hrLab >= 12) {
-    des = 1.0;
-  } else if (hrLab >= 8) {
-    des = 0.5;
+  // Col M: Descuento Dinámico basado en horas físicas (brutas)
+  let horasBrutas = 0;
+  if (isTime(day.hr_ent) && isTime(day.hr_sal)) {
+      horasBrutas = getTimeDifference(day.hr_ent, day.hr_sal);
+  }
+
+  let des = 0.5; // Por defecto para turnos de 8 horas o menos
+  if (horasBrutas > 8.5) {
+      des = 1.0;
+  }
+
+  const isValidPunch = (t) => t && String(t).trim() !== "" && String(t).trim() !== "-";
+  const diaIncompletoFlag = !isValidPunch(hrEntPago) || !isValidPunch(hrSalPago);
+  
+  if (diaIncompletoFlag) {
+      des = 0;
   }
   
   // Col N: Hr. Pag = L3 - M3
@@ -451,8 +461,7 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   let finalExtDiu = overrides[`${prefix}_ext_diu`] !== undefined ? Number(overrides[`${prefix}_ext_diu`]) : extDiu;
 
   // CORTACIRCUITOS (KILL SWITCH) PARA DÍAS INCOMPLETOS
-  const isValidPunch = (t) => t && String(t).trim() !== "" && String(t).trim() !== "-";
-  const diaIncompleto = !isValidPunch(hrEntPago) || !isValidPunch(hrSalPago);
+  const diaIncompleto = diaIncompletoFlag;
   
   if (diaIncompleto) {
       finalDiurnas = 0;
