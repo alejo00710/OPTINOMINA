@@ -439,25 +439,21 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
     } else if (!hr_sal || hr_sal === "") {
         estadoFinal = "incompleto";
         novedadFinal = "FALTA SALIDA";
+    } else if (!hr_ent_desc1 || hr_ent_desc1 === "") {
+        estadoFinal = "incompleto";
+        novedadFinal = "FALTA INICIO COMIDA";
+    } else if (!hr_sal_desc1 || hr_sal_desc1 === "") {
+        estadoFinal = "incompleto";
+        novedadFinal = "FALTA FIN COMIDA";
     } 
-    // 2. Protocolo estricto de descansos para turnos estándar (> 6 horas)
-    else if (horasFisicas >= 6) { 
-        if (!hr_ent_desc1 || hr_ent_desc1 === "") {
+    // Mantenemos la exigencia condicional SOLO para el SEGUNDO descanso (turnos de > 10.5h)
+    else if (horasFisicas >= 10.5) {
+        if (!hr_ent_desc2 || hr_ent_desc2 === "") {
             estadoFinal = "incompleto";
-            novedadFinal = "FALTA INICIO COMIDA";
-        } else if (!hr_sal_desc1 || hr_sal_desc1 === "") {
+            novedadFinal = "FALTA IN. DESCANSO 2";
+        } else if (!hr_sal_desc2 || hr_sal_desc2 === "") {
             estadoFinal = "incompleto";
-            novedadFinal = "FALTA FIN COMIDA";
-        } 
-        // 3. Protocolo estricto para turnos largos (> 10.5 horas) que exigen un segundo descanso
-        else if (horasFisicas >= 10.5) {
-            if (!hr_ent_desc2 || hr_ent_desc2 === "") {
-                estadoFinal = "incompleto";
-                novedadFinal = "FALTA INICIO DES. 2";
-            } else if (!hr_sal_desc2 || hr_sal_desc2 === "") {
-                estadoFinal = "incompleto";
-                novedadFinal = "FALTA FIN DES. 2";
-            }
+            novedadFinal = "FALTA FIN DESCANSO 2";
         }
     }
 

@@ -460,10 +460,10 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   let finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : noct;
   let finalExtDiu = overrides[`${prefix}_ext_diu`] !== undefined ? Number(overrides[`${prefix}_ext_diu`]) : extDiu;
 
-  // CORTACIRCUITOS (KILL SWITCH) PARA DÍAS INCOMPLETOS
-  const diaIncompleto = diaIncompletoFlag;
+  // CORTACIRCUITOS (KILL SWITCH) PARA CÁLCULOS MATEMÁTICOS
+  const faltaTurnoOficial = !hrEntPago || hrEntPago === "-" || !hrSalPago || hrSalPago === "-";
   
-  if (diaIncompleto) {
+  if (faltaTurnoOficial) {
       finalDiurnas = 0;
       finalNocturnas = 0;
       fesDiu = 0;
@@ -476,11 +476,8 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
       llegadaTardeMin = 0;
   }
 
-  const finalEstado = diaIncompleto ? day.estado : "normal";
-
   return {
     ...day,
-    estado: finalEstado,
     hr_ent_desc1: hrEntDesc1,
     hr_sal_desc1: hrSalDesc1,
     total_desc1: desc1,
