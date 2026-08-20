@@ -422,13 +422,28 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   
   const inicioDia = "04:50";
   const finDia = "17:49";
-  const baseHoras = 44 / 6; // 7.333333
+  
+  const horasTurnoOficial = getTimeDifference(baseHrEnt, baseHrSal);
+  const horasNetasLaboradas = hrPag;
+
+  let horasOrdinarias = 0;
+  let horasExtrasTotal = 0;
+
+  // La base pagada nunca puede superar lo que exigía el turno
+  if (horasNetasLaboradas <= horasTurnoOficial) {
+      horasOrdinarias = horasNetasLaboradas;
+      horasExtrasTotal = 0; // Cero negativo, cero extras
+  } else {
+      // Si trabajó más que su turno, la base se topa al turno y el resto es extra
+      horasOrdinarias = horasTurnoOficial;
+      horasExtrasTotal = horasNetasLaboradas - horasTurnoOficial;
+  }
   
   // Cálculo Nocturnas (P):
-  let noct = (hrEntPago > finDia) ? baseHoras : 0;
+  let noct = (hrEntPago > finDia) ? horasOrdinarias : 0;
   
   // Cálculo Diurnas (O):
-  let diurn = (hrEntPago >= inicioDia && hrEntPago <= finDia) ? (baseHoras - noct) : 0;
+  let diurn = (hrEntPago >= inicioDia && hrEntPago <= finDia) ? (horasOrdinarias - noct) : 0;
   
   // Manuals overriding or defaults to 0
   let fesDiu = overrides[`${prefix}_fes_diu`] !== undefined ? Number(overrides[`${prefix}_fes_diu`]) : Number(day.fes_diu || 0);
@@ -452,8 +467,8 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   }
 
   // Col S: Ext. Diu = N3 - O3 - P3 - Q3 - R3 - T3 - U3 - V3
-  const extDiuCalc = hrPag - diurn - noct - fesDiu - fesNoc - extNoc - extFesDiu - extFesNoc;
-  const extDiu = extDiuCalc;
+  const extDiuCalc = horasExtrasTotal - fesDiu - fesNoc - extNoc - extFesDiu - extFesNoc;
+  const extDiu = extDiuCalc < 0 ? 0 : extDiuCalc;
 
   // Let overrides take precedence on final values if the user edited them manually
   let finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : diurn;
