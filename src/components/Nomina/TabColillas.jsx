@@ -9,9 +9,18 @@ export default function TabColillas({
   endDate
 }) {
   const [selectedWorkerName, setSelectedWorkerName] = useState("");
-  const [detallePeriodo, setDetallePeriodo] = useState("NÓMINA 2026-06-07 / 2026-06-21");
+  const [periodoForzado, setPeriodoForzado] = useState("");
 
-  // Ensure default selection when data changes
+  const obtenerPeriodoAutomatico = (fecha) => {
+      if (!fecha) return "Periodo no definido";
+      const dia = new Date(fecha).getDate();
+      if (dia <= 15) {
+          return "Nómina del 01 al 15";
+      }
+      return "Nómina del 16 al 30";
+  };
+
+  const textoPeriodo = periodoForzado || obtenerPeriodoAutomatico(startDate);
   useEffect(() => {
     if (nominaRows.length > 0 && !nominaRows.find(r => r.nombre === selectedWorkerName)) {
       setSelectedWorkerName(nominaRows[0].nombre);
@@ -78,12 +87,18 @@ export default function TabColillas({
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex flex-col justify-center">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Detalle del Periodo:</span>
-            <input 
-              type="text"
-              value={detallePeriodo}
-              onChange={(e) => setDetallePeriodo(e.target.value)}
-              className="bg-slate-50 border border-slate-200 text-xs font-black text-slate-800 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 outline-none w-56 uppercase"
-            />
+            <div className="flex items-center gap-2">
+                <span className="text-sm font-bold bg-slate-100 px-3 py-2 rounded-lg text-slate-800">{textoPeriodo}</span>
+                <select 
+                    className="bg-slate-50 border border-slate-200 text-xs font-black text-slate-800 rounded-xl px-2 py-2.5 focus:ring-2 focus:ring-emerald-500 outline-none uppercase cursor-pointer"
+                    value={periodoForzado}
+                    onChange={(e) => setPeriodoForzado(e.target.value)}
+                >
+                    <option value="">(Automático)</option>
+                    <option value="Nómina del 01 al 15">Forzar: 01 al 15</option>
+                    <option value="Nómina del 16 al 30">Forzar: 16 al 30</option>
+                </select>
+            </div>
           </div>
           <div className="flex flex-col justify-center">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Seleccionar Operario:</span>
@@ -115,7 +130,7 @@ export default function TabColillas({
         <div className="w-full mx-auto bg-white p-0 md:p-6 print:p-0">
           <ColillaImprimible 
              empleado={selectedWorkerData} 
-             periodo={detallePeriodo} 
+             periodo={textoPeriodo} 
           />
         </div>
       )}

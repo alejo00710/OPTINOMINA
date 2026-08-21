@@ -274,7 +274,8 @@ export default function TabLiquidacion({
   };
 
   const isAnomalo = day.estado === 'incompleto';
-  const defaultStatus = isAnomalo ? 'Novedad' : 'Normal';
+  let defaultStatus = isAnomalo ? 'Novedad' : 'Normal';
+  if (day.estado === 'DESCANSO') defaultStatus = 'Descanso';
   let statusVal = overrides[`${prefix}_novedad_status`] || defaultStatus;
   
   // Legacy mapping

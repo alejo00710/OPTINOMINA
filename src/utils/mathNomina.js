@@ -200,6 +200,9 @@ export const getOfficialShiftTime = (timeStr, type, turnoProgramadoDelDia = null
 };
 
 export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
+    if (String(dbShiftText).toUpperCase().includes('DESCANSO')) {
+        return { officialIn: null, officialOut: null, isRestDay: true, lateMinutes: 0 };
+    }
     // 1. Escudo de Día Vacío o Incompleto (Evita horas fantasma y adivinanza de turnos)
     const isEmptyPunchIn = !realPunchIn || realPunchIn === '--:--' || realPunchIn === 'null' || String(realPunchIn).trim() === '' || realPunchIn === '-';
     const isEmptyPunchOut = !realPunchOut || realPunchOut === '--:--' || realPunchOut === 'null' || String(realPunchOut).trim() === '' || realPunchOut === '-';
@@ -424,19 +427,28 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   const finDia = "17:49";
   
   const horasTurnoOficial = getTimeDifference(baseHrEnt, baseHrSal);
-  const horasNetasLaboradas = hrPag;
 
   let horasOrdinarias = 0;
   let horasExtrasTotal = 0;
 
-  // La base pagada nunca puede superar lo que exigía el turno
-  if (horasNetasLaboradas <= horasTurnoOficial) {
-      horasOrdinarias = horasNetasLaboradas;
-      horasExtrasTotal = 0; // Cero negativo, cero extras
+  if (smartShift.isRestDay) {
+      horasOrdinarias = 0.0;
+      horasExtrasTotal = 0.0;
+      day.estado = "DESCANSO";
+      day.novedad = "";
   } else {
-      // Si trabajó más que su turno, la base se topa al turno y el resto es extra
-      horasOrdinarias = horasTurnoOficial;
-      horasExtrasTotal = horasNetasLaboradas - horasTurnoOficial;
+      if (horasBrutas > horasTurnoOficial) {
+          // Las extras son sagradas: lo físico que supere al turno oficial
+          horasExtrasTotal = horasBrutas - horasTurnoOficial;
+          // El descuento de comida castiga solo la base ordinaria
+          horasOrdinarias = horasTurnoOficial - des; 
+      } else {
+          horasExtrasTotal = 0;
+          horasOrdinarias = horasBrutas - des;
+      }
+      
+      // Seguro contra negativos por salidas muy tempranas
+      if (horasOrdinarias < 0) horasOrdinarias = 0;
   }
   
   // Cálculo Nocturnas (P):
@@ -489,6 +501,14 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
       extFesNoc = 0;
       llegadaTarde = 0;
       llegadaTardeMin = 0;
+  }
+
+  // Novedad por Salida Temprana
+  if (horasBrutas > 0 && horasBrutas < (horasTurnoOficial - 0.25)) {
+      if (day.estado === "normal") {
+          day.estado = "incompleto";
+          day.novedad = "SALIDA ANTICIPADA / TIEMPO INCOMPLETO";
+      }
   }
 
   return {
