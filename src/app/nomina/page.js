@@ -46,6 +46,7 @@ export default function NominaPage() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isDbLoading, setIsDbLoading] = useState(true);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [deudaAnteriorModal, setDeudaAnteriorModal] = useState(0);
   const [detailsWorkerName, setDetailsWorkerName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterPosition, setFilterPosition] = useState("all");
@@ -119,6 +120,33 @@ export default function NominaPage() {
     setIsClient(true);
     setDataLoaded(true);
   }, []);
+
+  useEffect(() => {
+    async function fetchDeudaModal() {
+      if (!isDetailsModalOpen || !detailsWorkerName) {
+        setDeudaAnteriorModal(0);
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from('historial_nominas')
+          .select('payload_json')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        if (error) return;
+        if (data?.payload_json?.nomina_calculada) {
+            const pastWorker = data.payload_json.nomina_calculada.find(w => w.nombre === detailsWorkerName);
+            if (pastWorker && pastWorker.horas_pendientes !== undefined && Number(pastWorker.horas_pendientes) < 0) {
+                setDeudaAnteriorModal(Number(pastWorker.horas_pendientes));
+            } else {
+                setDeudaAnteriorModal(0);
+            }
+        }
+      } catch (err) {}
+    }
+    fetchDeudaModal();
+  }, [isDetailsModalOpen, detailsWorkerName]);
 
   const handleSaveDraft = () => {
     localStorage.setItem('optinomina_draft', JSON.stringify({ attendanceLogs, overrides }));
@@ -1271,6 +1299,12 @@ const handleSaveToCloud = async () => {
       {/* Cuerpo Scrollable con Grid de 40 columnas */}
       <div className="flex-1 overflow-y-auto p-6 sm:p-8 custom-scrollbar bg-slate-50/50">
         
+        {deudaAnteriorModal < 0 && (
+          <div className="bg-rose-100 text-rose-800 p-3 rounded-xl mb-6 font-bold border border-rose-300 flex items-center gap-2 shadow-sm">
+             <span className="text-xl">⚠️</span> ATENCIÓN: Este trabajador arrastra {Math.abs(deudaAnteriorModal)}h pendientes de la quincena pasada.
+          </div>
+        )}
+        
         {/* SECCIÓN INDICADORES DE TIEMPO */}
         {(() => {
              const workerData = filteredPayrollData.find(d => d.masterRow.nombre === detailsWorkerName) || filteredPayrollData[0];
@@ -1325,17 +1359,54 @@ const handleSaveToCloud = async () => {
                'total_deducciones', 'total_pagar', 'neto_pagar', 'verificacion'
              ];
 
+             // COMPENSACIÓN CRUZADA:
+             const cKeyExtDiu = `${workerData.masterRow.cedula}_extras_diurnas`;
+             const cKeyExtNoc = `${workerData.masterRow.cedula}_extras_nocturnas`;
+             
+             let extraDiurnaOriginal = Number(overrides[cKeyExtDiu] !== undefined ? overrides[cKeyExtDiu] : (workerData['extras_diurnas'] || 0));
+             let extraNocturnaOriginal = Number(overrides[cKeyExtNoc] !== undefined ? overrides[cKeyExtNoc] : (workerData['extras_nocturnas'] || 0));
+             
+             let finalExtraDiurna = extraDiurnaOriginal;
+             let finalExtraNocturna = extraNocturnaOriginal;
+             let requiresWarning = false;
+
+             if (extraDiurnaOriginal < 0 && extraNocturnaOriginal > 0) {
+                 const balance = extraDiurnaOriginal + extraNocturnaOriginal;
+                 
+                 if (balance > 0) {
+                     finalExtraNocturna = parseFloat(balance.toFixed(2));
+                     finalExtraDiurna = 0;
+                 } else {
+                     finalExtraNocturna = 0;
+                     finalExtraDiurna = 0;
+                     requiresWarning = true; // Activa la alerta visual
+                 }
+             }
+
              return PLANILLA_COLUMNS.map(col => {
                 const cKey = `${workerData.masterRow.cedula}_${col.key}`;
                 let val = overrides[cKey] !== undefined ? overrides[cKey] : (workerData[col.key] !== undefined ? workerData[col.key] : "");
+                
+                if (col.key === 'extras_diurnas') val = finalExtraDiurna;
+                if (col.key === 'extras_nocturnas') val = finalExtraNocturna;
+
                 if (col.isCurrency && val !== "") val = Math.round(Number(val));
                 
                 const isLiquidacion = camposLiquidacion.includes(col.key);
                 const isFormulated = camposFormulados.includes(col.key);
                 const hasBadge = isLiquidacion || isFormulated;
+                
+                const isWarningField = requiresWarning && (col.key === 'extras_diurnas' || col.key === 'extras_nocturnas');
+                const cellWarningClass = isWarningField ? "text-red-600 font-bold bg-red-50 !text-red-600 rounded" : "";
+                const containerWarningClass = isWarningField ? "border-red-300 bg-red-50/20" : "";
 
                 return (
-                  <div key={col.key} className="relative bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
+                  <div key={col.key} className={`relative bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group ${containerWarningClass}`}>
+                     {isWarningField && (
+                        <div className="absolute top-2 left-2 text-[10px] text-red-600 flex items-center gap-1 mb-1 font-bold">
+                          <span>⚠️ Alerta</span>
+                        </div>
+                     )}
                      {isLiquidacion && (
                        <div className="absolute top-2 right-2 text-[10px] text-amber-600 flex items-center gap-1 mb-1 justify-end font-semibold" title="Viene de Liquidación">
                          <span>⏱️ Liquidación</span>
@@ -1347,7 +1418,7 @@ const handleSaveToCloud = async () => {
                           <button onClick={() => handleOpenFormulaEditor(col.key)} className="hover:text-indigo-700 transition-colors p-1 rounded hover:bg-indigo-50" title="Editar Fórmula">⚙️</button>
                         </div>
                      )}
-                     <span className={`text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-emerald-600 transition-colors ${hasBadge ? 'pr-24' : ''}`} title={col.label}>
+                     <span className={`text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-emerald-600 transition-colors ${hasBadge ? 'pr-24' : ''} ${isWarningField ? 'text-red-500' : ''}`} title={col.label}>
                        {col.label}
                      </span>
                      <EditableCell
@@ -1357,6 +1428,7 @@ const handleSaveToCloud = async () => {
                         isCalculated={col.isCalculated}
                         isCurrency={col.isCurrency}
                         isDecimal={col.isDecimal}
+                        extraClasses={cellWarningClass}
                      />
                   </div>
                 )

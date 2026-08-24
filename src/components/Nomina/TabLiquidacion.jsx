@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '@/utils/supabase';
 import { Info, Printer } from 'lucide-react';
 import { isFestivoColombia } from '@/utils/festivosColombia';
 
@@ -112,6 +113,52 @@ export default function TabLiquidacion({
   setSelectedWorkerName,
   nominaRows
 }) {
+  const [deudaAnterior, setDeudaAnterior] = useState(0);
+
+  useEffect(() => {
+    async function fetchDeudaAnterior() {
+      if (!selectedWorkerData?.cedula) {
+        setDeudaAnterior(0);
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from('historial_nominas')
+          .select('payload_json')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        
+        if (error) {
+            if (error.code !== 'PGRST116') console.error("Error fetching past nomina:", error);
+            return;
+        }
+
+        if (data && data.payload_json && data.payload_json.nomina_calculada) {
+            const pastWorker = data.payload_json.nomina_calculada.find(w => String(w.cedula) === String(selectedWorkerData.cedula));
+            if (pastWorker && pastWorker.horas_pendientes !== undefined) {
+                if (Number(pastWorker.horas_pendientes) < 0) {
+                    setDeudaAnterior(Number(pastWorker.horas_pendientes));
+                    // Auto-fill logic (if empty in overrides)
+                    if (overrides[`${selectedWorkerData.cedula}_horas_que_debe`] === undefined && (selectedWorkerData.horas_debe === undefined || selectedWorkerData.horas_debe === 0)) {
+                        handleCellEdit(`${selectedWorkerData.cedula}_horas_que_debe`, Math.abs(Number(pastWorker.horas_pendientes)));
+                    }
+                } else {
+                    setDeudaAnterior(0);
+                }
+            } else {
+                setDeudaAnterior(0);
+            }
+        } else {
+            setDeudaAnterior(0);
+        }
+      } catch (err) {
+        console.error("Error in fetchDeudaAnterior:", err);
+      }
+    }
+    fetchDeudaAnterior();
+  }, [selectedWorkerData?.cedula]);
+
   if (!selectedWorkerData) {
     const getTotal = (field) => {
     if (!selectedWorkerData || !selectedWorkerData.workerDays) return "0.0";
@@ -469,7 +516,14 @@ export default function TabLiquidacion({
                          return (
                             <>
                                <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">26. Horas que debe</span>
+                                  <div className="flex flex-col">
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">26. Horas que debe</span>
+                                    {deudaAnterior < 0 && (
+                                        <span className="text-rose-400 text-[9px] mt-1 font-bold bg-rose-900/30 px-2 py-0.5 rounded border border-rose-800/50 w-fit">
+                                            ⚠️ Arrastra {Math.abs(deudaAnterior)}h pendientes
+                                        </span>
+                                    )}
+                                  </div>
                                   <div className="w-24">
                                      <input
                                         type="number" step="0.1"

@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function ColillaImprimible({ empleado, periodo }) {
+export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
   if (!empleado) return null;
 
   const safeNumber = (val) => isNaN(Number(val)) ? 0 : Number(val);
@@ -85,8 +85,11 @@ export default function ColillaImprimible({ empleado, periodo }) {
         </div>
 
         {/* 3. DETALLE Y SALARIO */}
-        <div className="flex justify-between px-1 mb-1 border-b-2 border-[#1f2937] pb-1 uppercase">
-          <div className="font-bold text-[10px]">DETALLE: {periodo}</div>
+        <div className="flex justify-between items-end px-1 mb-1 border-b-2 border-[#1f2937] pb-1 uppercase">
+          <div className="flex flex-col">
+            <span className="font-bold text-[11px] mb-0.5">DETALLE: {periodo}</span>
+            <span className="text-[9px] text-gray-600 font-bold">Fecha de corte: {fechaCorte}</span>
+          </div>
           <div className="font-bold text-[10px]">SALARIO BÁSICO: {formatCurrency(safeNumber(empleado.salario || empleado.salario_base))}</div>
         </div>
 

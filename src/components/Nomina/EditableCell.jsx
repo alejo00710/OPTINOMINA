@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { fmtCOP, parseLocalNumber } from "@/utils/mathNomina";
 
-export default function EditableCell({ value, onChange, isOverridden, isCalculated = false, isCurrency = false, isDecimal = false }) {
+export default function EditableCell({ value, onChange, isOverridden, isCalculated = false, isCurrency = false, isDecimal = false, extraClasses = "" }) {
   const [isEditing, setIsEditing] = useState(false);
   const [localVal, setLocalVal] = useState(value);
 
@@ -46,7 +46,7 @@ export default function EditableCell({ value, onChange, isOverridden, isCalculat
           className="w-full bg-transparent border-none p-0 m-0 text-sm font-semibold text-slate-900 focus:ring-0 outline-none text-right"
         />
       ) : (
-        <div className={`w-full text-right text-sm font-medium ${isOverridden ? 'text-amber-900' : 'text-slate-700'}`}>
+        <div className={`w-full text-right text-sm font-medium ${isOverridden ? 'text-amber-900' : 'text-slate-700'} ${extraClasses}`}>
           {displayValue}
         </div>
       )}
