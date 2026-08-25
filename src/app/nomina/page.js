@@ -353,16 +353,22 @@ export default function NominaPage() {
          return String(dbDate).includes(targetMonday);
        });
        
-       const idUsar = emp.consecutivo || emp.id_biometrico || emp.biometric_id || emp.cedula;
-       const cleanStr = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-       const targetKey = cleanStr(`${idUsar}_${diaSemanaMayuscula}`);
+       const idParaBuscar = emp.biometric_id || emp.id_biometrico || emp.cedula;
+       const key = `${idParaBuscar}_${diaSemanaMayuscula}`;
        let shiftEncontrado = null;
 
        if (matchedWeek && matchedWeek.datos_json) {
-           for (const [k, v] of Object.entries(matchedWeek.datos_json)) {
-               if (cleanStr(k) === targetKey) {
-                   shiftEncontrado = v;
-                   break;
+           shiftEncontrado = matchedWeek.datos_json[key] || null;
+           
+           // Fallback with clean string if direct access fails (just in case)
+           if (!shiftEncontrado) {
+               const cleanStr = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+               const targetKeyClean = cleanStr(key);
+               for (const [k, v] of Object.entries(matchedWeek.datos_json)) {
+                   if (cleanStr(k) === targetKeyClean) {
+                       shiftEncontrado = v;
+                       break;
+                   }
                }
            }
        }
