@@ -408,9 +408,13 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
       horasBrutas = getTimeDifference(day.hr_ent, day.hr_sal);
   }
 
-  let des = 0.5; // Por defecto para turnos de 8 horas o menos
-  if (horasBrutas > 8.5) {
-      des = 1.0;
+  let des = 0;
+  if (hrLab > 0) {
+      if (hrLab > 8.0) {
+          des = 1.0;
+      } else {
+          des = 0.5;
+      }
   }
 
   const isValidPunch = (t) => t && String(t).trim() !== "" && String(t).trim() !== "-";
@@ -423,69 +427,73 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   // Col N: Hr. Pag = L3 - M3
   const hrPag = hrLab > 0 ? hrLab - des : 0;
   
-  const inicioDia = "04:50";
-  const finDia = "17:49";
-  
-  const horasTurnoOficial = getTimeDifference(baseHrEnt, baseHrSal);
+  const MAX_ORDINARY = 7.0;
 
-  let horasOrdinarias = 0;
-  let horasExtrasTotal = 0;
+  let diurn = 0;
+  let noct = 0;
+  let extDiu = 0;
+  let extNoc = 0;
 
   if (smartShift.isRestDay) {
-      horasOrdinarias = 0.0;
-      horasExtrasTotal = 0.0;
       day.estado = "DESCANSO";
       day.novedad = "";
-  } else {
-      if (horasBrutas > horasTurnoOficial) {
-          // Las extras son sagradas: lo físico que supere al turno oficial
-          horasExtrasTotal = horasBrutas - horasTurnoOficial;
-          // El descuento de comida castiga solo la base ordinaria
-          horasOrdinarias = horasTurnoOficial - des; 
-      } else {
-          horasExtrasTotal = 0;
-          horasOrdinarias = horasBrutas - des;
+  } else if (hrPag > 0 && hrEntPago && hrSalPago && hrEntPago !== "-" && hrSalPago !== "-") {
+      let start = timeStrToDecimal(hrEntPago);
+      let end = timeStrToDecimal(hrSalPago);
+      if (end <= start && (end > 0 || start > 0)) end += 24;
+      
+      let rawDiu = 0;
+      let rawNoc = 0;
+      
+      // Diurnal: 06:00 to 19:00
+      const diuRanges = [{ s: 6, e: 19 }, { s: 30, e: 43 }];
+      for (let i = 0; i < diuRanges.length; i++) {
+          let s = Math.max(start, diuRanges[i].s);
+          let e = Math.min(end, diuRanges[i].e);
+          if (s < e) rawDiu += (e - s);
       }
       
-      // Seguro contra negativos por salidas muy tempranas
-      if (horasOrdinarias < 0) horasOrdinarias = 0;
+      rawNoc = (end - start) - rawDiu;
+      
+      let netDiu = rawDiu;
+      let netNoc = rawNoc;
+      
+      if (rawDiu >= rawNoc) {
+          netDiu = Math.max(0, rawDiu - des);
+          let remainder = des - (rawDiu - netDiu);
+          netNoc = Math.max(0, rawNoc - remainder);
+      } else {
+          netNoc = Math.max(0, rawNoc - des);
+          let remainder = des - (rawNoc - netNoc);
+          netDiu = Math.max(0, rawDiu - remainder);
+      }
+      
+      // Prioridad a las nocturnas para la base ordinaria
+      noct = Math.min(netNoc, MAX_ORDINARY);
+      let remainingOrd = Math.max(0, MAX_ORDINARY - noct);
+      diurn = Math.min(netDiu, remainingOrd);
+      
+      extNoc = Math.max(0, netNoc - noct);
+      extDiu = Math.max(0, netDiu - diurn);
   }
-  
-  // Cálculo Nocturnas (P):
-  let noct = (hrEntPago > finDia) ? horasOrdinarias : 0;
-  
-  // Cálculo Diurnas (O):
-  let diurn = (hrEntPago >= inicioDia && hrEntPago <= finDia) ? (horasOrdinarias - noct) : 0;
   
   // Manuals overriding or defaults to 0
   let fesDiu = overrides[`${prefix}_fes_diu`] !== undefined ? Number(overrides[`${prefix}_fes_diu`]) : Number(day.fes_diu || 0);
   let fesNoc = overrides[`${prefix}_fes_noc`] !== undefined ? Number(overrides[`${prefix}_fes_noc`]) : Number(day.fes_noc || 0);
-  let extNoc = overrides[`${prefix}_ext_noc`] !== undefined ? Number(overrides[`${prefix}_ext_noc`]) : Number(day.ext_noc || 0);
   let extFesDiu = overrides[`${prefix}_ext_fes_diu`] !== undefined ? Number(overrides[`${prefix}_ext_fes_diu`]) : Number(day.ext_fes_diu || 0);
   let extFesNoc = overrides[`${prefix}_ext_fes_noc`] !== undefined ? Number(overrides[`${prefix}_ext_fes_noc`]) : Number(day.ext_fes_noc || 0);
+  
+  // Apply overrides for computed fields
+  let finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : diurn;
+  let finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : noct;
+  let finalExtDiu = overrides[`${prefix}_ext_diu`] !== undefined ? Number(overrides[`${prefix}_ext_diu`]) : extDiu;
+  extNoc = overrides[`${prefix}_ext_noc`] !== undefined ? Number(overrides[`${prefix}_ext_noc`]) : extNoc;
   
   const calcLlegadaTardeMin = smartShift.lateMinutes || 0;
   const calcLlegadaTarde = calcLlegadaTardeMin > 0 ? 1 : 0;
   
   let llegadaTarde = overrides[`${prefix}_llegada_tarde`] !== undefined ? Number(overrides[`${prefix}_llegada_tarde`]) : calcLlegadaTarde;
   let llegadaTardeMin = overrides[`${prefix}_llegada_tarde_min`] !== undefined ? Number(overrides[`${prefix}_llegada_tarde_min`]) : calcLlegadaTardeMin;
-  
-  // REGLAS ESPECÍFICAS OBLIGATORIAS ANTES DE BALANCE (OVERRIDES CONDICIONALES)
-  if (hrSalPago === "22:00") {
-      noct = 3.0;
-  }
-  if (hrEntPago === "18:00" && hrSalPago === "06:00") {
-      extNoc = 3.0;
-  }
-
-  // Col S: Ext. Diu = N3 - O3 - P3 - Q3 - R3 - T3 - U3 - V3
-  const extDiuCalc = horasExtrasTotal - fesDiu - fesNoc - extNoc - extFesDiu - extFesNoc;
-  const extDiu = extDiuCalc < 0 ? 0 : extDiuCalc;
-
-  // Let overrides take precedence on final values if the user edited them manually
-  let finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : diurn;
-  let finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : noct;
-  let finalExtDiu = overrides[`${prefix}_ext_diu`] !== undefined ? Number(overrides[`${prefix}_ext_diu`]) : extDiu;
 
   // CORTACIRCUITOS (KILL SWITCH) PARA CÁLCULOS MATEMÁTICOS
   const faltaTurnoOficial = !hrEntPago || hrEntPago === "-" || !hrSalPago || hrSalPago === "-";
@@ -504,6 +512,7 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   }
 
   // Novedad por Salida Temprana
+  const horasTurnoOficial = getTimeDifference(baseHrEnt, baseHrSal);
   if (horasBrutas > 0 && horasBrutas < (horasTurnoOficial - 0.25)) {
       if (day.estado === "normal") {
           day.estado = "incompleto";
