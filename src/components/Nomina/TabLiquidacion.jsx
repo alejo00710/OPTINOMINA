@@ -324,6 +324,9 @@ export default function TabLiquidacion({
   let defaultStatus = isAnomalo ? 'Novedad' : 'Normal';
   if (day.estado === 'DESCANSO') defaultStatus = 'Descanso';
   let statusVal = overrides[`${prefix}_novedad_status`] || defaultStatus;
+  if (day.estado === 'DESCANSO') {
+      statusVal = 'Descanso'; // Forzar estado indiscutible
+  }
   
   // Legacy mapping
   if (statusVal === 'NORMAL') statusVal = 'Normal';
@@ -332,6 +335,9 @@ export default function TabLiquidacion({
   if (statusVal === 'NO MARCÓ RELOJ') statusVal = 'No marcacion';
   if (statusVal === 'CALAMIDAD') statusVal = 'Calamidad';
   if (statusVal === 'DESCANSO') statusVal = 'Descanso';
+
+  const entValue = overrides[`${prefix}_hr_ent`] !== undefined ? overrides[`${prefix}_hr_ent`] : (day.hr_ent || "");
+  const salValue = overrides[`${prefix}_hr_sal`] !== undefined ? overrides[`${prefix}_hr_sal`] : (day.hr_sal || "");
 
   return (
                             <tr key={displayDate} className={`${getRowColor(statusVal)} ${isDiaDescanso ? 'bg-red-50/60 border-l-4 border-red-300' : ''}`}>
@@ -348,11 +354,27 @@ export default function TabLiquidacion({
                                      ))}
                                   </select>
                                </td>
-                               <td className="px-1 py-1">
-                                  <input type="time" value={overrides[`${prefix}_hr_ent`] !== undefined ? overrides[`${prefix}_hr_ent`] : (day.hr_ent || "")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent`, e.target.value)} className="w-full bg-transparent text-center font-mono outline-none focus:ring-1 focus:bg-slate-50 rounded text-blue-600" />
+                               <td className="px-1 py-1 relative group">
+                                  {!entValue || entValue === '--:--' || entValue === '-' ? (
+                                      <div className="absolute inset-0 flex items-center justify-center cursor-pointer text-slate-300 font-mono text-xs hover:text-emerald-500 hover:bg-emerald-50 rounded transition-all"
+                                           onClick={() => handleCellEdit(`${prefix}_hr_ent`, day.hr_ent_pago || "06:00")}
+                                           title="Clic para autocompletar turno oficial"
+                                      >
+                                          {day.hr_ent_pago || "06:00"} <span className="ml-1 opacity-0 group-hover:opacity-100">✨</span>
+                                      </div>
+                                  ) : null}
+                                  <input type="time" value={entValue === '-' ? '' : entValue} onChange={(e) => handleCellEdit(`${prefix}_hr_ent`, e.target.value)} className={`relative w-full bg-transparent text-center font-mono outline-none focus:ring-1 focus:bg-slate-50 rounded text-blue-600 ${(!entValue || entValue === '--:--' || entValue === '-') ? 'opacity-0 focus:opacity-100 hover:opacity-100 z-10' : 'z-10'}`} />
                                </td>
-                               <td className="px-1 py-1">
-                                  <input type="time" value={overrides[`${prefix}_hr_sal`] !== undefined ? overrides[`${prefix}_hr_sal`] : (day.hr_sal || "")} onChange={(e) => handleCellEdit(`${prefix}_hr_sal`, e.target.value)} className="w-full bg-transparent text-center font-mono outline-none focus:ring-1 focus:bg-slate-50 rounded text-blue-600" />
+                               <td className="px-1 py-1 relative group">
+                                  {!salValue || salValue === '--:--' || salValue === '-' ? (
+                                      <div className="absolute inset-0 flex items-center justify-center cursor-pointer text-slate-300 font-mono text-xs hover:text-emerald-500 hover:bg-emerald-50 rounded transition-all"
+                                           onClick={() => handleCellEdit(`${prefix}_hr_sal`, day.hr_sal_pago || "14:00")}
+                                           title="Clic para autocompletar turno oficial"
+                                      >
+                                          {day.hr_sal_pago || "14:00"} <span className="ml-1 opacity-0 group-hover:opacity-100">✨</span>
+                                      </div>
+                                  ) : null}
+                                  <input type="time" value={salValue === '-' ? '' : salValue} onChange={(e) => handleCellEdit(`${prefix}_hr_sal`, e.target.value)} className={`relative w-full bg-transparent text-center font-mono outline-none focus:ring-1 focus:bg-slate-50 rounded text-blue-600 ${(!salValue || salValue === '--:--' || salValue === '-') ? 'opacity-0 focus:opacity-100 hover:opacity-100 z-10' : 'z-10'}`} />
                                </td>
                                <td className="px-1 py-1">
                                   <input type="text" value={overrides[`${prefix}_hr_ent_desc1`] !== undefined ? overrides[`${prefix}_hr_ent_desc1`] : (day.hr_ent_desc1 || "-")} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_desc1`, e.target.value)} className="w-10 bg-white border border-slate-200 text-center font-mono rounded focus:ring-1 outline-none" />
