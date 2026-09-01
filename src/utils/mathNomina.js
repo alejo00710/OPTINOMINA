@@ -203,16 +203,8 @@ export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
     if (String(dbShiftText).toUpperCase().includes('DESCANSO')) {
         return { officialIn: null, officialOut: null, isRestDay: true, lateMinutes: 0 };
     }
-    // 1. Escudo de Día Vacío o Incompleto (Evita horas fantasma y adivinanza de turnos)
     const isEmptyPunchIn = !realPunchIn || realPunchIn === '--:--' || realPunchIn === 'null' || String(realPunchIn).trim() === '' || realPunchIn === '-';
     const isEmptyPunchOut = !realPunchOut || realPunchOut === '--:--' || realPunchOut === 'null' || String(realPunchOut).trim() === '' || realPunchOut === '-';
-    
-    if (isEmptyPunchIn || isEmptyPunchOut) {
-        return { officialIn: "-", officialOut: "-", lateMinutes: 0 };
-    }
-
-    const [realHH, realMM] = String(realPunchIn).split(':').map(Number);
-    const realTotalMins = (realHH * 60) + realMM;
 
     let baseInHH = 6, baseInMM = 0, baseOutHH = 14, baseOutMM = 0;
     let usedDB = false;
@@ -239,6 +231,21 @@ export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
             usedDB = true;
         }
     }
+
+    // 2.5 Cortocircuito si faltan marcas físicas (retorna el oficial puro extraído)
+    if (isEmptyPunchIn || isEmptyPunchOut) {
+        if (!usedDB) return { officialIn: "-", officialOut: "-", lateMinutes: 0 };
+        const pad = (n) => String(n).padStart(2, '0');
+        return { 
+            officialIn: `${pad(baseInHH)}:${pad(baseInMM)}`, 
+            officialOut: `${pad(baseOutHH)}:${pad(baseOutMM)}`, 
+            lateMinutes: 0 
+        };
+    }
+
+    const [realHH, realMM] = String(realPunchIn).split(':').map(Number);
+    const realTotalMins = (realHH * 60) + realMM;
+
 
     // 3. Prioridad 2: Template Matching en Minutos (Si BD falla o está vacía)
     if (!usedDB) {
@@ -544,6 +551,8 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
     llegada_tarde: llegadaTarde,
     llegada_tarde_min: llegadaTardeMin,
     comidas_excedidas_veces: overrides[`${prefix}_comidas_excedidas_veces`] !== undefined ? Number(overrides[`${prefix}_comidas_excedidas_veces`]) : comidasExcedidasVeces,
-    comidas_excedidas_min: overrides[`${prefix}_comidas_excedidas_min`] !== undefined ? Number(overrides[`${prefix}_comidas_excedidas_min`]) : comidasExcedidasMin
+    comidas_excedidas_min: overrides[`${prefix}_comidas_excedidas_min`] !== undefined ? Number(overrides[`${prefix}_comidas_excedidas_min`]) : comidasExcedidasMin,
+    officialIn: baseHrEnt,
+    officialOut: baseHrSal
   };
 };

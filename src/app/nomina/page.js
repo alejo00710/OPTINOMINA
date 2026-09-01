@@ -148,36 +148,129 @@ export default function NominaPage() {
     fetchDeudaModal();
   }, [isDetailsModalOpen, detailsWorkerName]);
 
-  const handleSaveDraft = () => {
-    localStorage.setItem('optinomina_draft', JSON.stringify({ attendanceLogs, overrides }));
+  const handleSaveDraft = async () => {
     setIsSaving(true);
-    setTimeout(() => {
+    try {
+      const payload = {
+        id: 'quincena_activa',
+        start_date: startDate,
+        end_date: endDate,
+        attendance_logs: attendanceLogs,
+        overrides: overrides,
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('optimoldes_payroll')
+        .upsert(payload, { onConflict: 'id' });
+
+      if (error) throw error;
+      
+      setToast({ message: "Borrador guardado en la nube", type: "success" });
+      setTimeout(() => setToast(null), 3000);
+    } catch (err) {
+      console.error("Error guardando borrador:", err);
+      setToast({ message: "Error al guardar el borrador", type: "error" });
+      setTimeout(() => setToast(null), 3000);
+    } finally {
       setIsSaving(false);
-    }, 2000);
+    }
   };
 
   const handleCloseQuincena = async () => {
     setIsClosing(true);
     try {
-      const payload = {
-        identificador: 'NÓMINA GENERAL',
-        rango_quincena: `${startDate} al ${endDate}`,
-        payload_json: {
-          rango_fechas: { inicio: startDate, fin: endDate },
-          asistencias_globales: attendanceLogs,
-          modificaciones_manuales: overrides,
-          nomina_calculada: typeof filteredPayrollData !== 'undefined' ? filteredPayrollData : nominaRows
-        }
+      const nominaParaGuardar = typeof filteredPayrollData !== 'undefined' ? filteredPayrollData : nominaRows;
+
+      // Helper para limpiar strings inválidos de tipo tiempo ("-", "--:--")
+      const sanitizeTime = (val) => {
+        if (!val || typeof val !== 'string' || val.includes('-')) return null;
+        return val.trim() || null;
       };
 
-      const { error } = await supabase
-        .from('historial_nominas')
-        .insert([payload]);
+      // 1. Construir payload relacional (Totales Consolidados)
+      const totales_consolidados = nominaParaGuardar.map(emp => ({
+        empleado_cedula: emp.cedula,
+        biometric_id: emp.biometric_id || emp.id_biometrico || null,
+        dias_pagados: Number(emp.dias_pagados) || 0,
+        total_devengado: Number(emp.total_devengados) || 0,
+        total_deducido: Number(emp.total_deducciones) || 0,
+        neto_a_pagar: Number(emp.neto_pagar) || 0,
+        horas_pendientes: Number(emp.horas_pendientes) || 0,
+        
+        aux_transporte: Number(emp.transporte) || 0,
+        rodamiento: Number(emp.rodamiento) || 0,
+        recargo_nocturno: Number(emp.recargo_nocturno) || 0,
+        valor_horas_extras: (Number(emp.val_extras_diurnas) || 0) + (Number(emp.val_extras_nocturnas) || 0) + (Number(emp.val_extras_festivas) || 0),
+        incapacidad: Number(emp.incapacidad) || 0,
+        salud: Number(emp.salud) || 0,
+        pension: Number(emp.pension) || 0,
+        fondo_solidaridad: Number(emp.solidaridad) || 0,
+        poliza_bolivar: Number(emp.poliza_bolivar) || 0,
+        poliza_sura: Number(emp.poliza_sura) || 0,
+        optica: Number(emp.optica) || 0,
+        prestamo: Number(emp.prestamos) || 0,
+        libranza_comfama: Number(emp.libranza_comfama) || 0
+      }));
 
-      if (error) throw error;
+      // 2. Construir payload de Liquidación Diaria
+      const dias_detallados = [];
+      nominaParaGuardar.forEach(emp => {
+        if (emp.workerDays && Array.isArray(emp.workerDays)) {
+          emp.workerDays.forEach(day => {
+            const isDescanso = day.estado === 'DESCANSO';
+            dias_detallados.push({
+              empleado_cedula: emp.cedula,
+              biometric_id: emp.biometric_id || emp.id_biometrico || null,
+              fecha: day.dia,
+              estado_marcacion: isDescanso ? 'DESCANSO' : (day.estado || 'Normal'),
+              reloj_entrada: sanitizeTime(day.hr_ent),
+              reloj_salida: sanitizeTime(day.hr_sal),
+              horas_laboradas: Number(day.hr_lab) || 0,
+              descuento_almuerzo: Number(day.desc_lunch) || 0,
+              extras_diurnas: Number(day.ext_diu) || 0,
+              extras_nocturnas: Number(day.ext_noc) || 0,
+              
+              extras_festivas: (Number(day.ext_fes_diu) || 0) + (Number(day.ext_fes_noc) || 0),
+              ordinarias_festivas: (Number(day.fes_diu) || 0) + (Number(day.fes_noc) || 0),
+              observacion: day.observacion || day.nota || null
+            });
+          });
+        }
+      });
 
-      // Limpieza de estado local tras guardado exitoso
-      localStorage.removeItem('optinomina_draft');
+      const payload = {
+        periodo: {
+          identificador: 'NÓMINA GENERAL',
+          fecha_inicio: startDate,
+          fecha_fin: endDate
+        },
+        totales_consolidados,
+        dias_detallados
+      };
+
+      const res = await fetch('/api/cerrar-quincena', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const jsonRes = await res.json();
+      if (!res.ok) throw new Error(jsonRes.error || 'Error en el API');
+
+      // Guardar legacy backup en historial_nominas (opcional, para compatibilidad hacia atrás temporalmente)
+      // await supabase.from('historial_nominas').insert([{
+      //   identificador: 'NÓMINA GENERAL',
+      //   rango_quincena: `${startDate} al ${endDate}`,
+      //   payload_json: { rango_fechas: { inicio: startDate, fin: endDate }, asistencias_globales: attendanceLogs, modificaciones_manuales: overrides, nomina_calculada: nominaParaGuardar }
+      // }]);
+
+      // Limpieza de estado en la nube tras guardado exitoso
+      await supabase
+        .from('optimoldes_payroll')
+        .update({ attendance_logs: {}, overrides: {} })
+        .eq('id', 'quincena_activa');
+
       setOverrides({});
       setAttendanceLogs({});
 
@@ -239,25 +332,32 @@ export default function NominaPage() {
         // TAREA 3: Iniciar en blanco (solo cargar masterEmployees y estados vacíos)
         setNominaRows(masterEmployees);
 
-        const localDraft = typeof window !== 'undefined' ? localStorage.getItem('optinomina_draft') : null;
+        // Cargar borrador desde Supabase
+        const { data: cloudDraft, error: draftError } = await supabase
+          .from('optimoldes_payroll')
+          .select('*')
+          .eq('id', 'quincena_activa')
+          .single();
+
         let blockReset = false;
 
-        if (localDraft) {
+        if (cloudDraft && !draftError) {
           try {
-            const parsedDraft = JSON.parse(localDraft);
-            if (parsedDraft.attendanceLogs && Object.keys(parsedDraft.attendanceLogs).length > 0) {
-              setAttendanceLogs(parsedDraft.attendanceLogs);
-              setOverrides(parsedDraft.overrides || {});
+            if (cloudDraft.attendance_logs && Object.keys(cloudDraft.attendance_logs).length > 0) {
+              setStartDate(cloudDraft.start_date || startDate);
+              setEndDate(cloudDraft.end_date || endDate);
+              setAttendanceLogs(cloudDraft.attendance_logs);
+              setOverrides(cloudDraft.overrides || {});
               blockReset = true;
-              console.log("✅ Borrador restaurado, ignorando plantillas vacías.");
+              console.log("✅ Borrador restaurado desde la nube, ignorando plantillas vacías.");
             }
           } catch (e) {
-            console.error("Error leyendo borrador:", e);
+            console.error("Error aplicando borrador desde la nube:", e);
           }
         }
 
         if (blockReset) {
-          console.warn("Candado Activo: Se intentó limpiar la grilla, pero hay un borrador guardado. Borrado interceptado.");
+          console.warn("Candado Activo: Se restauró el borrador guardado en la nube.");
         } else {
           setAttendanceLogs({});
           setOverrides({});
