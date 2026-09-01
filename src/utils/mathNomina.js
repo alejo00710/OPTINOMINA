@@ -251,16 +251,17 @@ export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
     if (!usedDB) {
         // Catálogo Global de Turnos (Planta + Taller)
         const templates = [
-            { inHH: 6, inMM: 0, outHH: 14, outMM: 0 },
-            { inHH: 6, inMM: 0, outHH: 18, outMM: 0 },
-            { inHH: 7, inMM: 0, outHH: 17, outMM: 0 },   // TALLER 10h
-            { inHH: 7, inMM: 30, outHH: 17, outMM: 0 },  // TALLER 9.5h
-            { inHH: 7, inMM: 30, outHH: 18, outMM: 0 },  // TALLER 10.5h
-            { inHH: 10, inMM: 0, outHH: 18, outMM: 0 },
-            { inHH: 10, inMM: 0, outHH: 22, outMM: 0 },
-            { inHH: 14, inMM: 0, outHH: 22, outMM: 0 },
-            { inHH: 18, inMM: 0, outHH: 6, outMM: 0 },
-            { inHH: 22, inMM: 0, outHH: 6, outMM: 0 }
+            { inHH: 6, inMM: 0, outHH: 14, outMM: 0 },   // 06:00 a 14:00
+            { inHH: 6, inMM: 0, outHH: 18, outMM: 0 },   // 06:00 a 18:00
+            { inHH: 7, inMM: 0, outHH: 17, outMM: 0 },   // 07:00 a 17:00
+            { inHH: 7, inMM: 30, outHH: 16, outMM: 0 },  // 07:30 a 16:00 (TALLER VIERNES)
+            { inHH: 7, inMM: 30, outHH: 17, outMM: 0 },  // 07:30 a 17:00 (TALLER 9.5h)
+            { inHH: 7, inMM: 30, outHH: 18, outMM: 0 },  // 07:30 a 18:00 (TALLER 10.5h)
+            { inHH: 10, inMM: 0, outHH: 18, outMM: 0 },  // 10:00 a 18:00
+            { inHH: 10, inMM: 0, outHH: 22, outMM: 0 },  // 10:00 a 22:00
+            { inHH: 14, inMM: 0, outHH: 22, outMM: 0 },  // 14:00 a 22:00
+            { inHH: 18, inMM: 0, outHH: 6, outMM: 0 },   // 18:00 a 06:00
+            { inHH: 22, inMM: 0, outHH: 6, outMM: 0 }    // 22:00 a 06:00
         ];
 
         const [outHH, outMM] = String(realPunchOut || "00:00").split(':').map(Number);
@@ -526,6 +527,37 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
           day.novedad = "SALIDA ANTICIPADA / TIEMPO INCOMPLETO";
       }
   }
+
+// --- INICIO INTERCEPTOR DEFINITIVO ---
+// 1. Limpiar extras falsas tolerando la imprecisión de decimales (1.500001)
+if (hrLab <= 9.6) {
+    if (finalExtDiu >= 1.4 && finalExtDiu <= 1.6) finalExtDiu = 0;
+    if (extNoc >= 1.4 && extNoc <= 1.6) extNoc = 0;
+}
+if (hrLab <= 8.1) {
+    if (finalExtDiu >= 0.4 && finalExtDiu <= 0.6) finalExtDiu = 0;
+    if (extNoc >= 0.4 && extNoc <= 0.6) extNoc = 0;
+}
+
+// 2. Usar la variable correcta que inyecta Horarios Semanales
+const turnoReal = String(typeof turnoProgramadoDelDia !== 'undefined' ? turnoProgramadoDelDia : "").toLowerCase();
+
+// 3. Corregir llegada tarde del Taller
+if (turnoReal.includes("7:30") || turnoReal.includes("07:30")) {
+    if (llegadaTardeMin > 0) {
+        llegadaTardeMin = Math.max(0, llegadaTardeMin - 30);
+        llegadaTarde = llegadaTardeMin > 0 ? 1 : 0;
+    }
+}
+
+// 4. Chismoso para la consola (F12)
+console.log("Evaluando liquidación de día:", { 
+    turnoRecibido: turnoReal, 
+    horasLaboradas: hrLab, 
+    extrasDiurnasFinal: finalExtDiu, 
+    minutosTarde: llegadaTardeMin 
+});
+// --- FIN INTERCEPTOR DEFINITIVO ---
 
   return {
     ...day,

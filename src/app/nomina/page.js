@@ -494,34 +494,48 @@ export default function NominaPage() {
       // 1. Sumatorias del Biométrico (Equivalente a Fila 24 de hojas individuales)
       let sumDiurnas = 0, sumNocturnas = 0, sumFesDiu = 0, sumFesNoc = 0;
       let sumExtDiu = 0, sumExtNoc = 0, sumExtFesDiu = 0, sumExtFesNoc = 0;
+// --- INICIO CORRECCIÓN DÍAS PAGADOS ---
       let diasLaborados = 0;
+      let diasPagadosCalculados = 0;
       let sumLlegadasTarde = 0, sumLlegadasMin = 0;
       let sumComidasVeces = 0, sumComidasMin = 0;
 
       processedLogs.forEach(day => {
-        if (day.hr_lab > 0) diasLaborados++;
-        sumDiurnas += Number(day.diurnas || 0);
-        sumNocturnas += Number(day.nocturnas || 0);
-        sumFesDiu += Number(day.fes_diu || 0);
-        sumFesNoc += Number(day.fes_noc || 0);
-        sumExtDiu += Number(day.ext_diu || 0);
-        sumExtNoc += Number(day.ext_noc || 0);
-        sumExtFesDiu += Number(day.ext_fes_diu || 0);
-        sumExtFesNoc += Number(day.ext_fes_noc || 0);
-        sumLlegadasTarde += Number(day.llegada_tarde || 0);
-        sumLlegadasMin += Number(day.llegada_tarde_min || 0);
-        sumComidasVeces += Number(day.comidas_excedidas_veces || 0);
-        sumComidasMin += Number(day.comidas_excedidas_min || 0);
+          if (day.hr_lab > 0) diasLaborados++;
+          
+          // Evaluar si el día se debe pagar
+          let esDiaPagado = false;
+          if (day.hr_lab > 0) {
+              esDiaPagado = true;
+          } else {
+              // Buscar en el estado o en las observaciones si es una novedad remunerada
+              const estado = String(day.estado_marcacion || day.estado || "").toUpperCase();
+              const obs = String(day.observacion || day.novedad || "").toUpperCase();
+              const novedadesPagas = ['DESCANSO', 'INCAPACIDAD', 'VACACION', 'FESTIVO', 'LICENCIA', 'REMUNERADO'];
+              
+              if (novedadesPagas.some(n => estado.includes(n) || obs.includes(n))) {
+                  esDiaPagado = true;
+              }
+          }
+          if (esDiaPagado) diasPagadosCalculados++;
+
+          sumDiurnas += Number(day.diurnas || 0);
+          sumNocturnas += Number(day.nocturnas || 0);
+          sumFesDiu += Number(day.fes_diu || 0);
+          sumFesNoc += Number(day.fes_noc || 0);
+          sumExtDiu += Number(day.ext_diu || 0);
+          sumExtNoc += Number(day.ext_noc || 0);
+          sumExtFesDiu += Number(day.ext_fes_diu || 0);
+          sumExtFesNoc += Number(day.ext_fes_noc || 0);
+          sumLlegadasTarde += Number(day.llegada_tarde || 0);
+          sumLlegadasMin += Number(day.llegada_tarde_min || 0);
+          sumComidasVeces += Number(day.comidas_excedidas_veces || 0);
+          sumComidasMin += Number(day.comidas_excedidas_min || 0);
       });
 
       // Sobreescribir días pagados si el usuario lo editó manualmente (overrides) o usar los calculados
-      const diasPagados = resolveValue(overrides, `${cedula}_dias_pagados`, () => {
-         let dias = 15; // default
-         if (emp.dias_pagados === 0 || emp.dias_pagados === '0') dias = 0;
-         else if (emp.dias_pagados !== undefined && emp.dias_pagados !== '') dias = Number(emp.dias_pagados);
-         else if (diasLaborados > 0) dias = diasLaborados;
-         return dias;
-      });
+      const diasPagados = resolveValue(overrides, `${cedula}_dias_pagados`, () => diasPagadosCalculados);
+// --- FIN CORRECCIÓN DÍAS PAGADOS ---
       const horasDebe = resolveValue(overrides, `${cedula}_horas_que_debe`, () => Number(emp.horas_debe || 0));
       
       const salarioBase = resolveValue(overrides, `${cedula}_salario_base`, () => Number(emp.salario_base || emp.salario || 0));
