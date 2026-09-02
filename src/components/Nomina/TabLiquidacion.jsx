@@ -10,6 +10,8 @@ const fmtCOP = (num) => {
 const STATUS_OPTIONS = [
   "Normal",
   "Licencia no remunerada",
+  "Licencia remunerada",
+  "Sancionado",
   "Calamidad",
   "Vacaciones",
   "Incapacidad General",

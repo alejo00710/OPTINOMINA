@@ -485,9 +485,15 @@ export default function NominaPage() {
       
       const processedLogs = allDates.map(date => {
          const existingLog = logs.find(l => l.dia === date);
-         const dayLog = existingLog || { dia: date, hr_ent: "-", hr_sal: "-", hr_ent_desc1: "-", hr_sal_desc1: "-", hr_ent_desc2: "-", hr_sal_desc2: "-" };
-         const prefix = `${cedula}_${date}`;
+         const dayLog = existingLog ? { ...existingLog } : { dia: date, hr_ent: "-", hr_sal: "-", hr_ent_desc1: "-", hr_sal_desc1: "-", hr_ent_desc2: "-", hr_sal_desc2: "-" };
          const scheduledShift = getScheduledShift(emp, date, weeklySchedules);
+
+         // --- INYECCIÓN DE CONTEXTO PARA EL LIQUIDADOR ---
+         dayLog.cedula = cedula;
+         dayLog.turno = scheduledShift;
+         // --- FIN INYECCIÓN ---
+
+         const prefix = `${cedula}_${date}`;
          return calculateDailyRecord(dayLog, overrides, prefix, HORA_INICIO_DIURNA, HORA_FIN_DIURNA, scheduledShift);
       });
       
@@ -495,46 +501,54 @@ export default function NominaPage() {
       let sumDiurnas = 0, sumNocturnas = 0, sumFesDiu = 0, sumFesNoc = 0;
       let sumExtDiu = 0, sumExtNoc = 0, sumExtFesDiu = 0, sumExtFesNoc = 0;
 // --- INICIO CORRECCIÓN DÍAS PAGADOS ---
-      let diasLaborados = 0;
-      let diasPagadosCalculados = 0;
-      let sumLlegadasTarde = 0, sumLlegadasMin = 0;
-      let sumComidasVeces = 0, sumComidasMin = 0;
+// --- INICIO CÁLCULO DE NOVEDADES ---
+let diasLaborados = 0;
+let diasPagadosCalculados = 0;
+const novedadesResumen = {};
+let sumLlegadasTarde = 0, sumLlegadasMin = 0;
+let sumComidasVeces = 0, sumComidasMin = 0;
 
-      processedLogs.forEach(day => {
-          if (day.hr_lab > 0) diasLaborados++;
-          
-          // Evaluar si el día se debe pagar
-          let esDiaPagado = false;
-          if (day.hr_lab > 0) {
-              esDiaPagado = true;
-          } else {
-              // Buscar en el estado o en las observaciones si es una novedad remunerada
-              const estado = String(day.estado_marcacion || day.estado || "").toUpperCase();
-              const obs = String(day.observacion || day.novedad || "").toUpperCase();
-              const novedadesPagas = ['DESCANSO', 'INCAPACIDAD', 'VACACION', 'FESTIVO', 'LICENCIA', 'REMUNERADO'];
-              
-              if (novedadesPagas.some(n => estado.includes(n) || obs.includes(n))) {
-                  esDiaPagado = true;
-              }
-          }
-          if (esDiaPagado) diasPagadosCalculados++;
+processedLogs.forEach(day => {
+    if (day.hr_lab > 0) diasLaborados++;
 
-          sumDiurnas += Number(day.diurnas || 0);
-          sumNocturnas += Number(day.nocturnas || 0);
-          sumFesDiu += Number(day.fes_diu || 0);
-          sumFesNoc += Number(day.fes_noc || 0);
-          sumExtDiu += Number(day.ext_diu || 0);
-          sumExtNoc += Number(day.ext_noc || 0);
-          sumExtFesDiu += Number(day.ext_fes_diu || 0);
-          sumExtFesNoc += Number(day.ext_fes_noc || 0);
-          sumLlegadasTarde += Number(day.llegada_tarde || 0);
-          sumLlegadasMin += Number(day.llegada_tarde_min || 0);
-          sumComidasVeces += Number(day.comidas_excedidas_veces || 0);
-          sumComidasMin += Number(day.comidas_excedidas_min || 0);
-      });
+    const estadoRaw = String(day.estado_marcacion || day.estado || day.observacion || day.novedad || "").toUpperCase().trim();
+    const estado = estadoRaw === "" ? "NORMAL" : estadoRaw;
+
+    // 1. Solo NORMAL, NOVEDAD y DESCANSO cuentan como día ordinario pagado.
+    const paganNormal = ["NORMAL", "NOVEDAD", "DESCANSO"];
+    let esDiaPagado = false;
+    
+    if (paganNormal.some(n => estado.includes(n))) {
+        esDiaPagado = true;
+    }
+
+    if (esDiaPagado) diasPagadosCalculados++;
+
+    // 2. Agrupar novedades (Todo lo que NO sea Normal, Novedad o Descanso)
+    if (!paganNormal.some(n => estado.includes(n))) {
+        if (!novedadesResumen[estado]) novedadesResumen[estado] = [];
+        // Guardar solo el día y mes para que se vea limpio (ej. 16-07)
+        const fechaCorta = day.dia.split('-').slice(1).join('-'); 
+        novedadesResumen[estado].push(fechaCorta);
+    }
+
+    sumDiurnas += Number(day.diurnas || 0);
+    sumNocturnas += Number(day.nocturnas || 0);
+    sumFesDiu += Number(day.fes_diu || 0);
+    sumFesNoc += Number(day.fes_noc || 0);
+    sumExtDiu += Number(day.ext_diu || 0);
+    sumExtNoc += Number(day.ext_noc || 0);
+    sumExtFesDiu += Number(day.ext_fes_diu || 0);
+    sumExtFesNoc += Number(day.ext_fes_noc || 0);
+    sumLlegadasTarde += Number(day.llegada_tarde || 0);
+    sumLlegadasMin += Number(day.llegada_tarde_min || 0);
+    sumComidasVeces += Number(day.comidas_excedidas_veces || 0);
+    sumComidasMin += Number(day.comidas_excedidas_min || 0);
+});
+// --- FIN CÁLCULO DE NOVEDADES ---
 
       // Sobreescribir días pagados si el usuario lo editó manualmente (overrides) o usar los calculados
-      const diasPagados = resolveValue(overrides, `${cedula}_dias_pagados`, () => diasPagadosCalculados);
+      const diasPagados = resolveValue(overrides, `${cedula}_dias_pagados`, () => Math.min(15, diasPagadosCalculados));
 // --- FIN CORRECCIÓN DÍAS PAGADOS ---
       const horasDebe = resolveValue(overrides, `${cedula}_horas_que_debe`, () => Number(emp.horas_debe || 0));
       
@@ -755,6 +769,7 @@ export default function NominaPage() {
         totalLlegadasMin: sumLlegadasMin,
         totalComidasVeces: sumComidasVeces,
         totalComidasMin: sumComidasMin,
+        novedadesResumen: novedadesResumen,
         liquidation: {
             total_extra_val: (variables['recargo_nocturno']||0) + (variables['val_extras_diurnas']||0) + (variables['val_extras_nocturnas']||0) + (variables['val_extras_festivas']||0) + resolveValue(overrides, `${cedula}_val_extras_festivas_nocturnas`, () => 0)
         }
@@ -1460,6 +1475,33 @@ const handleSaveToCloud = async () => {
                  </div>
                </div>
              );
+        })()}
+
+        {/* SECCIÓN RESUMEN DE NOVEDADES */}
+        {(() => {
+            const workerData = filteredPayrollData.find(d => d.masterRow.nombre === detailsWorkerName) || filteredPayrollData[0];
+            if (!workerData || !workerData.novedadesResumen || Object.keys(workerData.novedadesResumen).length === 0) return null;
+
+            return (
+                <div className="bg-slate-900 rounded-2xl p-6 mb-6 shadow-xl border border-slate-800">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
+                        <span className="text-amber-400">📋</span> Tipos de Novedad (Descuentan de Ordinarios)
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {Object.entries(workerData.novedadesResumen).map(([tipo, fechas]) => (
+                            <div key={tipo} className="bg-slate-800 rounded-xl p-4 border border-amber-700/30 shadow-inner">
+                                <span className="block text-[10px] font-bold text-amber-400 uppercase tracking-widest mb-1 truncate">{tipo}</span>
+                                <div className="text-2xl font-black tracking-tight text-slate-200 mb-2">
+                                    {fechas.length} <span className="text-sm font-medium text-slate-500">días</span>
+                                </div>
+                                <div className="text-xs text-slate-400 leading-tight">
+                                    Fechas: {fechas.join(', ')}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
         })()}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

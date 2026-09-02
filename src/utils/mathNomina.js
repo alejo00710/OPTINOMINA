@@ -291,6 +291,13 @@ export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
         baseInMM = bestMatch.inMM;
         baseOutHH = bestMatch.outHH;
         baseOutMM = bestMatch.outMM;
+        
+        // --- INICIO CORRECCIÓN ADIVINANZA TALLER ---
+        // Si el sistema adivinó el turno de las 07:00, forzarlo al turno real de 07:30
+        if (baseInHH === 7 && baseInMM === 0) {
+            baseInMM = 30; // Lo empuja a las 07:30
+        }
+        // --- FIN CORRECCIÓN ADIVINANZA TALLER ---
     }
 
     // 4. Regla Industrial: Exigencia de 10 mins y Snapping
@@ -539,24 +546,22 @@ if (hrLab <= 8.1) {
     if (extNoc >= 0.4 && extNoc <= 0.6) extNoc = 0;
 }
 
-// 2. Usar la variable correcta que inyecta Horarios Semanales
-const turnoReal = String(typeof turnoProgramadoDelDia !== 'undefined' ? turnoProgramadoDelDia : "").toLowerCase();
+// 2 & 3. Corregir llegada tarde del Taller (Escáner Global)
+const dataFila = JSON.stringify(day || {}).toLowerCase() + String(typeof turnoProgramadoDelDia !== 'undefined' ? turnoProgramadoDelDia : "").toLowerCase();
 
-// 3. Corregir llegada tarde del Taller
-if (turnoReal.includes("7:30") || turnoReal.includes("07:30")) {
+if (dataFila.includes("7:30") || dataFila.includes("07:30")) {
     if (llegadaTardeMin > 0) {
         llegadaTardeMin = Math.max(0, llegadaTardeMin - 30);
         llegadaTarde = llegadaTardeMin > 0 ? 1 : 0;
     }
 }
 
-// 4. Chismoso para la consola (F12)
-console.log("Evaluando liquidación de día:", { 
-    turnoRecibido: turnoReal, 
-    horasLaboradas: hrLab, 
-    extrasDiurnasFinal: finalExtDiu, 
-    minutosTarde: llegadaTardeMin 
-});
+// --- NUEVO CHISMOSO CON ID ---
+const idEmpleado = day.cedula || day.empleado_id || day.documento || "Sin ID";
+const fechaDia = day.fecha || day.date || day.dia || "Sin Fecha";
+    
+console.log(`🔎 EMPLEADO: ${idEmpleado} | FECHA: ${fechaDia} | TURNO BRUTO:`, day.turno || day.horario || day.horario_id || "Ninguno", "| DATA COMPLETA:", day);
+// --- FIN NUEVO CHISMOSO ---
 // --- FIN INTERCEPTOR DEFINITIVO ---
 
   return {
