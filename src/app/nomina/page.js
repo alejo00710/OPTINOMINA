@@ -1504,7 +1504,8 @@ const handleSaveToCloud = async () => {
             );
         })()}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+
+        <div className="space-y-8">
           {(() => {
              const workerData = filteredPayrollData.find(d => d.masterRow.nombre === detailsWorkerName) || filteredPayrollData[0];
              if (!workerData) return null;
@@ -1545,7 +1546,7 @@ const handleSaveToCloud = async () => {
                  }
              }
 
-             return PLANILLA_COLUMNS.map(col => {
+             const renderCard = (col) => {
                 const cKey = `${workerData.masterRow.cedula}_${col.key}`;
                 let val = overrides[cKey] !== undefined ? overrides[cKey] : (workerData[col.key] !== undefined ? workerData[col.key] : "");
                 
@@ -1594,7 +1595,38 @@ const handleSaveToCloud = async () => {
                      />
                   </div>
                 )
-             });
+             };
+
+             const devengosBasicos = ['salario', 'dias_pagados', 'sueldo', 'transporte', 'rodamiento', 'comisiones', 'bonificacion_no_salarial', 'bonificacion', 'total_devengados'];
+             const novedadesFinancieras = ['dias_vacaciones', 'val_vacaciones', 'dias_lic_rem', 'val_lic_rem', 'dias_lic_norem', 'val_lic_norem', 'dias_incapacidad', 'incapacidad', 'dias_incap_at', 'val_incap_at', 'dias_calamidad', 'val_calamidad', 'dias_sancion', 'val_sancion'];
+             const suplementario = ['horas_diurnas', 'horas_nocturnas', 'extras_diurnas', 'extras_nocturnas', 'extras_festivas', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas'];
+             const deducciones = ['salud', 'pension', 'solidaridad', 'prestamos', 'saldo_prestamo', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'poliza_sura', 'optica', 'celular', 'retencion', 'total_deducciones'];
+             const resultados = ['total_pagar', 'neto_pagar', 'verificacion'];
+
+             const renderCategory = (title, keys, titleColor) => {
+                 const columns = PLANILLA_COLUMNS.filter(col => keys.includes(col.key));
+                 if (columns.length === 0) return null;
+                 return (
+                     <div key={title} className="bg-slate-50/30 rounded-2xl p-6 border border-slate-200">
+                         <h4 className={`text-xs font-black uppercase tracking-widest ${titleColor} mb-4 flex items-center gap-2`}>
+                             {title}
+                         </h4>
+                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                             {columns.map(renderCard)}
+                         </div>
+                     </div>
+                 );
+             };
+
+             return (
+                 <>
+                     {renderCategory("Devengos Básicos", devengosBasicos, "text-indigo-500")}
+                     {renderCategory("Liquidación de Novedades", novedadesFinancieras, "text-cyan-500")}
+                     {renderCategory("Trabajo Suplementario", suplementario, "text-emerald-500")}
+                     {renderCategory("Deducciones y Retenciones", deducciones, "text-rose-500")}
+                     {renderCategory("Liquidación Final", resultados, "text-amber-500")}
+                 </>
+             );
           })()}
         </div>
       </div>

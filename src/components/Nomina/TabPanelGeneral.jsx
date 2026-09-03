@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import EditableCell from '@/components/Nomina/EditableCell';
 import SaitempModal from '@/components/Nomina/SaitempModal';
 import { PLANILLA_COLUMNS } from '@/utils/constants';
@@ -26,6 +27,7 @@ export default function TabPanelGeneral({
   const [vinculacionFiltro, setVinculacionFiltro] = useState('Empresa');
   const [isSaitempModalOpen, setIsSaitempModalOpen] = useState(false);
   const [empleadoSaitemp, setEmpleadoSaitemp] = useState(null);
+  const [vacacionesModal, setVacacionesModal] = useState({ isOpen: false, empleado: null });
 
   const COLUMNAS_ESENCIALES = ['salario', 'total_devengados', 'total_deducciones', 'neto_pagar'];
   const COLUMNAS_FIJAS = ['consecutivo', 'cedula', 'nombre', 'cargo'];
@@ -415,6 +417,13 @@ export default function TabPanelGeneral({
                           >
                              Liquidar
                           </button>
+                          <button 
+                             onClick={() => setVacacionesModal({ isOpen: true, empleado: row.nombre })}
+                             className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors shadow-sm flex items-center gap-1"
+                             title="Gestionar Vacaciones"
+                          >
+                             🌴 Vacaciones
+                          </button>
                           {vinculacionFiltro === 'Temporal' && (
                              <button
                                onClick={() => {
@@ -454,6 +463,53 @@ export default function TabPanelGeneral({
         onClose={() => setIsSaitempModalOpen(false)} 
         employee={empleadoSaitemp} 
       />
+
+      {/* MODAL DE VACACIONES */}
+      {vacacionesModal.isOpen && typeof document !== 'undefined' && createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm transition-opacity">
+              
+              {/* Capa invisible para cerrar */}
+              <div className="absolute inset-0 cursor-pointer" onClick={() => setVacacionesModal({ isOpen: false, empleado: null })}></div>
+
+              {/* Cuadro Flotante Inmersivo (Idéntico a Detalles) */}
+              <div className="relative w-full max-w-4xl bg-white rounded-[2rem] shadow-2xl flex flex-col overflow-hidden max-h-[85vh] animate-stitch border border-slate-200/50">
+                  
+                  {/* Header del Modal */}
+                  <div className="px-8 py-6 bg-white flex justify-between items-start z-10 shrink-0">
+                      <div>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-2 block">
+                              🌴 Módulo de Vacaciones
+                          </span>
+                          <h3 className="font-black text-2xl text-slate-900 uppercase">{vacacionesModal.empleado}</h3>
+                      </div>
+                      <div className="flex items-center gap-4">
+                          <button 
+                              disabled
+                              className="bg-blue-600 opacity-50 text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all text-sm inline-flex items-center gap-2 cursor-not-allowed"
+                          >
+                              🔒 Guardar Cambios
+                          </button>
+                          <button 
+                              onClick={() => setVacacionesModal({ isOpen: false, empleado: null })}
+                              className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 hover:bg-slate-100 rounded-full text-slate-400 transition-all shadow-sm font-bold text-lg"
+                          >
+                              ×
+                          </button>
+                      </div>
+                  </div>
+                  
+                  {/* Body */}
+                  <div className="flex-1 overflow-y-auto p-6 sm:p-8 custom-scrollbar bg-slate-50/50">
+                      <div className="bg-amber-50 rounded-xl p-6 border border-amber-200 text-center border-dashed mt-4">
+                          <p className="text-sm font-medium text-amber-700">
+                              El motor de cálculo está listo. Esperando las fórmulas y reglas de negocio para inyectar los campos dinámicos.
+                          </p>
+                      </div>
+                  </div>
+              </div>
+          </div>,
+          document.body
+      )}
     </section>
   );
 }

@@ -133,6 +133,20 @@ export const PLANILLA_COLUMNS = [
   { key: "rodamiento", label: "Rodamiento (T)", letter: "T", type: "number", isCurrency: true, editable: true },
   { key: "dias_incapacidad", label: "Días Incap (U)", letter: "U", type: "number", center: true, editable: true },
   { key: "incapacidad", label: "Valor Incap (V)", letter: "V", type: "number", isCurrency: true, editable: true },
+  
+  { key: "dias_vacaciones", label: "DÍAS VACACIONES (U)", letter: "U", type: "number", center: true, editable: true, isCalculated: true },
+  { key: "val_vacaciones", label: "VALOR VACACIONES (V)", letter: "V", type: "number", isCurrency: true, editable: true, isCalculated: true },
+  { key: "dias_lic_rem", label: "DÍAS LIC. REM (U)", letter: "U", type: "number", center: true, editable: true, isCalculated: true },
+  { key: "val_lic_rem", label: "VALOR LIC. REM (V)", letter: "V", type: "number", isCurrency: true, editable: true, isCalculated: true },
+  { key: "dias_lic_norem", label: "DÍAS LIC. NO REM (U)", letter: "U", type: "number", center: true, editable: true, isCalculated: true },
+  { key: "val_lic_norem", label: "VALOR LIC. NO REM (V)", letter: "V", type: "number", isCurrency: true, editable: true, isCalculated: true },
+
+  { key: "dias_incap_at", label: "DÍAS INCAP. AT (U)", letter: "U", type: "number", center: true, editable: true, isCalculated: true },
+  { key: "val_incap_at", label: "VALOR INCAP. AT (V)", letter: "V", type: "number", isCurrency: true, editable: true, isCalculated: true },
+  { key: "dias_calamidad", label: "DÍAS CALAMIDAD (U)", letter: "U", type: "number", center: true, editable: true, isCalculated: true },
+  { key: "val_calamidad", label: "VALOR CALAMIDAD (V)", letter: "V", type: "number", isCurrency: true, editable: true, isCalculated: true },
+  { key: "dias_sancion", label: "DÍAS SANCION (U)", letter: "U", type: "number", center: true, editable: true, isCalculated: true },
+  { key: "val_sancion", label: "VALOR SANCION (V)", letter: "V", type: "number", isCurrency: true, editable: true, isCalculated: true },
   { key: "total_devengados", label: "Total Devengado (W)", letter: "W", type: "number", isCurrency: true, bg: "bg-emerald-500/5 font-extrabold text-emerald-800", editable: true },
   
   { key: "salud", label: "Salud 4% (X)", letter: "X", type: "number", isCurrency: true, textClass: "text-rose-600", editable: true },
