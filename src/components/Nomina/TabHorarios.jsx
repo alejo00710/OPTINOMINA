@@ -4,7 +4,13 @@ import { supabase } from '@/utils/supabase';
 
 const CeldaTurno = ({ valor, onChange, getTurnColor }) => {
   const [showMenu, setShowMenu] = useState(false);
-  const oficiales = ['6AM A 2PM', '2PM A 10PM', '10PM A 6AM', '6AM A 6PM', '6PM A 6AM', '7:30AM A 5PM', 'DESCANSO', 'VACACIONES', 'LICENCIA'];
+  const oficiales = [
+    '6AM A 2PM', '2PM A 10PM', '10PM A 6AM', '6AM A 6PM', '6PM A 6AM', 
+    '7:30AM A 5PM', '7:30AM A 4PM', 'DESCANSO', 'VACACIONES', 
+    'LICENCIA REMUNERADA', 'LICENCIA NO REMUNERADA', 
+    'INCAPACIDAD GENERAL', 'INCAPACIDAD ACCIDENTE LABORAL', 
+    'CALAMIDAD', 'SANCIONADO'
+  ];
 
   return (
     <div className="relative w-full h-full">
@@ -197,11 +203,24 @@ export default function TabHorarios({ empleados }) {
     if (t.includes('2PM A 10PM')) return 'bg-blue-200 text-black';
     if (t.includes('10PM A 6AM')) return 'bg-orange-200 text-black';
     if (t.includes('6AM A 6PM') || t.includes('6PM A 6AM')) return 'bg-yellow-300 text-black';
-    if (t.includes('7:30AM A 5PM') || t.includes('7:30 A 5PM')) return 'bg-teal-100 text-teal-900 font-semibold';
-    if (t.includes('VACACIONES') || t.includes('LICENCIA')) return 'bg-yellow-400 font-bold text-black';
+    if (t.includes('7:30AM A 5PM') || t.includes('7:30 A 5PM') || t.includes('7:30AM A 4PM')) return 'bg-teal-100 text-teal-900 font-semibold';
     if (t.includes('DESCANSO')) return 'bg-white font-bold text-black';
+    
+    if (t.includes('VACACIONES')) return 'bg-amber-100 text-amber-800 font-bold';
+    if (t.includes('INCAPACIDAD ACCIDENTE LABORAL')) return 'bg-red-200 text-red-900 font-bold';
+    if (t.includes('INCAPACIDAD GENERAL')) return 'bg-rose-100 text-rose-800 font-bold';
+    if (t.includes('LICENCIA NO REMUNERADA')) return 'bg-slate-200 text-slate-700 font-bold';
+    if (t.includes('LICENCIA REMUNERADA')) return 'bg-cyan-100 text-cyan-800 font-bold';
+    if (t.includes('CALAMIDAD')) return 'bg-fuchsia-100 text-fuchsia-800 font-bold';
+    if (t.includes('SANCIONADO')) return 'bg-orange-100 text-orange-800 font-bold';
 
-    const oficiales = ['6AM A 2PM', '2PM A 10PM', '10PM A 6AM', '6AM A 6PM', '6PM A 6AM', '7:30AM A 5PM', 'DESCANSO', 'VACACIONES', 'LICENCIA'];
+    const oficiales = [
+      '6AM A 2PM', '2PM A 10PM', '10PM A 6AM', '6AM A 6PM', '6PM A 6AM', 
+      '7:30AM A 5PM', '7:30AM A 4PM', 'DESCANSO', 'VACACIONES', 
+      'LICENCIA REMUNERADA', 'LICENCIA NO REMUNERADA', 
+      'INCAPACIDAD GENERAL', 'INCAPACIDAD ACCIDENTE LABORAL', 
+      'CALAMIDAD', 'SANCIONADO'
+    ];
     if (t !== '' && !oficiales.includes(t) && t !== '7:30 A 5PM') {
       return 'bg-yellow-100 text-black font-semibold';
     }

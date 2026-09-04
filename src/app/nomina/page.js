@@ -609,13 +609,30 @@ processedLogs.forEach(day => {
       const extNocturnasParaCalculo = getValExactoInput('extras_nocturnas', finalExtNoc);
       const extFestivasParaCalculo = getValExactoInput('extras_festivas', finalExtFesDiu + finalExtFesNoc);
 
+      const resumenNov = novedadesResumen || {};
+      const dias_vacaciones = resumenNov['VACACIONES']?.length || 0;
+      const dias_lic_rem = resumenNov['LICENCIA REMUNERADA']?.length || 0;
+      const dias_lic_norem = resumenNov['LICENCIA NO REMUNERADA']?.length || 0;
+      const dias_incap_at = resumenNov['INCAPACIDAD ACCIDENTE LABORAL']?.length || 0;
+      const dias_calamidad = resumenNov['CALAMIDAD']?.length || 0;
+      const dias_sancion = resumenNov['SANCIONADO']?.length || 0;
+      
+      const dias_ausentes_total = (dias_vacaciones || 0) + (dias_lic_rem || 0) + (dias_lic_norem || 0) + (diasIncapacidad || 0) + (dias_incap_at || 0) + (dias_calamidad || 0) + (dias_sancion || 0);
+
       // MOTOR MATEMÁTICO EN CASCADA
       let variables = {
         salario_base: salarioBase,
         smlv_base: globalSmmlv,
         aux_transporte_base: globalAuxTransporte,
         valor_diario_base: MINIMO_DIARIO_INCAPACIDAD,
-        dias_pagados: diasPagados,
+        dias_pagados: overrides[`${cedula}_dias_pagados`] !== undefined && overrides[`${cedula}_dias_pagados`] !== "" ? Number(overrides[`${cedula}_dias_pagados`]) : (emp.dias_pagados || Math.min(15, diasPagadosCalculados)),
+        dias_ausentes_total: dias_ausentes_total,
+        dias_vacaciones: dias_vacaciones,
+        dias_lic_rem: dias_lic_rem,
+        dias_lic_norem: dias_lic_norem,
+        dias_incap_at: dias_incap_at,
+        dias_calamidad: dias_calamidad,
+        dias_sancion: dias_sancion,
         horas_diurnas: hrsDiurnasParaCalculo,
         horas_nocturnas: hrsNocturnasParaCalculo,
         extras_diurnas: extDiurnasParaCalculo,
@@ -901,7 +918,7 @@ processedLogs.forEach(day => {
       const deduccionesBase = ['salud', 'pension', 'solidaridad', 'prestamos', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'poliza_sura', 'optica', 'celular', 'retencion'];
       const totalesIntermedios = ['total_devengados', 'total_devengado', 'total_deducciones', 'total_deducido'];
 
-      if (devengadosBase.includes(campoEditado)) {
+      if (devengadosBase.includes(campoEditado) || campoEditado === 'dias_pagados') {
           delete newOverrides[`${cedula}_total_devengados`];
           delete newOverrides[`${cedula}_total_devengado`];
           delete newOverrides[`${cedula}_total_pagar`];
@@ -1509,6 +1526,52 @@ const handleSaveToCloud = async () => {
           {(() => {
              const workerData = filteredPayrollData.find(d => d.masterRow.nombre === detailsWorkerName) || filteredPayrollData[0];
              if (!workerData) return null;
+
+             // --- INYECCIÓN LÓGICA DE GERENCIA: NOVEDADES Y TRANSPORTE ---
+             const salarioBase = Number(workerData.masterRow?.salario_base || 0);
+             const smlvBase = globalSmmlv;
+             const auxTransporteMensual = globalAuxTransporte;
+             const valorDia = salarioBase / 30;
+             const valorDiaMinimo = smlvBase / 30;
+             const resumen = workerData.novedadesResumen || {};
+
+             // Extraer días (U) desde el resumen
+             const dias_vacaciones = resumen['VACACIONES']?.length || 0;
+             const dias_lic_rem = resumen['LICENCIA REMUNERADA']?.length || 0;
+             const dias_lic_norem = resumen['LICENCIA NO REMUNERADA']?.length || 0;
+             const dias_incapacidad = resumen['INCAPACIDAD GENERAL']?.length || 0; 
+             const dias_incap_at = resumen['INCAPACIDAD ACCIDENTE LABORAL']?.length || 0;
+             const dias_calamidad = resumen['CALAMIDAD']?.length || 0;
+             const dias_sancion = resumen['SANCIONADO']?.length || 0;
+
+             // Inyectar (U) en workerData para que EditableCell los lea
+             workerData.dias_vacaciones = dias_vacaciones;
+             workerData.dias_lic_rem = dias_lic_rem;
+             workerData.dias_lic_norem = dias_lic_norem;
+             workerData.dias_incapacidad = dias_incapacidad;
+             workerData.dias_incap_at = dias_incap_at;
+             workerData.dias_calamidad = dias_calamidad;
+             workerData.dias_sancion = dias_sancion;
+
+             // Fórmulas de Gerencia (V)
+             workerData.val_vacaciones = valorDia * dias_vacaciones;
+             workerData.val_lic_rem = valorDia * dias_lic_rem;
+             workerData.val_calamidad = valorDia * dias_calamidad;
+             workerData.val_incap_at = valorDia * dias_incap_at;
+
+             // Novedades no pagas
+             workerData.val_lic_norem = 0;
+             workerData.val_sancion = 0;
+
+             // Incapacidad EG (66.67% con piso de SMLV)
+             const valorDiaEG = (valorDia * (2/3));
+             workerData.incapacidad = valorDiaEG < valorDiaMinimo ? (valorDiaMinimo * dias_incapacidad) : (valorDiaEG * dias_incapacidad);
+
+             // Descuento de Auxilio de Transporte (Tope 15 días quincenal)
+             const diasSinTransporte = dias_vacaciones + dias_lic_rem + dias_lic_norem + dias_incapacidad + dias_incap_at + dias_calamidad + dias_sancion;
+             const diasTransporteFinal = Math.max(0, 15 - diasSinTransporte);
+             workerData.transporte = (auxTransporteMensual / 30) * diasTransporteFinal;
+             // --- FIN INYECCIÓN ---
              
              // 1. Campos que vienen de la pestaña Liquidación (Horas y Días)
              const camposLiquidacion = [

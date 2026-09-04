@@ -208,10 +208,10 @@ export const LIQUIDATION_CONCEPTS = [
 
 export const DEFAULT_FORMULAS = {
   sueldo: '(salario_base / 30) * dias_pagados',
-  recargo_nocturno: '((salario_base / 230) * 0.35) * horas_nocturnas',
-  val_extras_diurnas: '(salario_base / 230) * 1.25 * extras_diurnas',
-  val_extras_nocturnas: '(salario_base / 230) * 1.75 * extras_nocturnas',
-  val_extras_festivas: '(salario_base / 230) * 2 * extras_festivas',
+  recargo_nocturno: '((salario_base / 210) * 0.35) * horas_nocturnas',
+  val_extras_diurnas: '(salario_base / 210) * 1.25 * extras_diurnas',
+  val_extras_nocturnas: '(salario_base / 210) * 1.75 * extras_nocturnas',
+  val_extras_festivas: '(salario_base / 210) * 2 * extras_festivas',
   transporte: 'salario_base <= (smlv_base * 2) ? (aux_transporte_base / 30) * dias_pagados : 0',
   incapacidad: '((salario_base / 30) * (2/3)) < (smlv_base / 30) ? (smlv_base / 30) * dias_incapacidad : ((salario_base / 30) * (2/3)) * dias_incapacidad',
   ibc_seguridad_social: 'sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + comisiones + incapacidad',

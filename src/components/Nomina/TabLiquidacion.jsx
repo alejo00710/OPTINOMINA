@@ -8,28 +8,22 @@ const fmtCOP = (num) => {
 };
 
 const STATUS_OPTIONS = [
-  "Normal",
-  "Licencia no remunerada",
-  "Licencia remunerada",
-  "Sancionado",
-  "Calamidad",
-  "Vacaciones",
-  "Incapacidad General",
-  "Incapacidad Accidente laboral",
-  "Votacion",
-  "Descanso",
-  "No marcacion",
-  "Novedad"
+  'Normal', 'LICENCIA NO REMUNERADA', 'LICENCIA REMUNERADA', 
+  'SANCIONADO', 'CALAMIDAD', 'VACACIONES', 'INCAPACIDAD GENERAL', 
+  'INCAPACIDAD ACCIDENTE LABORAL', 'Votacion', 'Descanso', 
+  'No marcacion', 'Novedad'
 ];
 
 const getStatusColor = (status) => {
   switch (status) {
     case "Normal": return "bg-green-100 text-green-800";
-    case "Licencia no remunerada": return "bg-gray-100 text-gray-800";
-    case "Calamidad": return "bg-red-100 text-red-800";
-    case "Vacaciones": return "bg-yellow-100 text-yellow-800";
-    case "Incapacidad General": return "bg-purple-100 text-purple-800";
-    case "Incapacidad Accidente laboral": return "bg-rose-100 text-rose-800";
+    case "LICENCIA NO REMUNERADA": return "bg-gray-100 text-gray-800";
+    case "LICENCIA REMUNERADA": return "bg-gray-100 text-gray-800";
+    case "SANCIONADO": return "bg-red-100 text-red-800";
+    case "CALAMIDAD": return "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200";
+    case "VACACIONES": return "bg-yellow-100 text-yellow-800";
+    case "INCAPACIDAD GENERAL": return "bg-purple-100 text-purple-800";
+    case "INCAPACIDAD ACCIDENTE LABORAL": return "bg-rose-100 text-rose-800";
     case "Votacion": return "bg-cyan-100 text-cyan-800";
     case "Descanso": return "bg-blue-100 text-blue-800";
     case "No marcacion": return "bg-slate-200 text-slate-800";
@@ -41,11 +35,13 @@ const getStatusColor = (status) => {
 const getRowColor = (status) => {
   switch (status) {
     case "Normal": return "hover:bg-slate-50 transition-colors";
-    case "Licencia no remunerada": return "bg-gray-100 hover:bg-gray-200 transition-colors";
-    case "Calamidad": return "bg-red-100 hover:bg-red-200 transition-colors";
-    case "Vacaciones": return "bg-yellow-100 hover:bg-yellow-200 transition-colors";
-    case "Incapacidad General": return "bg-purple-100 hover:bg-purple-200 transition-colors";
-    case "Incapacidad Accidente laboral": return "bg-rose-100 hover:bg-rose-200 transition-colors";
+    case "LICENCIA NO REMUNERADA": return "bg-gray-100 hover:bg-gray-200 transition-colors";
+    case "LICENCIA REMUNERADA": return "bg-gray-100 hover:bg-gray-200 transition-colors";
+    case "SANCIONADO": return "bg-red-100 hover:bg-red-200 transition-colors";
+    case "CALAMIDAD": return "bg-fuchsia-50/50 hover:bg-fuchsia-100/50 transition-colors";
+    case "VACACIONES": return "bg-yellow-100 hover:bg-yellow-200 transition-colors";
+    case "INCAPACIDAD GENERAL": return "bg-purple-100 hover:bg-purple-200 transition-colors";
+    case "INCAPACIDAD ACCIDENTE LABORAL": return "bg-rose-100 hover:bg-rose-200 transition-colors";
     case "Votacion": return "bg-cyan-100 hover:bg-cyan-200 transition-colors";
     case "Descanso": return "bg-blue-100 hover:bg-blue-200 transition-colors";
     case "No marcacion": return "bg-slate-200 hover:bg-slate-300 transition-colors";
@@ -330,13 +326,20 @@ export default function TabLiquidacion({
       statusVal = 'Descanso'; // Forzar estado indiscutible
   }
   
-  // Legacy mapping
+  // Legacy mapping & normalization
   if (statusVal === 'NORMAL') statusVal = 'Normal';
   if (statusVal === 'ANÓMALO') statusVal = 'Novedad';
-  if (statusVal === 'INCAPACIDAD EG') statusVal = 'Incapacidad General';
   if (statusVal === 'NO MARCÓ RELOJ') statusVal = 'No marcacion';
-  if (statusVal === 'CALAMIDAD') statusVal = 'Calamidad';
   if (statusVal === 'DESCANSO') statusVal = 'Descanso';
+  
+  // Convert old titlecase to new uppercase standards
+  if (statusVal === 'Calamidad') statusVal = 'CALAMIDAD';
+  if (statusVal === 'Vacaciones') statusVal = 'VACACIONES';
+  if (statusVal === 'Sancionado') statusVal = 'SANCIONADO';
+  if (statusVal === 'Incapacidad General' || statusVal === 'INCAPACIDAD EG') statusVal = 'INCAPACIDAD GENERAL';
+  if (statusVal === 'Incapacidad Accidente laboral') statusVal = 'INCAPACIDAD ACCIDENTE LABORAL';
+  if (statusVal === 'Licencia remunerada') statusVal = 'LICENCIA REMUNERADA';
+  if (statusVal === 'Licencia no remunerada') statusVal = 'LICENCIA NO REMUNERADA';
 
   const entValue = overrides[`${prefix}_hr_ent`] !== undefined ? overrides[`${prefix}_hr_ent`] : (day.hr_ent || "");
   const salValue = overrides[`${prefix}_hr_sal`] !== undefined ? overrides[`${prefix}_hr_sal`] : (day.hr_sal || "");
