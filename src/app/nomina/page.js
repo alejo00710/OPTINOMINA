@@ -64,7 +64,7 @@ export default function NominaPage() {
   const [activeFormulas, setActiveFormulas] = useState(DEFAULT_FORMULAS);
 
   useEffect(() => {
-    const savedFormulas = localStorage.getItem('optinomina_global_formulas_v4');
+    const savedFormulas = localStorage.getItem('optinomina_global_formulas_v5');
     if (savedFormulas) {
       setActiveFormulas({ ...DEFAULT_FORMULAS, ...JSON.parse(savedFormulas) });
     }
@@ -81,7 +81,7 @@ export default function NominaPage() {
     const campoId = formulaConfig.fieldId;
     const updatedFormulas = { ...activeFormulas, [campoId]: newFormula };
     setActiveFormulas(updatedFormulas);
-    localStorage.setItem('optinomina_global_formulas_v4', JSON.stringify(updatedFormulas));
+    localStorage.setItem('optinomina_global_formulas_v5', JSON.stringify(updatedFormulas));
     
     setToast({
       message: "¡Fórmula global actualizada!",
@@ -511,7 +511,13 @@ let sumComidasVeces = 0, sumComidasMin = 0;
 processedLogs.forEach(day => {
     if (day.hr_lab > 0) diasLaborados++;
 
-    const estadoRaw = String(day.estado_marcacion || day.estado || day.observacion || day.novedad || "").toUpperCase().trim();
+    const turnoValor = String(typeof day.turno === 'object' ? (day.turno?.novedad || day.turno?.tipo || day.turno?.nombre || "") : day.turno).toUpperCase().trim();
+    const esTurnoNormal = ["NORMAL", "DESCANSO", "DIURNO", "NOCTURNO", "TURNO"].some(t => turnoValor.includes(t)) || turnoValor === "";
+
+    // Si el turno tiene una novedad explícita (ej. CALAMIDAD), gana el turno. Si es un turno normal o vacío, lee el biométrico.
+    const estadoRaw = (!esTurnoNormal && turnoValor) 
+        ? turnoValor 
+        : String(day.estado_marcacion || day.estado || day.observacion || day.novedad || "").toUpperCase().trim();
     const estado = estadoRaw === "" ? "NORMAL" : estadoRaw;
 
     // 1. Solo NORMAL, NOVEDAD y DESCANSO cuentan como día ordinario pagado.
@@ -713,7 +719,7 @@ processedLogs.forEach(day => {
       };
 
       // FASE 1: Devengados Base
-      const fase1 = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento'];
+      const fase1 = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento', 'valor_vacaciones', 'valor_lic_rem', 'valor_lic_norem', 'valor_incap_at', 'valor_calamidad', 'valor_sancion'];
       // FASE 2: Suma de Devengados (SOLO LLAVES OFICIALES)
       const fase2 = ['total_devengados', 'ibc_seguridad_social', 'ibc_fsp'];
       // FASE 3: Deducciones Base
@@ -1567,10 +1573,6 @@ const handleSaveToCloud = async () => {
              const valorDiaEG = (valorDia * (2/3));
              workerData.incapacidad = valorDiaEG < valorDiaMinimo ? (valorDiaMinimo * dias_incapacidad) : (valorDiaEG * dias_incapacidad);
 
-             // Descuento de Auxilio de Transporte (Tope 15 días quincenal)
-             const diasSinTransporte = dias_vacaciones + dias_lic_rem + dias_lic_norem + dias_incapacidad + dias_incap_at + dias_calamidad + dias_sancion;
-             const diasTransporteFinal = Math.max(0, 15 - diasSinTransporte);
-             workerData.transporte = (auxTransporteMensual / 30) * diasTransporteFinal;
              // --- FIN INYECCIÓN ---
              
              // 1. Campos que vienen de la pestaña Liquidación (Horas y Días)
