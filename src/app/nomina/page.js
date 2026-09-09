@@ -993,15 +993,8 @@ processedLogs.forEach(day => {
         // 3. Destruir caché local
         localStorage.removeItem('optinomina_draft');
         
-        // 4. GUARDAR EN SUPABASE USANDO TU FUNCIÓN EXISTENTE SEGURA
-        await savePayrollToCloud({ 
-          startDate, 
-          endDate, 
-          nominaRows: freshRows, 
-          attendanceLogs: {}, 
-          overrides: newOverrides, 
-          hiddenColumns 
-        });
+        // 4. DESTRUIR EL BORRADOR DE LA NUBE PARA EVITAR EL "CANDADO ACTIVO" ZOMBIE
+        await supabase.from('optimoldes_payroll').delete().eq('id', 'quincena_activa');
         
     } catch (err) {
         console.error("Error en la limpieza:", err);
