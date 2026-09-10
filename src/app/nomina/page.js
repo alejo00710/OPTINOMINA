@@ -435,48 +435,48 @@ export default function NominaPage() {
     console.log("RECALCULATING PAYROLL DATA. Attendance logs:", Object.keys(attendanceLogs).length, "employees");
     
   const getScheduledShift = (emp, dateStr, schedules) => {
-       const targetDate = new Date(dateStr + "T00:00:00");
-       const nameMap = { 1: 'LUNES', 2: 'MARTES', 3: 'MIÉRCOLES', 4: 'JUEVES', 5: 'VIERNES', 6: 'SÁBADO', 0: 'DOMINGO' };
-       const diaSemanaMayuscula = nameMap[targetDate.getDay()];
-       const targetTime = targetDate.getTime();
-       const getMonday = (d) => {
-         const date = new Date(d);
-         const day = date.getDay();
-         const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-         return new Date(date.setDate(diff)).toISOString().substring(0,10);
-       };
+    // 1. Blindaje de Zona Horaria: T12:00:00 asegura que Local y UTC caigan siempre en el mismo día calendario
+    const targetDate = new Date(dateStr + "T12:00:00");
+    const nameMap = { 1: 'LUNES', 2: 'MARTES', 3: 'MIÉRCOLES', 4: 'JUEVES', 5: 'VIERNES', 6: 'SÁBADO', 0: 'DOMINGO' };
+    const diaSemanaMayuscula = nameMap[targetDate.getDay()];
+    
+    // Calcular el lunes de esa semana sin alterar el timezone
+    const d = new Date(dateStr + "T12:00:00");
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    const targetMonday = new Date(d.setDate(diff)).toISOString().substring(0, 10);
 
-       const targetMonday = getMonday(targetDate); 
+    const matchedWeek = schedules.find(w => {
+        const dbDate = String(w.id_semana || w.fecha || w.date || w.fecha_inicio || w.start_date || w.id || ""); 
+        return dbDate.includes(targetMonday);
+    });
+    
+    if (!matchedWeek || !matchedWeek.datos_json) return null;
 
-       const matchedWeek = schedules.find(w => {
-         const dbDate = w.id_semana || w.fecha || w.date || w.fecha_inicio || w.start_date || w.id; 
-         return String(dbDate).includes(targetMonday);
-       });
-       
-       const idParaBuscar = emp.biometric_id || emp.id_biometrico || emp.cedula;
-       const key = `${idParaBuscar}_${diaSemanaMayuscula}`;
-       let shiftEncontrado = null;
+    // 2. Buscador de Fuerza Bruta: Probar todos los IDs posibles que pueda tener el operario
+    const posiblesIds = [emp.biometric_id, emp.id_biometrico, emp.cedula, emp.id]
+        .filter(Boolean)
+        .map(String)
+        .map(id => id.trim());
 
-       if (matchedWeek && matchedWeek.datos_json) {
-           shiftEncontrado = matchedWeek.datos_json[key] || null;
-           
-           // Fallback with clean string if direct access fails (just in case)
-           if (!shiftEncontrado) {
-               const cleanStr = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-               const targetKeyClean = cleanStr(key);
-               for (const [k, v] of Object.entries(matchedWeek.datos_json)) {
-                   if (cleanStr(k) === targetKeyClean) {
-                       shiftEncontrado = v;
-                       break;
-                   }
-               }
-           }
-       }
-       
-       const finalShift = shiftEncontrado || null;
-       
-       return finalShift;
-    };
+    let shiftEncontrado = null;
+    const cleanStr = (str) => String(str).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+    
+    for (const id of posiblesIds) {
+        const targetKeyClean = cleanStr(`${id}_${diaSemanaMayuscula}`);
+        
+        // Búsqueda profunda ignorando tildes (ej. SÁBADO vs SABADO)
+        for (const [k, v] of Object.entries(matchedWeek.datos_json)) {
+            if (cleanStr(k) === targetKeyClean) {
+                shiftEncontrado = v;
+                break;
+            }
+        }
+        if (shiftEncontrado) break; // Si lo encuentra con el ID 79, detiene la búsqueda
+    }
+    
+    return shiftEncontrado;
+  };
 
     return nominaRows.map(emp => {
       const cedula = emp.cedula;
@@ -1088,8 +1088,26 @@ const handleSaveToCloud = async () => {
 
          Object.keys(cleaned).forEach(dateStr => {
             const currentDay = cleaned[dateStr];
-            if (currentDay.hr_ent || currentDay.hr_sal) {
-               byDate.set(dateStr, { ...(byDate.get(dateStr) || {}), ...currentDay });
+            
+            // 1. Consultar si existe un turno programado para este empleado en esta fecha
+            const emp = typeof nominaRows !== 'undefined' ? nominaRows.find(r => r.cedula === groupKey) || { cedula: groupKey } : { cedula: groupKey };
+            const scheduledShift = typeof getScheduledShift === 'function' && typeof weeklySchedules !== 'undefined' 
+                ? getScheduledShift(emp, dateStr, weeklySchedules) 
+                : null;
+            
+            // 2. Extraer el estado del turno programado
+            const turnoValor = String(typeof scheduledShift === 'object' ? (scheduledShift?.novedad || scheduledShift?.tipo || scheduledShift?.nombre || "") : (scheduledShift || "")).toUpperCase().trim();
+            const esTurnoNormal = ["NORMAL", "DESCANSO", "DIURNO", "NOCTURNO", "TURNO"].some(t => turnoValor.includes(t)) || turnoValor === "";
+            
+            // 3. Escudo protector: Si hay una novedad programada, inyectarla para que el biométrico no la aplaste
+            if (!esTurnoNormal && turnoValor) {
+                currentDay.estado = turnoValor;
+                currentDay.novedad = turnoValor;
+            }
+
+            // 4. Guardar el registro
+            if (currentDay.hr_ent || currentDay.hr_sal || currentDay.estado) {
+                byDate.set(dateStr, { ...(byDate.get(dateStr) || {}), ...currentDay });
             }
          });
 
