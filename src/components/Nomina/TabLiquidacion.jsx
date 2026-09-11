@@ -319,11 +319,16 @@ export default function TabLiquidacion({
   };
 
   const isAnomalo = day.estado === 'incompleto';
-  let defaultStatus = isAnomalo ? 'Novedad' : 'Normal';
-  if (day.estado === 'DESCANSO') defaultStatus = 'Descanso';
+  // Conexión directa: Si el motor central manda una novedad (CALAMIDAD, VACACIONES, etc.), es la prioridad absoluta.
+  let defaultStatus = (day.estado && day.estado !== 'incompleto') 
+      ? day.estado.toUpperCase() 
+      : (isAnomalo ? 'Novedad' : 'Normal');
+
+  if (defaultStatus === 'DESCANSO') defaultStatus = 'Descanso';
   let statusVal = overrides[`${prefix}_novedad_status`] || defaultStatus;
+
   if (day.estado === 'DESCANSO') {
-      statusVal = 'Descanso'; // Forzar estado indiscutible
+      statusVal = 'Descanso';
   }
   
   // Legacy mapping & normalization

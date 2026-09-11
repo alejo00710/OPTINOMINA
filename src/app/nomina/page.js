@@ -435,47 +435,34 @@ export default function NominaPage() {
     console.log("RECALCULATING PAYROLL DATA. Attendance logs:", Object.keys(attendanceLogs).length, "employees");
     
   const getScheduledShift = (emp, dateStr, schedules) => {
-    // 1. Blindaje de Zona Horaria: T12:00:00 asegura que Local y UTC caigan siempre en el mismo día calendario
+    if (!schedules) return null;
+
     const targetDate = new Date(dateStr + "T12:00:00");
     const nameMap = { 1: 'LUNES', 2: 'MARTES', 3: 'MIÉRCOLES', 4: 'JUEVES', 5: 'VIERNES', 6: 'SÁBADO', 0: 'DOMINGO' };
     const diaSemanaMayuscula = nameMap[targetDate.getDay()];
-    
-    // Calcular el lunes de esa semana sin alterar el timezone
-    const d = new Date(dateStr + "T12:00:00");
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    const targetMonday = new Date(d.setDate(diff)).toISOString().substring(0, 10);
-
-    const matchedWeek = schedules.find(w => {
-        const dbDate = String(w.id_semana || w.fecha || w.date || w.fecha_inicio || w.start_date || w.id || ""); 
-        return dbDate.includes(targetMonday);
-    });
-    
-    if (!matchedWeek || !matchedWeek.datos_json) return null;
-
-    // 2. Buscador de Fuerza Bruta: Probar todos los IDs posibles que pueda tener el operario
-    const posiblesIds = [emp.biometric_id, emp.id_biometrico, emp.cedula, emp.id]
-        .filter(Boolean)
-        .map(String)
-        .map(id => id.trim());
-
-    let shiftEncontrado = null;
+    const posiblesIds = [emp.biometric_id, emp.id_biometrico, emp.cedula, emp.id].filter(Boolean).map(String).map(id => id.trim());
     const cleanStr = (str) => String(str).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-    
-    for (const id of posiblesIds) {
-        const targetKeyClean = cleanStr(`${id}_${diaSemanaMayuscula}`);
-        
-        // Búsqueda profunda ignorando tildes (ej. SÁBADO vs SABADO)
-        for (const [k, v] of Object.entries(matchedWeek.datos_json)) {
-            if (cleanStr(k) === targetKeyClean) {
-                shiftEncontrado = v;
-                break;
+
+    // Extraer todos los objetos JSON disponibles, sin importar cómo se llame la semana
+    let jsonAExplorar = [];
+    if (Array.isArray(schedules)) {
+        jsonAExplorar = schedules.map(w => w.datos_json || w).filter(Boolean);
+    } else {
+        jsonAExplorar = [schedules];
+    }
+
+    // Buscar directamente la llave (ej. 79_LUNES) en todos los registros
+    for (const jsonObj of jsonAExplorar) {
+        for (const id of posiblesIds) {
+            const targetKeyClean = cleanStr(`${id}_${diaSemanaMayuscula}`);
+            for (const [k, v] of Object.entries(jsonObj)) {
+                if (cleanStr(k) === targetKeyClean) {
+                    return v; // Retorna la novedad (ej. CALAMIDAD) inmediatamente
+                }
             }
         }
-        if (shiftEncontrado) break; // Si lo encuentra con el ID 79, detiene la búsqueda
     }
-    
-    return shiftEncontrado;
+    return null;
   };
 
     return nominaRows.map(emp => {
@@ -487,10 +474,17 @@ export default function NominaPage() {
          const existingLog = logs.find(l => l.dia === date);
          const dayLog = existingLog ? { ...existingLog } : { dia: date, hr_ent: "-", hr_sal: "-", hr_ent_desc1: "-", hr_sal_desc1: "-", hr_ent_desc2: "-", hr_sal_desc2: "-" };
          const scheduledShift = getScheduledShift(emp, date, weeklySchedules);
+         const turnoStr = String(scheduledShift || "").toUpperCase().trim();
 
          // --- INYECCIÓN DE CONTEXTO PARA EL LIQUIDADOR ---
          dayLog.cedula = cedula;
          dayLog.turno = scheduledShift;
+         
+         // CONEXIÓN MAESTRA: Si el horario semanal dicta novedad o descanso, el día nace con esa información
+         if (turnoStr && !["NORMAL", "DIURNO", "NOCTURNO", "TURNO", ""].includes(turnoStr)) {
+             dayLog.estado = turnoStr;
+             dayLog.novedad = turnoStr;
+         }
          // --- FIN INYECCIÓN ---
 
          const prefix = `${cedula}_${date}`;
@@ -515,9 +509,19 @@ processedLogs.forEach(day => {
     const esTurnoNormal = ["NORMAL", "DESCANSO", "DIURNO", "NOCTURNO", "TURNO"].some(t => turnoValor.includes(t)) || turnoValor === "";
 
     // Si el turno tiene una novedad explícita (ej. CALAMIDAD), gana el turno. Si es un turno normal o vacío, lee el biométrico.
-    const estadoRaw = (!esTurnoNormal && turnoValor) 
-        ? turnoValor 
-        : String(day.estado_marcacion || day.estado || day.observacion || day.novedad || "").toUpperCase().trim();
+    // 1. Prioridad Absoluta: El cambio manual en la pantalla (override)
+    const manualOverride = overrides[`${cedula}_${day.dia}_novedad_status`];
+
+    let estadoRaw;
+    if (manualOverride) {
+        estadoRaw = String(manualOverride).toUpperCase().trim();
+    } else if (!esTurnoNormal && turnoValor) {
+        // 2. Prioridad Secundaria: La novedad programada en el horario semanal
+        estadoRaw = turnoValor;
+    } else {
+        // 3. Fallback: El estado crudo del biométrico o vacío
+        estadoRaw = String(day.estado_marcacion || day.estado || day.observacion || day.novedad || "").toUpperCase().trim();
+    }
     const estado = estadoRaw === "" ? "NORMAL" : estadoRaw;
 
     // 1. Solo NORMAL, NOVEDAD y DESCANSO cuentan como día ordinario pagado.
@@ -616,14 +620,21 @@ processedLogs.forEach(day => {
       const extFestivasParaCalculo = getValExactoInput('extras_festivas', finalExtFesDiu + finalExtFesNoc);
 
       const resumenNov = novedadesResumen || {};
-      const dias_vacaciones = resumenNov['VACACIONES']?.length || 0;
-      const dias_lic_rem = resumenNov['LICENCIA REMUNERADA']?.length || 0;
-      const dias_lic_norem = resumenNov['LICENCIA NO REMUNERADA']?.length || 0;
-      const dias_incap_at = resumenNov['INCAPACIDAD ACCIDENTE LABORAL']?.length || 0;
-      const dias_calamidad = resumenNov['CALAMIDAD']?.length || 0;
-      const dias_sancion = resumenNov['SANCIONADO']?.length || 0;
-      
-      const dias_ausentes_total = (dias_vacaciones || 0) + (dias_lic_rem || 0) + (dias_lic_norem || 0) + (diasIncapacidad || 0) + (dias_incap_at || 0) + (dias_calamidad || 0) + (dias_sancion || 0);
+
+      // Helper para dar prioridad absoluta a lo que el usuario edite en las tarjetas visuales
+      const getDiaOverride = (campo, rawValue) => {
+          const val = overrides[`${cedula}_${campo}`];
+          return val !== undefined && val !== "" ? Number(val) : rawValue;
+      };
+
+      const dias_vacaciones = getDiaOverride('dias_vacaciones', resumenNov['VACACIONES']?.length || 0);
+      const dias_lic_rem = getDiaOverride('dias_lic_rem', resumenNov['LICENCIA REMUNERADA']?.length || 0);
+      const dias_lic_norem = getDiaOverride('dias_lic_norem', resumenNov['LICENCIA NO REMUNERADA']?.length || 0);
+      const dias_incap_at = getDiaOverride('dias_incap_at', resumenNov['INCAPACIDAD ACCIDENTE LABORAL']?.length || 0);
+      const dias_calamidad = getDiaOverride('dias_calamidad', resumenNov['CALAMIDAD']?.length || 0);
+      const dias_sancion = getDiaOverride('dias_sancion', resumenNov['SANCIONADO']?.length || 0);
+
+      const dias_ausentes_total = (dias_vacaciones || 0) + (dias_lic_rem || 0) + (dias_lic_norem || 0) + (typeof diasIncapacidad !== 'undefined' ? diasIncapacidad : 0) + (dias_incap_at || 0) + (dias_calamidad || 0) + (dias_sancion || 0);
 
       // MOTOR MATEMÁTICO EN CASCADA
       let variables = {
@@ -719,7 +730,7 @@ processedLogs.forEach(day => {
       };
 
       // FASE 1: Devengados Base
-      const fase1 = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento', 'valor_vacaciones', 'valor_lic_rem', 'valor_lic_norem', 'valor_incap_at', 'valor_calamidad', 'valor_sancion'];
+      const fase1 = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento', 'val_vacaciones', 'val_lic_rem', 'val_lic_norem', 'val_incap_at', 'val_calamidad', 'val_sancion'];
       // FASE 2: Suma de Devengados (SOLO LLAVES OFICIALES)
       const fase2 = ['total_devengados', 'ibc_seguridad_social', 'ibc_fsp'];
       // FASE 3: Deducciones Base
@@ -734,6 +745,13 @@ processedLogs.forEach(day => {
           fase.forEach(campoId => {
               computeField(campoId); 
           });
+      });
+
+      console.log("💰 ESCÁNER DE NÓMINA - Cédula:", cedula, {
+          dias_capturados: variables.dias_calamidad,
+          salario: variables.salario_base,
+          formula: activeFormulas['val_calamidad'] || DEFAULT_FORMULAS['val_calamidad'],
+          resultado_final_plata: variables.val_calamidad
       });
 
       // Si después de todo, total_pagar es 0 o NaN, FUERZA la resta matemática:
@@ -764,7 +782,19 @@ processedLogs.forEach(day => {
         transporte: variables['transporte'] || 0,
         rodamiento: variables['rodamiento'] || 0,
         dias_incapacidad: diasIncapacidad,
+        dias_vacaciones: variables['dias_vacaciones'] || 0,
+        dias_lic_rem: variables['dias_lic_rem'] || 0,
+        dias_lic_norem: variables['dias_lic_norem'] || 0,
+        dias_incap_at: variables['dias_incap_at'] || 0,
+        dias_calamidad: variables['dias_calamidad'] || 0,
+        dias_sancion: variables['dias_sancion'] || 0,
         incapacidad: variables['incapacidad'] || 0,
+        val_vacaciones: variables['val_vacaciones'] || 0,
+        val_lic_rem: variables['val_lic_rem'] || 0,
+        val_lic_norem: variables['val_lic_norem'] || 0,
+        val_incap_at: variables['val_incap_at'] || 0,
+        val_calamidad: variables['val_calamidad'] || 0,
+        val_sancion: variables['val_sancion'] || 0,
         total_devengados: variables['total_devengados'] || 0,
         total_devengado: variables['total_devengados'] || 0, // Alias para UI
         ibc_seguridad_social: variables['ibc_seguridad_social'] || 0,
@@ -1552,38 +1582,6 @@ const handleSaveToCloud = async () => {
              const valorDiaMinimo = smlvBase / 30;
              const resumen = workerData.novedadesResumen || {};
 
-             // Extraer días (U) desde el resumen
-             const dias_vacaciones = resumen['VACACIONES']?.length || 0;
-             const dias_lic_rem = resumen['LICENCIA REMUNERADA']?.length || 0;
-             const dias_lic_norem = resumen['LICENCIA NO REMUNERADA']?.length || 0;
-             const dias_incapacidad = resumen['INCAPACIDAD GENERAL']?.length || 0; 
-             const dias_incap_at = resumen['INCAPACIDAD ACCIDENTE LABORAL']?.length || 0;
-             const dias_calamidad = resumen['CALAMIDAD']?.length || 0;
-             const dias_sancion = resumen['SANCIONADO']?.length || 0;
-
-             // Inyectar (U) en workerData para que EditableCell los lea
-             workerData.dias_vacaciones = dias_vacaciones;
-             workerData.dias_lic_rem = dias_lic_rem;
-             workerData.dias_lic_norem = dias_lic_norem;
-             workerData.dias_incapacidad = dias_incapacidad;
-             workerData.dias_incap_at = dias_incap_at;
-             workerData.dias_calamidad = dias_calamidad;
-             workerData.dias_sancion = dias_sancion;
-
-             // Fórmulas de Gerencia (V)
-             workerData.val_vacaciones = valorDia * dias_vacaciones;
-             workerData.val_lic_rem = valorDia * dias_lic_rem;
-             workerData.val_calamidad = valorDia * dias_calamidad;
-             workerData.val_incap_at = valorDia * dias_incap_at;
-
-             // Novedades no pagas
-             workerData.val_lic_norem = 0;
-             workerData.val_sancion = 0;
-
-             // Incapacidad EG (66.67% con piso de SMLV)
-             const valorDiaEG = (valorDia * (2/3));
-             workerData.incapacidad = valorDiaEG < valorDiaMinimo ? (valorDiaMinimo * dias_incapacidad) : (valorDiaEG * dias_incapacidad);
-
              // --- FIN INYECCIÓN ---
              
              // 1. Campos que vienen de la pestaña Liquidación (Horas y Días)
@@ -1593,9 +1591,10 @@ const handleSaveToCloud = async () => {
 
              // 2. Campos con fórmulas matemáticas en la nómina (Dinero y Totales)
              const camposFormulados = [
-               'sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 
-               'transporte', 'incapacidad', 'total_devengados', 'salud', 'pension', 'solidaridad', 
-               'total_deducciones', 'total_pagar', 'neto_pagar', 'verificacion'
+                 'sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 
+                 'transporte', 'incapacidad', 'total_devengados', 'salud', 'pension', 'solidaridad', 
+                 'total_deducciones', 'total_pagar', 'neto_pagar', 'verificacion',
+                 'val_vacaciones', 'val_lic_rem', 'val_lic_norem', 'val_incap_at', 'val_calamidad', 'val_sancion'
              ];
 
              // COMPENSACIÓN CRUZADA:
