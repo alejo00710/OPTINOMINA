@@ -177,95 +177,44 @@ export default function NominaPage() {
     }
   };
 
-  const handleCloseQuincena = async () => {
+  const handleCerrarQuincena = async () => {
+    if (!window.confirm("🚨 ALERTA: Estás a punto de CERRAR esta quincena. Se guardará una fotografía estática e inmutable de todos los cálculos. ¿Estás absolutamente seguro de continuar?")) return;
+    
     setIsClosing(true);
     try {
       const nominaParaGuardar = typeof filteredPayrollData !== 'undefined' ? filteredPayrollData : nominaRows;
 
-      // Helper para limpiar strings inválidos de tipo tiempo ("-", "--:--")
-      const sanitizeTime = (val) => {
-        if (!val || typeof val !== 'string' || val.includes('-')) return null;
-        return val.trim() || null;
-      };
+      // 1. Calcular KPIs globales sumando toda la grilla
+      const total_devengado = nominaParaGuardar.reduce((acc, emp) => acc + (Number(emp.total_devengados) || 0), 0);
+      const total_deducido = nominaParaGuardar.reduce((acc, emp) => acc + (Number(emp.total_deducciones) || 0), 0);
+      const total_neto_pagado = nominaParaGuardar.reduce((acc, emp) => acc + (Number(emp.neto_pagar) || 0), 0);
+      const total_empleados = nominaParaGuardar.length;
 
-      // 1. Construir payload relacional (Totales Consolidados)
-      const totales_consolidados = nominaParaGuardar.map(emp => ({
-        empleado_cedula: emp.cedula,
-        biometric_id: emp.biometric_id || emp.id_biometrico || null,
-        dias_pagados: Number(emp.dias_pagados) || 0,
-        total_devengado: Number(emp.total_devengados) || 0,
-        total_deducido: Number(emp.total_deducciones) || 0,
-        neto_a_pagar: Number(emp.neto_pagar) || 0,
-        horas_pendientes: Number(emp.horas_pendientes) || 0,
-        
-        aux_transporte: Number(emp.transporte) || 0,
-        rodamiento: Number(emp.rodamiento) || 0,
-        recargo_nocturno: Number(emp.recargo_nocturno) || 0,
-        valor_horas_extras: (Number(emp.val_extras_diurnas) || 0) + (Number(emp.val_extras_nocturnas) || 0) + (Number(emp.val_extras_festivas) || 0),
-        incapacidad: Number(emp.incapacidad) || 0,
-        salud: Number(emp.salud) || 0,
-        pension: Number(emp.pension) || 0,
-        fondo_solidaridad: Number(emp.solidaridad) || 0,
-        poliza_bolivar: Number(emp.poliza_bolivar) || 0,
-        poliza_sura: Number(emp.poliza_sura) || 0,
-        optica: Number(emp.optica) || 0,
-        prestamo: Number(emp.prestamos) || 0,
-        libranza_comfama: Number(emp.libranza_comfama) || 0
-      }));
-
-      // 2. Construir payload de Liquidación Diaria
-      const dias_detallados = [];
-      nominaParaGuardar.forEach(emp => {
-        if (emp.workerDays && Array.isArray(emp.workerDays)) {
-          emp.workerDays.forEach(day => {
-            const isDescanso = day.estado === 'DESCANSO';
-            dias_detallados.push({
-              empleado_cedula: emp.cedula,
-              biometric_id: emp.biometric_id || emp.id_biometrico || null,
-              fecha: day.dia,
-              estado_marcacion: isDescanso ? 'DESCANSO' : (day.estado || 'Normal'),
-              reloj_entrada: sanitizeTime(day.hr_ent),
-              reloj_salida: sanitizeTime(day.hr_sal),
-              horas_laboradas: Number(day.hr_lab) || 0,
-              descuento_almuerzo: Number(day.desc_lunch) || 0,
-              extras_diurnas: Number(day.ext_diu) || 0,
-              extras_nocturnas: Number(day.ext_noc) || 0,
-              
-              extras_festivas: (Number(day.ext_fes_diu) || 0) + (Number(day.ext_fes_noc) || 0),
-              ordinarias_festivas: (Number(day.fes_diu) || 0) + (Number(day.fes_noc) || 0),
-              observacion: day.observacion || day.nota || null
-            });
-          });
-        }
-      });
-
+      // 2. Construir el objeto de inserción
       const payload = {
-        periodo: {
-          identificador: 'NÓMINA GENERAL',
-          fecha_inicio: startDate,
-          fecha_fin: endDate
-        },
-        totales_consolidados,
-        dias_detallados
+        identificador: `Quincena del ${startDate} al ${endDate}`,
+        fecha_inicio: startDate,
+        fecha_fin: endDate,
+        estado: 'CERRADA',
+        total_devengado,
+        total_deducido,
+        total_neto_pagado,
+        total_empleados,
+        empleados_jsonb: nominaParaGuardar,
+        variables_globales: {
+          smlv: globalSmmlv,
+          aux_transporte: globalAuxTransporte
+        }
       };
 
-      const res = await fetch('/api/cerrar-quincena', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      // 3. Insertar directamente en historico_nominas_v2 vía Supabase
+      const { error } = await supabase
+        .from('historico_nominas_v2')
+        .insert([payload]);
 
-      const jsonRes = await res.json();
-      if (!res.ok) throw new Error(jsonRes.error || 'Error en el API');
+      if (error) throw error;
 
-      // Guardar legacy backup en historial_nominas (opcional, para compatibilidad hacia atrás temporalmente)
-      // await supabase.from('historial_nominas').insert([{
-      //   identificador: 'NÓMINA GENERAL',
-      //   rango_quincena: `${startDate} al ${endDate}`,
-      //   payload_json: { rango_fechas: { inicio: startDate, fin: endDate }, asistencias_globales: attendanceLogs, modificaciones_manuales: overrides, nomina_calculada: nominaParaGuardar }
-      // }]);
-
-      // Limpieza de estado en la nube tras guardado exitoso
+      // 4. Limpiar estado activo si el proceso fue exitoso
       await supabase
         .from('optimoldes_payroll')
         .update({ attendance_logs: {}, overrides: {} })
@@ -275,14 +224,15 @@ export default function NominaPage() {
       setAttendanceLogs({});
 
       setToast({
-        message: "¡Nómina cerrada y enviada al histórico con éxito!",
+        message: "¡Nómina cerrada exitosamente! Fotografía guardada.",
         type: "success"
       });
       setTimeout(() => setToast(null), 4000);
+      
     } catch (error) {
-      console.error("Error al cerrar quincena:", error);
+      console.error("Error al cerrar quincena en V2:", error);
       setToast({
-        message: "Error al guardar el histórico",
+        message: "Error crítico al guardar el histórico.",
         type: "error"
       });
       setTimeout(() => setToast(null), 4000);
@@ -1255,15 +1205,14 @@ const handleSaveToCloud = async () => {
           </button>
 
           <button
-            onClick={handleCloseQuincena}
-            disabled={isClosing}
-            className={
-              isClosing
-                ? "bg-emerald-600 opacity-70 cursor-wait text-white px-4 py-2 rounded font-bold shadow-md text-xs inline-flex items-center gap-2 transition-all"
-                : "bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded font-bold shadow-md text-xs inline-flex items-center gap-2 transition-all active:scale-95 duration-200"
-            }
+            onClick={handleCerrarQuincena}
+            disabled={isClosing || !filteredPayrollData || filteredPayrollData.length === 0}
+            className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-2
+              ${isClosing 
+                ? "bg-slate-400 text-slate-200 cursor-not-allowed border border-slate-500" 
+                : "bg-red-600 text-white hover:bg-red-700 hover:shadow-red-500/30 hover:shadow-lg active:scale-95 border border-red-800"}`}
           >
-            {isClosing ? "⏳ Guardando en la nube..." : "✅ Guardar Quincena"}
+            {isClosing ? "⏳ Congelando..." : "🔒 Cerrar Quincena (Ultimátum)"}
           </button>
           
           <button
@@ -1673,7 +1622,7 @@ const handleSaveToCloud = async () => {
              };
 
              const devengosBasicos = ['salario', 'dias_pagados', 'sueldo', 'transporte', 'rodamiento', 'comisiones', 'bonificacion_no_salarial', 'bonificacion', 'total_devengados'];
-             const novedadesFinancieras = ['dias_vacaciones', 'val_vacaciones', 'dias_lic_rem', 'val_lic_rem', 'dias_lic_norem', 'val_lic_norem', 'dias_incapacidad', 'incapacidad', 'dias_incap_at', 'val_incap_at', 'dias_calamidad', 'val_calamidad', 'dias_sancion', 'val_sancion'];
+             const novedadesFinancieras = ['dias_lic_rem', 'val_lic_rem', 'dias_lic_norem', 'val_lic_norem', 'dias_incapacidad', 'incapacidad', 'dias_incap_at', 'val_incap_at', 'dias_calamidad', 'val_calamidad', 'dias_sancion', 'val_sancion'];
              const suplementario = ['horas_diurnas', 'horas_nocturnas', 'extras_diurnas', 'extras_nocturnas', 'extras_festivas', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas'];
              const deducciones = ['salud', 'pension', 'solidaridad', 'prestamos', 'saldo_prestamo', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'poliza_sura', 'optica', 'celular', 'retencion', 'total_deducciones'];
              const resultados = ['total_pagar', 'neto_pagar', 'verificacion'];

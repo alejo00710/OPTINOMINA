@@ -222,7 +222,7 @@ export const DEFAULT_FORMULAS = {
   val_sancion: '0',
   ibc_seguridad_social: 'sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + comisiones + incapacidad',
   ibc_fsp: 'sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + incapacidad',
-  total_devengados: 'sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + comisiones + transporte + rodamiento + incapacidad',
+  total_devengados: 'sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + comisiones + transporte + rodamiento + incapacidad + val_vacaciones + val_lic_rem + val_incap_at + val_calamidad',
   salud: 'ibc_seguridad_social * 0.04',
   pension: 'ibc_seguridad_social * 0.04',
   solidaridad: 'ibc_fsp >= (smlv_base * 4) ? ibc_fsp * 0.01 : 0',

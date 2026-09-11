@@ -500,11 +500,50 @@ export default function TabPanelGeneral({
                   
                   {/* Body */}
                   <div className="flex-1 overflow-y-auto p-6 sm:p-8 custom-scrollbar bg-slate-50/50">
-                      <div className="bg-amber-50 rounded-xl p-6 border border-amber-200 text-center border-dashed mt-4">
-                          <p className="text-sm font-medium text-amber-700">
-                              El motor de cálculo está listo. Esperando las fórmulas y reglas de negocio para inyectar los campos dinámicos.
-                          </p>
-                      </div>
+                      {(() => {
+                          const workerData = filteredPayrollData.find(d => d.masterRow?.nombre === vacacionesModal.empleado);
+                          if (!workerData) return null;
+                          
+                          const renderVacacionesCard = (colKey) => {
+                              const col = PLANILLA_COLUMNS.find(c => c.key === colKey);
+                              if (!col) return null;
+                              
+                              const cKey = `${workerData.masterRow.cedula}_${col.key}`;
+                              let val = overrides[cKey] !== undefined ? overrides[cKey] : (workerData[col.key] !== undefined ? workerData[col.key] : "");
+                              
+                              if (col.isCurrency && val !== "") val = Math.round(Number(val));
+                              
+                              const isFormulated = ['val_vacaciones'].includes(col.key);
+                              
+                              return (
+                                  <div key={col.key} className="relative bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
+                                     {isFormulated && (
+                                       <div className="absolute top-2 right-2 text-[10px] text-indigo-500 flex items-center gap-1 mb-1 justify-end font-semibold">
+                                          <span>✨ Formulado</span>
+                                        </div>
+                                     )}
+                                     <span className={`text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-emerald-600 transition-colors ${isFormulated ? 'pr-24' : ''}`} title={col.label}>
+                                       {col.label}
+                                     </span>
+                                     <EditableCell
+                                        value={val}
+                                        onChange={(newVal) => handleCellEdit(cKey, newVal)}
+                                        isOverridden={overrides[cKey] !== undefined}
+                                        isCalculated={col.isCalculated}
+                                        isCurrency={col.isCurrency}
+                                        isDecimal={col.isDecimal}
+                                     />
+                                  </div>
+                              );
+                          };
+
+                          return (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                  {renderVacacionesCard('dias_vacaciones')}
+                                  {renderVacacionesCard('val_vacaciones')}
+                              </div>
+                          );
+                      })()}
                   </div>
               </div>
           </div>,
