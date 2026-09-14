@@ -624,9 +624,17 @@ processedLogs.forEach(day => {
 
       // Helper para evaluar, respetar overrides y guardar en scope variables
       const computeField = (fieldId, formulaFallback = '') => {
+        // Regla de Negocio: Vacaciones pagadas por anticipado
+        if (fieldId === 'val_vacaciones' && overrides[`${cedula}_vacaciones_pagadas`] === true) {
+            variables[fieldId] = 0;
+            return 0;
+        }
+
         const aliasMap = {
-          'total_devengados': ['total_devengados', 'total_devengado'],
-          'total_deducciones': ['total_deducciones', 'total_deducido'],
+          'sueldo': ['sueldo_calculado', 'sueldo_basico'],
+          'total_devengados': ['total_devengado', 'total_devengos'],
+          'total_deducciones': ['total_deducido', 'total_descuentos'],
+          'neto_pagar': ['neto_a_pagar', 'neto'],
           'total_pagar': ['total_pagar', 'total_a_pagar']
         };
 
