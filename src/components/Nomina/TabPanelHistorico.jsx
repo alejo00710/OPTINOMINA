@@ -1,5 +1,3 @@
-"use client";
-
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/utils/supabase';
@@ -8,7 +6,7 @@ import ColillaPDF from '@/components/Contabilidad/ColillaPDF';
 
 const PDFViewer = dynamic(() => import('@react-pdf/renderer').then(mod => mod.PDFViewer), { ssr: false });
 
-export default function ContabilidadDashboard() {
+export default function TabPanelHistorico() {
   const [nominas, setNominas] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -84,11 +82,11 @@ export default function ContabilidadDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 md:p-12 animate-stitch">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <div className="w-full animate-stitch">
+      <div className="space-y-8">
         
         {/* Header */}
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-4">
           <div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
               <Wallet className="text-emerald-600" size={32} />
@@ -170,7 +168,7 @@ export default function ContabilidadDashboard() {
                           {loadingPDFId === nomina.id ? (
                             <><Loader2 size={14} className="animate-spin" /> Cargando...</>
                           ) : (
-                            <>Ver Colillas <ArrowRight size={14} /></>
+                            <>Sábana Consolidada <ArrowRight size={14} /></>
                           )}
                         </button>
                       </td>
@@ -191,7 +189,7 @@ export default function ContabilidadDashboard() {
             <div>
               <h2 className="text-white font-bold text-xl flex items-center gap-2">
                 <Wallet className="text-emerald-500" size={24} /> 
-                Visor de Colillas
+                Sábana Consolidada Contable
               </h2>
               <p className="text-slate-400 text-sm mt-1">{selectedQuincena} — {empleadosPDF.length} empleados</p>
             </div>
@@ -202,8 +200,8 @@ export default function ContabilidadDashboard() {
               <X size={20} />
             </button>
           </div>
-          <div className="flex-1 w-full bg-slate-800 relative">
-             <PDFViewer width="100%" height="100%" className="border-none">
+          <div className="flex-1 w-full bg-slate-800 relative h-[85vh]">
+             <PDFViewer width="100%" height="100%" className="border-none" style={{ height: '85vh', width: '100%' }}>
                <ColillaPDF empleados={empleadosPDF} identificador={selectedQuincena} />
              </PDFViewer>
           </div>

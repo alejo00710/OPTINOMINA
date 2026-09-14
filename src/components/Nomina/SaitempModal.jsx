@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Save, Trash2, Plus } from 'lucide-react';
 
-export default function SaitempModal({ isOpen, onClose, employee }) {
+export default function SaitempModal({ isOpen, onClose, employee, onSave }) {
   const [novedades, setNovedades] = useState([
     { id: 1, novedad: '', fechaInicio: '', fechaFinal: '', totalDias: '' }
   ]);
@@ -55,9 +55,17 @@ export default function SaitempModal({ isOpen, onClose, employee }) {
     setNovedades(prev => prev.filter(nov => nov.id !== id));
   };
 
-  const handleSave = () => {
-    console.log("Reporte SAITEMP guardado para", employee.nombre, { novedades, ...formData });
-    onClose();
+  const handleSave = async () => {
+    try {
+      if (typeof onSave === 'function') {
+        await onSave({ novedades, ...formData });
+      }
+      console.log("Reporte SAITEMP guardado para", employee?.nombre);
+      onClose();
+    } catch (e) {
+      console.error(e);
+      alert("Error al guardar formato Saitemp");
+    }
   };
 
   const novedadesOptions = [

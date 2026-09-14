@@ -462,6 +462,26 @@ export default function TabPanelGeneral({
         isOpen={isSaitempModalOpen} 
         onClose={() => setIsSaitempModalOpen(false)} 
         employee={empleadoSaitemp} 
+        onSave={async (data) => {
+          if (!empleadoSaitemp) return;
+          const cedula = empleadoSaitemp.cedula;
+          if (data.recargoNocturno !== '') handleCellEdit(`${cedula}_horas_nocturnas`, data.recargoNocturno);
+          if (data.horasExtrasDiurnas !== '') handleCellEdit(`${cedula}_extras_diurnas`, data.horasExtrasDiurnas);
+          if (data.horasExtrasNocturnas !== '') handleCellEdit(`${cedula}_extras_nocturnas`, data.horasExtrasNocturnas);
+          if (data.horasExtrasFestivasDiurnas !== '') handleCellEdit(`${cedula}_extras_festivas`, data.horasExtrasFestivasDiurnas);
+          if (data.descuentos !== '') handleCellEdit(`${cedula}_prestamos`, data.descuentos);
+          if (data.comisiones !== '') handleCellEdit(`${cedula}_comisiones`, data.comisiones);
+          if (data.auxilios !== '') handleCellEdit(`${cedula}_rodamiento`, data.auxilios);
+          
+          if (data.novedades && data.novedades.length > 0) {
+              const nov = data.novedades[0];
+              if (nov.novedad && nov.totalDias !== '') {
+                  handleCellEdit(`${cedula}_dias_incapacidad`, nov.totalDias);
+                  handleCellEdit(`${cedula}_incapacidad`, nov.novedad);
+              }
+          }
+          alert("Datos transferidos a la planilla.");
+        }}
       />
 
       {/* MODAL DE VACACIONES */}
@@ -484,10 +504,10 @@ export default function TabPanelGeneral({
                       </div>
                       <div className="flex items-center gap-4">
                           <button 
-                              disabled
-                              className="bg-blue-600 opacity-50 text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all text-sm inline-flex items-center gap-2 cursor-not-allowed"
+                              onClick={() => setVacacionesModal({ isOpen: false, empleado: null })}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all text-sm inline-flex items-center gap-2"
                           >
-                              🔒 Guardar Cambios
+                              ✅ Listo
                           </button>
                           <button 
                               onClick={() => setVacacionesModal({ isOpen: false, empleado: null })}

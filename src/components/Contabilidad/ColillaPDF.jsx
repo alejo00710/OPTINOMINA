@@ -3,7 +3,7 @@ import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 
 const styles = StyleSheet.create({
   page: {
-    padding: 40,
+    padding: 30,
     fontFamily: 'Helvetica',
     backgroundColor: '#ffffff',
   },
@@ -17,159 +17,119 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   companyName: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#0f172a',
   },
   title: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#64748b',
     textTransform: 'uppercase',
   },
-  employeeInfo: {
+  employeeBlock: {
+    marginBottom: 25,
+  },
+  employeeHeader: {
+    backgroundColor: '#1e293b',
+    padding: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: '#f8fafc',
-    padding: 12,
-    borderRadius: 4,
-    marginBottom: 20,
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
   },
-  infoCol: {
+  empHeaderCol: {
     flex: 1,
   },
-  infoLabel: {
-    fontSize: 9,
-    color: '#64748b',
-    marginBottom: 2,
+  empLabel: {
+    fontSize: 7,
+    color: '#94a3b8',
     textTransform: 'uppercase',
+    marginBottom: 2,
   },
-  infoValue: {
+  empValue: {
     fontSize: 11,
     fontWeight: 'bold',
-    color: '#0f172a',
+    color: '#ffffff',
   },
-  table: {
-    width: 'auto',
-    borderStyle: 'solid',
+  section: {
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    borderRightWidth: 0,
-    borderBottomWidth: 0,
-    marginBottom: 20,
-  },
-  tableRow: {
-    margin: 'auto',
-    flexDirection: 'row',
-  },
-  tableRowHeader: {
-    margin: 'auto',
-    flexDirection: 'row',
-    backgroundColor: '#f1f5f9',
-  },
-  tableColLeft: {
-    width: '60%',
-    borderStyle: 'solid',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderLeftWidth: 0,
     borderTopWidth: 0,
   },
-  tableColRight: {
-    width: '40%',
-    borderStyle: 'solid',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderLeftWidth: 0,
-    borderTopWidth: 0,
-  },
-  tableCellHeader: {
-    margin: 6,
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#334155',
-  },
-  tableCell: {
-    margin: 6,
-    fontSize: 10,
-    color: '#475569',
-  },
-  tableCellMoney: {
-    margin: 6,
-    fontSize: 10,
-    color: '#475569',
-    textAlign: 'right',
+  sectionTitleBox: {
+    backgroundColor: '#f8fafc',
+    padding: 6,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 9,
     fontWeight: 'bold',
-    color: '#0f172a',
-    marginBottom: 8,
-    marginTop: 10,
+    color: '#334155',
     textTransform: 'uppercase',
   },
-  totalsContainer: {
+  detailRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    padding: 6,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  totalsBox: {
-    width: '50%',
-    backgroundColor: '#f8fafc',
-    padding: 12,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+  detailConcept: {
+    fontSize: 8,
+    color: '#475569',
+    flex: 1,
+  },
+  detailValue: {
+    fontSize: 9,
+    color: '#0f172a',
+    textAlign: 'right',
+    fontWeight: 'medium',
+    width: 120,
   },
   totalRow: {
     flexDirection: 'row',
+    backgroundColor: '#f1f5f9',
+    padding: 8,
+    paddingHorizontal: 10,
+    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
   },
-  totalLabel: {
-    fontSize: 10,
-    color: '#64748b',
+  totalConcept: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#0f172a',
   },
   totalValue: {
     fontSize: 10,
-    color: '#0f172a',
     fontWeight: 'bold',
+    color: '#0f172a',
+    textAlign: 'right',
   },
-  netoRow: {
+  finalRow: {
     flexDirection: 'row',
+    backgroundColor: '#10b981',
+    padding: 10,
+    alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#cbd5e1',
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
   },
-  netoLabel: {
+  finalConcept: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  finalValue: {
     fontSize: 12,
     fontWeight: 'bold',
-    color: '#0f172a',
-  },
-  netoValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#10b981',
-  },
-  footer: {
-    position: 'absolute',
-    bottom: 40,
-    left: 40,
-    right: 40,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  signatureBox: {
-    width: 200,
-    borderTopWidth: 1,
-    borderTopColor: '#94a3b8',
-    alignItems: 'center',
-    paddingTop: 8,
-  },
-  signatureText: {
-    fontSize: 10,
-    color: '#64748b',
+    color: '#ffffff',
+    textAlign: 'right',
   }
 });
 
@@ -178,153 +138,146 @@ const formatMoney = (val) => {
   return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(val);
 };
 
-export default function ColillaPDF({ empleados = [], identificador = "COMPROBANTE DE PAGO" }) {
+const DetailRow = ({ label, value, isMoney = true, forceShow = false }) => {
+  if (!forceShow && (value === undefined || value === null || value === '' || Number(value) === 0)) return null;
+  const displayValue = isMoney ? formatMoney(value) : value;
+  return (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailConcept}>{label}</Text>
+      <Text style={styles.detailValue}>{displayValue}</Text>
+    </View>
+  );
+};
+
+const DetailRowCombined = ({ label, qty, qtyLabel, money }) => {
+  const numQty = Number(qty) || 0;
+  const numMoney = Number(money) || 0;
+  if (numQty === 0 && numMoney === 0) return null;
+  
+  return (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailConcept}>{label} {numQty > 0 ? `(${numQty} ${qtyLabel})` : ''}</Text>
+      <Text style={styles.detailValue}>{numMoney !== 0 ? formatMoney(money) : '-'}</Text>
+    </View>
+  );
+};
+
+export default function ColillaPDF({ empleados = [], identificador = "SÁBANA CONSOLIDADA DETALLADA" }) {
   return (
     <Document>
-      {empleados.map((emp, index) => (
-        <Page key={emp.cedula || index} size="LETTER" style={styles.page}>
-          
-          {/* Header */}
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.companyName}>OPTIMOLDES</Text>
-            </View>
-            <View>
-              <Text style={styles.title}>{identificador}</Text>
-            </View>
+      <Page size="A4" orientation="portrait" style={styles.page}>
+        
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.companyName}>OPTIMOLDES</Text>
           </View>
-
-          {/* Employee Info */}
-          <View style={styles.employeeInfo}>
-            <View style={styles.infoCol}>
-              <Text style={styles.infoLabel}>Nombre del Empleado</Text>
-              <Text style={styles.infoValue}>{emp.nombre}</Text>
-            </View>
-            <View style={styles.infoCol}>
-              <Text style={styles.infoLabel}>Documento</Text>
-              <Text style={styles.infoValue}>{emp.cedula}</Text>
-            </View>
-            <View style={styles.infoCol}>
-              <Text style={styles.infoLabel}>Cargo</Text>
-              <Text style={styles.infoValue}>{emp.cargo || 'N/A'}</Text>
-            </View>
-            <View style={styles.infoCol}>
-              <Text style={styles.infoLabel}>Salario Base</Text>
-              <Text style={styles.infoValue}>{formatMoney(emp.salario)}</Text>
-            </View>
+          <View>
+            <Text style={styles.title}>{identificador}</Text>
           </View>
+        </View>
 
-          {/* Devengos */}
-          <Text style={styles.sectionTitle}>Ingresos y Devengos</Text>
-          <View style={styles.table}>
-            <View style={styles.tableRowHeader}>
-              <View style={styles.tableColLeft}><Text style={styles.tableCellHeader}>Concepto</Text></View>
-              <View style={styles.tableColRight}><Text style={styles.tableCellHeader}>Valor</Text></View>
+        {empleados.map((emp, index) => {
+          return (
+            <View style={styles.employeeBlock} key={emp.cedula || index} wrap={false}>
+              
+              {/* Encabezado */}
+              <View style={styles.employeeHeader}>
+                <View style={styles.empHeaderCol}>
+                  <Text style={styles.empLabel}>Nombre</Text>
+                  <Text style={styles.empValue}>{emp.nombre}</Text>
+                </View>
+                <View style={styles.empHeaderCol}>
+                  <Text style={styles.empLabel}>Documento</Text>
+                  <Text style={styles.empValue}>{emp.cedula}</Text>
+                </View>
+                <View style={styles.empHeaderCol}>
+                  <Text style={styles.empLabel}>Cargo</Text>
+                  <Text style={styles.empValue}>{emp.cargo || 'N/A'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.section}>
+                
+                {/* Devengos Básicos */}
+                <View style={styles.sectionTitleBox}>
+                  <Text style={styles.sectionTitle}>Devengos Básicos</Text>
+                </View>
+                <DetailRow label="Salario Base" value={emp.salario} forceShow={true} />
+                <DetailRow label="Días Pagados" value={`${emp.dias_pagados || 0} días`} isMoney={false} forceShow={true} />
+                <DetailRow label="Sueldo" value={emp.sueldo} forceShow={true} />
+                <DetailRow label="Comisiones" value={emp.comisiones} />
+                <DetailRow label="Auxilio de Transporte" value={emp.transporte} />
+                <DetailRow label="Rodamiento" value={emp.rodamiento} />
+                <DetailRow label="Bonif. No Salarial" value={emp.bonificacion_no_salarial || emp.bonificacion} />
+                
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalConcept}>Total Devengado</Text>
+                  <Text style={styles.totalValue}>{formatMoney(emp.total_devengados || emp.total_devengado)}</Text>
+                </View>
+
+                {/* Liquidación de Novedades */}
+                <View style={styles.sectionTitleBox}>
+                  <Text style={styles.sectionTitle}>Liquidación de Novedades</Text>
+                </View>
+                <DetailRowCombined label="Incapacidad" qty={emp.dias_incapacidad} qtyLabel="días" money={emp.incapacidad} />
+                <DetailRowCombined label="Lic. Remunerada" qty={emp.dias_lic_rem} qtyLabel="días" money={emp.val_lic_rem} />
+                <DetailRowCombined label="Lic. No Remunerada" qty={emp.dias_lic_norem} qtyLabel="días" money={emp.val_lic_norem} />
+                <DetailRowCombined label="Incap. AT" qty={emp.dias_incap_at} qtyLabel="días" money={emp.val_incap_at} />
+                <DetailRowCombined label="Calamidad" qty={emp.dias_calamidad} qtyLabel="días" money={emp.val_calamidad} />
+                <DetailRowCombined label="Sanción" qty={emp.dias_sancion} qtyLabel="días" money={emp.val_sancion} />
+                <DetailRow label="Vacaciones" value={emp.val_vacaciones} />
+
+                {/* Trabajo Suplementario */}
+                <View style={styles.sectionTitleBox}>
+                  <Text style={styles.sectionTitle}>Trabajo Suplementario</Text>
+                </View>
+                <DetailRowCombined label="Horas Diurnas" qty={emp.horas_diurnas} qtyLabel="hrs" money={0} />
+                <DetailRowCombined label="Horas Nocturnas" qty={emp.horas_nocturnas} qtyLabel="hrs" money={0} />
+                <DetailRowCombined label="Ext. Diurnas" qty={emp.extras_diurnas} qtyLabel="hrs" money={emp.val_extras_diurnas} />
+                <DetailRowCombined label="Ext. Nocturnas" qty={emp.extras_nocturnas} qtyLabel="hrs" money={emp.val_extras_nocturnas} />
+                <DetailRowCombined label="Ext. Festivas" qty={emp.extras_festivas} qtyLabel="hrs" money={emp.val_extras_festivas} />
+                <DetailRow label="Recargo Nocturno" value={emp.recargo_nocturno} />
+
+                {/* Deducciones y Retenciones */}
+                <View style={styles.sectionTitleBox}>
+                  <Text style={styles.sectionTitle}>Deducciones y Retenciones</Text>
+                </View>
+                <DetailRow label="Salud (4%)" value={emp.salud} />
+                <DetailRow label="Pensión (4%)" value={emp.pension} />
+                <DetailRow label="Solidaridad (1%)" value={emp.solidaridad} />
+                <DetailRow label="Préstamos" value={emp.prestamos} />
+                <DetailRow label="Póliza Bolívar" value={emp.poliza_bolivar} />
+                <DetailRow label="Póliza Plenitud" value={emp.poliza_plenitud} />
+                <DetailRow label="Comfama" value={emp.libranza_comfama} />
+                <DetailRow label="Póliza Sura" value={emp.poliza_sura} />
+                <DetailRow label="Óptica" value={emp.optica} />
+                <DetailRow label="Celular" value={emp.celular} />
+                <DetailRow label="Retención" value={emp.retencion} />
+                <DetailRow label="Saldo Préstamo" value={emp.saldo_prestamo} />
+                
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalConcept}>Total Deducido</Text>
+                  <Text style={styles.totalValue}>{formatMoney(emp.total_deducciones || emp.total_deducido)}</Text>
+                </View>
+
+                {/* Liquidación Final */}
+                <View style={styles.sectionTitleBox}>
+                  <Text style={styles.sectionTitle}>Liquidación Final</Text>
+                </View>
+                <DetailRow label="Total a Pagar" value={emp.total_pagar} />
+                <DetailRow label="Verificación (40%)" value={emp.verificacion} />
+                
+                <View style={styles.finalRow}>
+                  <Text style={styles.finalConcept}>NETO A PAGAR</Text>
+                  <Text style={styles.finalValue}>{formatMoney(emp.neto_pagar)}</Text>
+                </View>
+
+              </View>
             </View>
-            
-            {Number(emp.sueldo) > 0 && (
-              <View style={styles.tableRow}>
-                <View style={styles.tableColLeft}><Text style={styles.tableCell}>Sueldo Básico ({emp.dias_pagados} días)</Text></View>
-                <View style={styles.tableColRight}><Text style={styles.tableCellMoney}>{formatMoney(emp.sueldo)}</Text></View>
-              </View>
-            )}
-            
-            {Number(emp.transporte) > 0 && (
-              <View style={styles.tableRow}>
-                <View style={styles.tableColLeft}><Text style={styles.tableCell}>Auxilio de Transporte</Text></View>
-                <View style={styles.tableColRight}><Text style={styles.tableCellMoney}>{formatMoney(emp.transporte)}</Text></View>
-              </View>
-            )}
-            
-            {Number(emp.val_extras_diurnas) > 0 && (
-              <View style={styles.tableRow}>
-                <View style={styles.tableColLeft}><Text style={styles.tableCell}>Horas Extras Diurnas</Text></View>
-                <View style={styles.tableColRight}><Text style={styles.tableCellMoney}>{formatMoney(emp.val_extras_diurnas)}</Text></View>
-              </View>
-            )}
-            
-            {Number(emp.val_extras_nocturnas) > 0 && (
-              <View style={styles.tableRow}>
-                <View style={styles.tableColLeft}><Text style={styles.tableCell}>Horas Extras Nocturnas</Text></View>
-                <View style={styles.tableColRight}><Text style={styles.tableCellMoney}>{formatMoney(emp.val_extras_nocturnas)}</Text></View>
-              </View>
-            )}
-
-            {Number(emp.recargo_nocturno) > 0 && (
-              <View style={styles.tableRow}>
-                <View style={styles.tableColLeft}><Text style={styles.tableCell}>Recargo Nocturno</Text></View>
-                <View style={styles.tableColRight}><Text style={styles.tableCellMoney}>{formatMoney(emp.recargo_nocturno)}</Text></View>
-              </View>
-            )}
-
-            {Number(emp.val_vacaciones) > 0 && (
-              <View style={styles.tableRow}>
-                <View style={styles.tableColLeft}><Text style={styles.tableCell}>Vacaciones</Text></View>
-                <View style={styles.tableColRight}><Text style={styles.tableCellMoney}>{formatMoney(emp.val_vacaciones)}</Text></View>
-              </View>
-            )}
-          </View>
-
-          {/* Deducciones */}
-          <Text style={styles.sectionTitle}>Deducciones y Retenciones</Text>
-          <View style={styles.table}>
-            <View style={styles.tableRowHeader}>
-              <View style={styles.tableColLeft}><Text style={styles.tableCellHeader}>Concepto</Text></View>
-              <View style={styles.tableColRight}><Text style={styles.tableCellHeader}>Valor</Text></View>
-            </View>
-            
-            {Number(emp.salud) > 0 && (
-              <View style={styles.tableRow}>
-                <View style={styles.tableColLeft}><Text style={styles.tableCell}>Aporte a Salud (4%)</Text></View>
-                <View style={styles.tableColRight}><Text style={styles.tableCellMoney}>{formatMoney(emp.salud)}</Text></View>
-              </View>
-            )}
-            
-            {Number(emp.pension) > 0 && (
-              <View style={styles.tableRow}>
-                <View style={styles.tableColLeft}><Text style={styles.tableCell}>Aporte a Pensión (4%)</Text></View>
-                <View style={styles.tableColRight}><Text style={styles.tableCellMoney}>{formatMoney(emp.pension)}</Text></View>
-              </View>
-            )}
-            
-            {Number(emp.prestamos) > 0 && (
-              <View style={styles.tableRow}>
-                <View style={styles.tableColLeft}><Text style={styles.tableCell}>Préstamos</Text></View>
-                <View style={styles.tableColRight}><Text style={styles.tableCellMoney}>{formatMoney(emp.prestamos)}</Text></View>
-              </View>
-            )}
-          </View>
-
-          {/* Totals */}
-          <View style={styles.totalsContainer}>
-            <View style={styles.totalsBox}>
-              <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Total Devengado:</Text>
-                <Text style={styles.totalValue}>{formatMoney(emp.total_devengados)}</Text>
-              </View>
-              <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Total Deducido:</Text>
-                <Text style={styles.totalValue}>{formatMoney(emp.total_deducciones)}</Text>
-              </View>
-              <View style={styles.netoRow}>
-                <Text style={styles.netoLabel}>NETO A PAGAR:</Text>
-                <Text style={styles.netoValue}>{formatMoney(emp.neto_pagar)}</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Footer Signatures */}
-          <View style={styles.footer}>
-            <View style={styles.signatureBox}>
-              <Text style={styles.signatureText}>Firma de la Empresa</Text>
-            </View>
-            <View style={styles.signatureBox}>
-              <Text style={styles.signatureText}>Firma del Empleado</Text>
-            </View>
-          </View>
-          
-        </Page>
-      ))}
+          );
+        })}
+        
+      </Page>
     </Document>
   );
 }

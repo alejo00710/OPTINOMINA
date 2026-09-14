@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import Link from "next/link";
 import { Search, Filter, Coins, Info, SlidersHorizontal, Download, RotateCcw, AlertTriangle, Briefcase, FileSpreadsheet, CheckCircle2, ChevronDown, ChevronRight, Calculator, Plus, Trash2, Calendar as CalendarIcon, UploadCloud, Users, ChevronLeft, CalendarRange } from "lucide-react";
 import TabDirectorio from "@/components/Nomina/TabDirectorio";
 import TabReportes from "@/components/Nomina/TabReportes";
@@ -9,7 +10,7 @@ import EditableCell from "@/components/Nomina/EditableCell";
 import TabPanelGeneral from "@/components/Nomina/TabPanelGeneral";
 import TabColillas from "@/components/Nomina/TabColillas";
 import TabLiquidacion from "@/components/Nomina/TabLiquidacion";
-import TabHistorico from "@/components/Nomina/TabHistorico";
+import TabPanelHistorico from "@/components/Nomina/TabPanelHistorico";
 import TabHorarios from "@/components/Nomina/TabHorarios";
 import FormulaEditorModal from "@/components/Nomina/FormulaEditorModal";
 import { NOMINA_DATE_RANGE_KEY, loadPersistedDateRange, savePersistedDateRange, PLANILLA_COLUMNS, DAILY_COLUMNS, LIQUIDATION_CONCEPTS, DEFAULT_FORMULAS, SMLV, AUX_TRANSPORTE, MINIMO_DIARIO_INCAPACIDAD, evaluateFormula, DIVISOR_RECARGOS_NOCTURNOS, DIVISOR_HORAS_EXTRAS, FACTOR_RECARGO_NOCTURNO, FACTOR_EXTRA_DIURNA, FACTOR_EXTRA_NOCTURNA, FACTOR_EXTRA_FESTIVA, FACTOR_EXTRA_FESTIVA_NOCTURNA, HORA_INICIO_DIURNA, HORA_FIN_DIURNA } from "@/utils/constants";
@@ -1120,7 +1121,7 @@ const handleSaveToCloud = async () => {
     }
   };
 
-  const handleClearAttendanceData = (scope = "worker") => {
+  const handleClearAttendanceData = async (scope = "worker") => {
     const dates = getDatesInRange(startDate, endDate);
     if (dates.length === 0) return;
 
@@ -1143,11 +1144,27 @@ const handleSaveToCloud = async () => {
     });
 
     setAttendanceLogs(nuevosLogs);
+    
+    try {
+      await supabase
+        .from('optimoldes_payroll')
+        .upsert({
+          id: 'quincena_activa',
+          start_date: startDate,
+          end_date: endDate,
+          attendance_logs: nuevosLogs,
+          overrides: overrides,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+    } catch (e) {
+      console.error("Error limpiando asistencia en DB:", e);
+    }
+
     if (scope === "all") {
       localStorage.removeItem('optinomina_draft');
     }
     setToast({
-      message: scope === "all" ? "Marcaciones borradas para todos en el rango." : `Marcaciones borradas para ${selectedWorkerName}.`,
+      message: scope === "all" ? "Marcaciones borradas de la base de datos." : `Marcaciones borradas para ${selectedWorkerName}.`,
       type: "success",
     });
     setTimeout(() => setToast(null), 4000);
@@ -1395,7 +1412,7 @@ const handleSaveToCloud = async () => {
 
       {/* --- TAB: HISTÓRICO --- */}
       {activeTab === "historico" && (
-        <TabHistorico />
+        <TabPanelHistorico />
       )}
 
       {/* --- TAB: HORARIOS --- */}
