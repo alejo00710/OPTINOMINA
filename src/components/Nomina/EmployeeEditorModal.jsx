@@ -23,7 +23,7 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
     banco: '',
     tipo_vinculacion: 'Empresa'
   });
-  const [isLoading, setIsLoading] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('idle');
 
   useEffect(() => {
     if (employee) {
@@ -74,7 +74,7 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
     
     try {
       console.log("🚀 INTENTANDO GUARDAR PAYLOAD:", formData);
-      setIsLoading(true);
+      setSaveStatus('saving');
       
       const empData = {
         cedula: formData.cedula,
@@ -116,19 +116,19 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         throw new Error(errorSupabase.message || "Error desconocido de Supabase");
       }
       
-      alert("✅ GUARDADO CORRECTO");
+      setSaveStatus('success');
       if (refreshEmployees) {
         await refreshEmployees();
       }
-      if (onClose) {
-        onClose(); // Cierra el modal
-      }
+      setTimeout(() => {
+        setSaveStatus('idle');
+        if (onClose) onClose();
+      }, 1500);
       
     } catch (error) {
       console.error("Error capturado:", error);
       alert("❌ ERROR SUPABASE: " + (error.message || JSON.stringify(error)));
-    } finally {
-      setIsLoading(false);
+      setSaveStatus('idle');
     }
   };
 
@@ -334,10 +334,10 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
               </button>
               <button
                 type="submit"
-                disabled={isLoading}
-                className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-95"
+                disabled={saveStatus === 'saving'}
+                className={`inline-flex items-center gap-2 px-6 py-2.5 disabled:opacity-50 text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-95 ${saveStatus === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'}`}
               >
-                {isLoading ? 'Guardando...' : <><CheckCircle2 className="w-4 h-4" /> Guardar Empleado</>}
+                {saveStatus === 'saving' ? '⏳ Guardando...' : saveStatus === 'success' ? '✅ ¡Guardado!' : <><CheckCircle2 className="w-4 h-4" /> Guardar Empleado</>}
               </button>
             </div>
           </form>

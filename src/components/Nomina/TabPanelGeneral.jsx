@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import EditableCell from '@/components/Nomina/EditableCell';
 import SaitempModal from '@/components/Nomina/SaitempModal';
@@ -22,12 +22,50 @@ export default function TabPanelGeneral({
   globalSmmlv,
   setGlobalSmmlv,
   globalAuxTransporte,
-  setGlobalAuxTransporte
+  setGlobalAuxTransporte,
+  handleSaveDraft
 }) {
   const [vinculacionFiltro, setVinculacionFiltro] = useState('Empresa');
   const [isSaitempModalOpen, setIsSaitempModalOpen] = useState(false);
   const [empleadoSaitemp, setEmpleadoSaitemp] = useState(null);
   const [vacacionesModal, setVacacionesModal] = useState({ isOpen: false, empleado: null });
+  const lastProcessedDates = useRef({});
+
+  // Auto-conteo de días de vacaciones
+  useEffect(() => {
+    if (vacacionesModal.isOpen && vacacionesModal.empleado) {
+      const workerData = filteredPayrollData.find(d => d.masterRow?.nombre === vacacionesModal.empleado);
+      if (workerData && workerData.masterRow) {
+        const cedula = workerData.masterRow.cedula;
+        const inicioKey = `${cedula}_fecha_inicio_vacaciones`;
+        const finKey = `${cedula}_fecha_fin_vacaciones`;
+        
+        const fechaInicio = overrides[inicioKey] || workerData.fecha_inicio_vacaciones;
+        const fechaFin = overrides[finKey] || workerData.fecha_fin_vacaciones;
+        
+        const signature = `${fechaInicio}_${fechaFin}`;
+        
+        if (fechaInicio && fechaFin && lastProcessedDates.current[cedula] !== signature) {
+          const inicio = new Date(fechaInicio);
+          const fin = new Date(fechaFin);
+          
+          if (!isNaN(inicio.getTime()) && !isNaN(fin.getTime()) && fin >= inicio) {
+             const diffTime = Math.abs(fin - inicio);
+             const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+             
+             handleCellEdit(`${cedula}_dias_vacaciones`, diffDays);
+             lastProcessedDates.current[cedula] = signature;
+          }
+        }
+      }
+    }
+  }, [
+    vacacionesModal.isOpen, 
+    vacacionesModal.empleado, 
+    overrides, 
+    filteredPayrollData, 
+    handleCellEdit
+  ]);
 
   const COLUMNAS_ESENCIALES = ['salario', 'total_devengados', 'total_deducciones', 'neto_pagar'];
   const COLUMNAS_FIJAS = ['consecutivo', 'cedula', 'nombre', 'cargo'];
@@ -461,7 +499,8 @@ export default function TabPanelGeneral({
       <SaitempModal 
         isOpen={isSaitempModalOpen} 
         onClose={() => setIsSaitempModalOpen(false)} 
-        employee={empleadoSaitemp} 
+        employee={empleadoSaitemp}
+        onSaveToCloud={handleSaveDraft}
         onSave={async (data) => {
           if (!empleadoSaitemp) return;
           const cedula = empleadoSaitemp.cedula;
@@ -480,7 +519,6 @@ export default function TabPanelGeneral({
                   handleCellEdit(`${cedula}_incapacidad`, nov.novedad);
               }
           }
-          alert("Datos transferidos a la planilla.");
         }}
       />
 

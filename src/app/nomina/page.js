@@ -47,6 +47,7 @@ export default function NominaPage() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isDbLoading, setIsDbLoading] = useState(true);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [detailsSaveStatus, setDetailsSaveStatus] = useState('idle'); // idle | saving | success
   const [deudaAnteriorModal, setDeudaAnteriorModal] = useState(0);
   const [detailsWorkerName, setDetailsWorkerName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -56,6 +57,8 @@ export default function NominaPage() {
   const [attendanceLogs, setAttendanceLogs] = useState({});
   const [ratesMap] = useState({});
   const [overrides, setOverrides] = useState({});
+  const overridesRef = useRef(overrides);
+  useEffect(() => { overridesRef.current = overrides; }, [overrides]);
   const [hiddenColumns, setHiddenColumns] = useState({});
   const [showColumnManager, setShowColumnManager] = useState(false);
   const [weeklySchedules, setWeeklySchedules] = useState([]);
@@ -95,7 +98,7 @@ export default function NominaPage() {
 
   // Toast notification state
   const [toast, setToast] = useState(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('idle');
   const [isClosing, setIsClosing] = useState(false);
 
   // File upload state
@@ -150,14 +153,14 @@ export default function NominaPage() {
   }, [isDetailsModalOpen, detailsWorkerName]);
 
   const handleSaveDraft = async () => {
-    setIsSaving(true);
+    setSaveStatus('saving');
     try {
       const payload = {
         id: 'quincena_activa',
         start_date: startDate,
         end_date: endDate,
         attendance_logs: attendanceLogs,
-        overrides: overrides,
+        overrides: overridesRef.current,
         updated_at: new Date().toISOString()
       };
 
@@ -167,14 +170,18 @@ export default function NominaPage() {
 
       if (error) throw error;
       
+      setSaveStatus('success');
       setToast({ message: "Borrador guardado en la nube", type: "success" });
       setTimeout(() => setToast(null), 3000);
+      
+      setTimeout(() => {
+        setSaveStatus('idle');
+      }, 1500);
     } catch (err) {
       console.error("Error guardando borrador:", err);
+      setSaveStatus('idle');
       setToast({ message: "Error al guardar el borrador", type: "error" });
       setTimeout(() => setToast(null), 3000);
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -930,6 +937,9 @@ processedLogs.forEach(day => {
           delete newOverrides[`${cedula}_neto_pagar`];
       }
 
+      // Sincronización inmediata para guardados asíncronos en el mismo ciclo
+      overridesRef.current = newOverrides;
+
       return newOverrides;
     });
   };
@@ -1134,48 +1144,56 @@ const handleSaveToCloud = async () => {
     if (dates.length === 0) return;
 
     const confirmMsg = scope === "all"
-      ? "¿Borrar marcaciones de TODOS los trabajadores en el rango seleccionado?"
+      ? "¿Borrar TODAS las marcaciones biométricas de la base de datos?"
       : `¿Borrar marcaciones de ${selectedWorkerName} en el rango ${startDate} a ${endDate}?`;
 
     if (!confirm(confirmMsg)) return;
 
-    const nuevosLogs = { ...attendanceLogs };
-    const targets = scope === "all" ? nominaRows.map(r => r.cedula) : [nominaRows.find(r => (r.nombre || r.name) === selectedWorkerName)?.cedula].filter(Boolean);
+    setToast({ message: "Limpiando biométrico...", type: "info" });
 
-    targets.forEach(targetKey => {
-      const existing = nuevosLogs[targetKey] || [];
-      const byDate = new Map(existing.map(d => [d.dia, d]));
-      dates.forEach(dateStr => {
-        byDate.set(dateStr, emptyAttendanceDay(dateStr));
-      });
-      nuevosLogs[targetKey] = Array.from(byDate.values()).sort((a, b) => a.dia.localeCompare(b.dia));
-    });
-
-    setAttendanceLogs(nuevosLogs);
-    
     try {
-      await supabase
-        .from('optimoldes_payroll')
-        .upsert({
-          id: 'quincena_activa',
-          start_date: startDate,
-          end_date: endDate,
-          attendance_logs: nuevosLogs,
-          overrides: overrides,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'id' });
+      if (scope === "all") {
+        setAttendanceLogs({});
+        await supabase
+          .from('optimoldes_payroll')
+          .update({
+            attendance_logs: null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', 'quincena_activa');
+        localStorage.removeItem('optinomina_draft');
+      } else {
+        const nuevosLogs = { ...attendanceLogs };
+        const targetKey = nominaRows.find(r => (r.nombre || r.name) === selectedWorkerName)?.cedula;
+        if (targetKey) {
+          const existing = nuevosLogs[targetKey] || [];
+          const byDate = new Map(existing.map(d => [d.dia, d]));
+          dates.forEach(dateStr => {
+            byDate.set(dateStr, emptyAttendanceDay(dateStr));
+          });
+          nuevosLogs[targetKey] = Array.from(byDate.values()).sort((a, b) => a.dia.localeCompare(b.dia));
+          setAttendanceLogs(nuevosLogs);
+
+          await supabase
+            .from('optimoldes_payroll')
+            .update({
+              attendance_logs: nuevosLogs,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', 'quincena_activa');
+        }
+      }
+
+      setToast({
+        message: scope === "all" ? "Biométrico borrado con éxito." : `Marcaciones borradas para ${selectedWorkerName}.`,
+        type: "success",
+      });
+      setTimeout(() => setToast(null), 4000);
     } catch (e) {
       console.error("Error limpiando asistencia en DB:", e);
+      setToast({ message: "Error al limpiar biométrico", type: "error" });
+      setTimeout(() => setToast(null), 4000);
     }
-
-    if (scope === "all") {
-      localStorage.removeItem('optinomina_draft');
-    }
-    setToast({
-      message: scope === "all" ? "Marcaciones borradas de la base de datos." : `Marcaciones borradas para ${selectedWorkerName}.`,
-      type: "success",
-    });
-    setTimeout(() => setToast(null), 4000);
   };
   const handleImportBackup = (e) => {
     const file = e.target?.files?.[0];
@@ -1220,13 +1238,14 @@ const handleSaveToCloud = async () => {
         <div className="flex gap-2 shrink-0 w-full md:w-auto justify-end flex-wrap">
           <button
             onClick={handleSaveDraft}
+            disabled={saveStatus === 'saving'}
             className={
-              isSaving
+              saveStatus === 'success'
                 ? "bg-emerald-500 text-white px-4 py-2 rounded font-bold transition-colors duration-300 text-xs inline-flex items-center gap-2"
                 : "bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold transition-colors duration-300 active:scale-95 text-xs inline-flex items-center gap-2 shadow-md"
             }
           >
-            {isSaving ? "✅ ¡Guardado con éxito!" : "💾 Guardar Progreso"}
+            {saveStatus === 'saving' ? "⏳ Guardando..." : saveStatus === 'success' ? "✅ Progreso Guardado" : "💾 Guardar Progreso"}
           </button>
 
           <button
@@ -1378,6 +1397,7 @@ const handleSaveToCloud = async () => {
              setGlobalSmmlv={setGlobalSmmlv}
              globalAuxTransporte={globalAuxTransporte}
              setGlobalAuxTransporte={setGlobalAuxTransporte}
+             handleSaveDraft={handleSaveDraft}
           />
 
           
@@ -1404,6 +1424,7 @@ const handleSaveToCloud = async () => {
             selectedWorkerName={selectedWorkerName}
             setSelectedWorkerName={setSelectedWorkerName}
             nominaRows={nominaRows}
+            handleSaveDraft={handleSaveDraft}
          />
       )}
 
@@ -1452,13 +1473,24 @@ const handleSaveToCloud = async () => {
         </div>
         <div className="flex items-center gap-4">
           <button
-            onClick={() => {
-              handleSaveDraft();
-              setIsDetailsModalOpen(false);
+            onClick={async () => {
+              setDetailsSaveStatus('saving');
+              try {
+                await handleSaveDraft();
+                setDetailsSaveStatus('success');
+                setTimeout(() => {
+                  setDetailsSaveStatus('idle');
+                  setIsDetailsModalOpen(false);
+                }, 1500);
+              } catch (e) {
+                setDetailsSaveStatus('idle');
+              }
             }}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all active:scale-95 text-sm inline-flex items-center gap-2"
+            disabled={detailsSaveStatus === 'saving'}
+            className={`${detailsSaveStatus === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'} text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all active:scale-95 text-sm inline-flex items-center gap-2`}
           >
-            💾 Guardar Cambios
+            {detailsSaveStatus === 'saving' ? "⏳ Guardando..." : 
+             detailsSaveStatus === 'success' ? "✅ ¡Guardado!" : "💾 Guardar Cambios"}
           </button>
           <button 
             onClick={() => setIsDetailsModalOpen(false)} 
