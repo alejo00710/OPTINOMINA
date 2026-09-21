@@ -18,6 +18,17 @@ export default function TabPanelHistorico() {
 
   useEffect(() => {
     fetchNominas();
+
+    const channel = supabase
+      .channel('public:historico_nominas_v2')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'historico_nominas_v2' }, () => {
+        fetchNominas();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchNominas = async () => {

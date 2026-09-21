@@ -25,6 +25,17 @@ export default function TabHistorico() {
       }
     }
     fetchHistorial();
+
+    const channel = supabase
+      .channel('public:historial_nominas')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'historial_nominas' }, () => {
+        fetchHistorial();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const formatDate = (dateString) => {

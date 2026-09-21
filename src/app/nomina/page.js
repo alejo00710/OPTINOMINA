@@ -378,6 +378,18 @@ export default function NominaPage() {
        }
     };
     fetchSchedules();
+
+    const schedulesChannel = supabase
+      .channel('public:horarios_semanales:page')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'horarios_semanales' }, () => {
+        console.log("🔄 Cambio en horarios semanales detectado, recargando en la app principal");
+        fetchSchedules();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(schedulesChannel);
+    };
   }, [startDate, endDate]);
 
   const getDatesInRange = (start, end) => {

@@ -34,6 +34,17 @@ export default function HistoricoNomina() {
       }
     }
     fetchPeriodos();
+
+    const channel = supabase
+      .channel('public:periodos_nomina')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'periodos_nomina' }, () => {
+        fetchPeriodos();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Cargar detalles cuando cambia el periodo seleccionado
@@ -99,6 +110,27 @@ export default function HistoricoNomina() {
     }
     
     fetchDetalles();
+
+    if (!selectedPeriodo) return;
+
+    const detalleChannel = supabase
+      .channel(`public:nomina_detalle:${selectedPeriodo}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'nomina_detalle', filter: `periodo_id=eq.${selectedPeriodo}` }, () => {
+        fetchDetalles();
+      })
+      .subscribe();
+
+    const diarioChannel = supabase
+      .channel(`public:liquidacion_diaria:${selectedPeriodo}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'liquidacion_diaria', filter: `periodo_id=eq.${selectedPeriodo}` }, () => {
+        fetchDetalles();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(detalleChannel);
+      supabase.removeChannel(diarioChannel);
+    };
   }, [selectedPeriodo]);
 
   const formatCurrency = (value) => {

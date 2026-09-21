@@ -2,8 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Save, Calendar as CalendarIcon } from 'lucide-react';
 import { supabase } from '@/utils/supabase';
 
+import { createPortal } from 'react-dom';
+
 const CeldaTurno = ({ valor, onChange, getTurnColor }) => {
   const [showMenu, setShowMenu] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
+  const inputRef = React.useRef(null);
+
   const oficiales = [
     '6AM A 2PM', '2PM A 10PM', '10PM A 6AM', '6AM A 6PM', '6PM A 6AM', 
     '7:30AM A 5PM', '7:30AM A 4PM', 'DESCANSO', 'VACACIONES', 
@@ -12,24 +17,34 @@ const CeldaTurno = ({ valor, onChange, getTurnColor }) => {
     'CALAMIDAD', 'SANCIONADO'
   ];
 
+  const handleFocus = () => {
+    if (inputRef.current) {
+       const rect = inputRef.current.getBoundingClientRect();
+       setCoords({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX, width: rect.width });
+    }
+    setShowMenu(true);
+  };
+
   return (
     <div className="relative w-full h-full">
       <input
+        ref={inputRef}
         type="text"
         value={valor}
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setShowMenu(true)}
+        onFocus={handleFocus}
         onBlur={() => setTimeout(() => setShowMenu(false), 200)}
         placeholder="Turno..."
         className={`w-full h-full p-2 text-xs text-center border-none focus:ring-inset focus:ring-2 focus:ring-indigo-500 outline-none placeholder-slate-300 uppercase transition-colors ${getTurnColor(valor)}`}
       />
-      {showMenu && (
-        <div className="absolute top-full left-0 mt-1 w-32 bg-white border border-slate-200 shadow-xl z-50 rounded overflow-hidden">
+      {showMenu && typeof document !== 'undefined' && createPortal(
+        <div style={{ top: coords.top, left: coords.left, minWidth: coords.width > 150 ? coords.width : 160 }} className="absolute mt-1 bg-white border border-slate-200 shadow-2xl z-[9999] rounded-xl overflow-hidden py-1 max-h-60 overflow-y-auto custom-scrollbar">
           {oficiales.map(opc => (
             <div 
               key={opc} 
-              className="px-3 py-2 text-xs hover:bg-slate-100 cursor-pointer text-slate-700 font-medium"
-              onClick={() => {
+              className="px-3 py-2 text-[10px] hover:bg-slate-100 cursor-pointer text-slate-700 font-bold uppercase transition-colors"
+              onMouseDown={(e) => {
+                e.preventDefault(); // Prevents blur
                 onChange(opc);
                 setShowMenu(false);
               }}
@@ -37,7 +52,8 @@ const CeldaTurno = ({ valor, onChange, getTurnColor }) => {
               {opc}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -71,6 +87,7 @@ export default function TabHorarios({ empleados }) {
     }
     return [];
   });
+  const [saveStatus, setSaveStatus] = useState('idle');
 
   const dragItem = React.useRef(null);
   const dragOverItem = React.useRef(null);
@@ -102,7 +119,7 @@ export default function TabHorarios({ empleados }) {
       return;
     }
     
-    console.log('Guardando Programación Semanal...');
+    setSaveStatus('saving');
     try {
       const { error } = await supabase
         .from('horarios_semanales')
@@ -114,16 +131,18 @@ export default function TabHorarios({ empleados }) {
         
       if (error) throw error;
       
-      alert('Horario guardado/actualizado exitosamente en la base de datos.');
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 1500);
     } catch (err) {
       console.error('Error guardando horario:', err);
+      setSaveStatus('idle');
       alert('Error al guardar el horario: ' + err.message);
     }
   };
 
-  const cargarDesdeBD = async () => {
+  const cargarDesdeBD = async (isSilent = false) => {
     if (!fechaInicioSemana) {
-      alert('Por favor, selecciona la fecha de la semana para buscar.');
+      if (!isSilent) alert('Por favor, selecciona la fecha de la semana para buscar.');
       return;
     }
     
@@ -136,7 +155,7 @@ export default function TabHorarios({ empleados }) {
         
       if (error) {
         if (error.code === 'PGRST116') {
-          alert('No se encontró un horario guardado para esa semana.');
+          if (!isSilent) alert('No se encontró un horario guardado para esa semana.');
         } else {
           throw error;
         }
@@ -146,13 +165,39 @@ export default function TabHorarios({ empleados }) {
       if (data) {
         setHorarios(data.datos_json || {});
         setEmpleadosOcultos(data.ocultos_json || []);
-        alert('Horario cargado exitosamente.');
+        if (!isSilent) alert('Horario cargado exitosamente.');
       }
     } catch (err) {
       console.error('Error cargando horario:', err);
-      alert('Error al cargar el horario: ' + err.message);
+      if (!isSilent) alert('Error al cargar el horario: ' + err.message);
     }
   };
+
+  useEffect(() => {
+    if (fechaInicioSemana) {
+      cargarDesdeBD(true);
+    }
+
+    const channel = supabase
+      .channel('public:horarios_semanales')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'horarios_semanales' },
+        (payload) => {
+          console.log('Cambio en tiempo real en horarios_semanales:', payload);
+          // Recarga los datos en silencio
+          if (fechaInicioSemana) {
+            cargarDesdeBD(true);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fechaInicioSemana]);
 
   const areaOrder = {
     'Administrativo': 1,
@@ -410,7 +455,7 @@ export default function TabHorarios({ empleados }) {
             />
           </div>
           <button 
-            onClick={cargarDesdeBD}
+            onClick={() => cargarDesdeBD(false)}
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-sky-100 hover:bg-sky-200 text-sky-700 rounded-xl text-xs font-black transition-all shadow-sm active:scale-95"
           >
             <span>☁️</span>
@@ -425,10 +470,10 @@ export default function TabHorarios({ empleados }) {
           </button>
           <button 
             onClick={handleSave}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all shadow-md active:scale-95"
+            disabled={saveStatus === 'saving'}
+            className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all shadow-md active:scale-95 ${saveStatus === 'success' ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}
           >
-            <Save size={16} />
-            Guardar Programación
+            {saveStatus === 'saving' ? "⏳ Guardando..." : saveStatus === 'success' ? "✅ ¡Guardado!" : <><Save size={16} /> Guardar Horarios</>}
           </button>
         </div>
       </section>
