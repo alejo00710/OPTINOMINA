@@ -133,10 +133,15 @@ export const toggleEmployeeStatus = async (cedula, currentStatus) => {
 
 export const loadWeeklySchedulesFromCloud = async (startDate, endDate) => {
   try {
-    // Fetch weeks starting up to 7 days before startDate to cover overlapping weeks
-    const start = new Date(startDate);
+    // Normalización estricta de fecha para evitar desfase de timezone en móviles
+    const [sYear, sMonth, sDay] = startDate.split('-');
+    const start = new Date(parseInt(sYear, 10), parseInt(sMonth, 10) - 1, parseInt(sDay, 10));
     start.setDate(start.getDate() - 7);
-    const startStr = start.toISOString().split('T')[0];
+    
+    const y = start.getFullYear();
+    const m = String(start.getMonth() + 1).padStart(2, '0');
+    const d = String(start.getDate()).padStart(2, '0');
+    const startStr = `${y}-${m}-${d}`;
 
     const { data, error } = await supabase
       .from('horarios_semanales')

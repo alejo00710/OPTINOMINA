@@ -333,6 +333,7 @@ export default function NominaPage() {
         if (payload.eventType === 'DELETE') {
           setAttendanceLogs({});
           setOverrides({});
+          setWeeklySchedules([]);
         } else if (payload.new) {
           setStartDate(prev => payload.new.start_date || prev);
           setEndDate(prev => payload.new.end_date || prev);
@@ -1016,6 +1017,23 @@ processedLogs.forEach(day => {
         
         // 4. DESTRUIR EL BORRADOR DE LA NUBE PARA EVITAR EL "CANDADO ACTIVO" ZOMBIE
         await supabase.from('optimoldes_payroll').delete().eq('id', 'quincena_activa');
+
+        // 5. DESTRUIR LOS HORARIOS SEMANALES ASOCIADOS A ESTA QUINCENA
+        if (startDate && endDate) {
+            const [sYear, sMonth, sDay] = startDate.split('-');
+            const start = new Date(parseInt(sYear, 10), parseInt(sMonth, 10) - 1, parseInt(sDay, 10));
+            start.setDate(start.getDate() - 7);
+            const y = start.getFullYear();
+            const m = String(start.getMonth() + 1).padStart(2, '0');
+            const d = String(start.getDate()).padStart(2, '0');
+            const startStr = `${y}-${m}-${d}`;
+
+            await supabase
+                .from('horarios_semanales')
+                .delete()
+                .gte('id_semana', startStr)
+                .lte('id_semana', endDate);
+        }
         
     } catch (err) {
         console.error("Error en la limpieza:", err);

@@ -155,6 +155,8 @@ export default function TabHorarios({ empleados }) {
         
       if (error) {
         if (error.code === 'PGRST116') {
+          setHorarios({});
+          setEmpleadosOcultos([]);
           if (!isSilent) alert('No se encontró un horario guardado para esa semana.');
         } else {
           throw error;
@@ -193,8 +195,21 @@ export default function TabHorarios({ empleados }) {
       )
       .subscribe();
 
+    const payrollChannel = supabase
+      .channel('public:optimoldes_payroll_horarios')
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'optimoldes_payroll', filter: 'id=eq.quincena_activa' },
+        () => {
+          console.log('Quincena reseteada, vaciando horarios en pantalla...');
+          setHorarios({});
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(payrollChannel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fechaInicioSemana]);

@@ -92,20 +92,23 @@ export const getTimeDifferenceHHMM = (start, end, allowMidnight = true) => {
   
   if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return "00:00";
   
-  const startTotal = (sh * 60) + sm;
-  const endTotal = (eh * 60) + em;
-  
-  let diff = endTotal - startTotal;
-  if (diff < 0) {
-    if (allowMidnight) {
-      diff += 1440;
-    } else {
-      return "00:00";
-    }
+  // Inyección de Lógica Matemática de Medianoche (Overnight)
+  const fechaEntrada = new Date(2000, 0, 1, sh, sm);
+  const fechaSalida = new Date(2000, 0, 1, eh, em);
+
+  if (fechaSalida < fechaEntrada) {
+      if (allowMidnight) {
+          fechaSalida.setDate(fechaSalida.getDate() + 1);
+      } else {
+          return "00:00";
+      }
   }
   
-  let outH = Math.floor(diff / 60);
-  let outM = diff % 60;
+  const diffMinutes = (fechaSalida.getTime() - fechaEntrada.getTime()) / 60000;
+  if (diffMinutes < 0) return "00:00";
+  
+  let outH = Math.floor(diffMinutes / 60);
+  let outM = diffMinutes % 60;
   return `${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}`;
 };
 
@@ -117,19 +120,22 @@ export const getTimeDifference = (start, end, allowMidnight = true) => {
   
   if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return 0;
   
-  const startTotal = (sh * 60) + sm;
-  const endTotal = (eh * 60) + em;
-  
-  let diff = endTotal - startTotal;
-  if (diff < 0) {
-    if (allowMidnight) {
-      diff += 1440; // Cruce de medianoche
-    } else {
-      return 0; // Si da negativo o absurdo por falta de datos, que retorne 0.00
-    }
+  // Inyección de Lógica Matemática de Medianoche (Overnight) con Date objects
+  const fechaEntrada = new Date(2000, 0, 1, sh, sm);
+  const fechaSalida = new Date(2000, 0, 1, eh, em);
+
+  if (fechaSalida < fechaEntrada) {
+      if (allowMidnight) {
+          fechaSalida.setDate(fechaSalida.getDate() + 1);
+      } else {
+          return 0; // Si no se permite cruce y da negativo
+      }
   }
   
-  return Number((diff / 60).toFixed(4));
+  const diffMinutes = (fechaSalida.getTime() - fechaEntrada.getTime()) / 60000;
+  if (diffMinutes < 0) return 0; // Fallback extremo
+  
+  return Number((diffMinutes / 60).toFixed(4));
 };
 
 
@@ -145,8 +151,8 @@ export const getOfficialShiftTime = (timeStr, type, turnoProgramadoDelDia = null
   let text = String(turnoProgramadoDelDia).toUpperCase().trim();
 
   // 2. Escáner de Fuerza Bruta: Busca cualquier patrón de hora en el texto
-  // Captura ej: "6AM", "10:30 PM", "14:00" ignorando el texto intermedio
-  const timeRegex = /(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/g;
+  // Captura ej: "6AM", "10:30 PM", "14:00", "10 P.M." ignorando el texto intermedio
+  const timeRegex = /(?:^|\b|\s)(\d{1,2})(?::(\d{2}))?\s*(A\.?M\.?|P\.?M\.?)?(?:\b|\s|$)/ig;
   const matches = [...text.matchAll(timeRegex)];
 
   if (matches.length >= 2) {
@@ -158,7 +164,7 @@ export const getOfficialShiftTime = (timeStr, type, turnoProgramadoDelDia = null
       
       let hh = parseInt(match[1], 10);
       const mm = match[2] || "00";
-      const modifier = match[3];
+      const modifier = match[3] ? match[3].replace(/\./g, '').toUpperCase() : undefined;
 
       // Matemática absoluta de 24 hrs
       if (modifier === 'PM' && hh < 12) hh += 12;
@@ -213,15 +219,16 @@ export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
     const isEmptyDB = !dbShiftText || dbShiftText === 'null' || dbShiftText === 'undefined' || String(dbShiftText).trim() === '{}' || String(dbShiftText).trim() === '';
     if (!isEmptyDB) {
         let textToParse = String(dbShiftText).toUpperCase();
-        const timeRegex = /\b(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?\b/g;
+        const timeRegex = /(?:^|\b|\s)(\d{1,2})(?::(\d{2}))?\s*(A\.?M\.?|P\.?M\.?)?(?:\b|\s|$)/ig;
         let matches = [...textToParse.matchAll(timeRegex)].filter(m => parseInt(m[1], 10) <= 24);
         
         if (matches.length >= 2) {
             const formatTime = (match) => {
                 let hh = parseInt(match[1], 10);
                 const mm = parseInt(match[2] || "00", 10);
-                if (match[3] === 'PM' && hh < 12) hh += 12;
-                if (match[3] === 'AM' && hh === 12) hh = 0;
+                const mod = match[3] ? match[3].replace(/\./g, '').toUpperCase() : undefined;
+                if (mod === 'PM' && hh < 12) hh += 12;
+                if (mod === 'AM' && hh === 12) hh = 0;
                 return { hh, mm };
             };
             const bIn = formatTime(matches[0]);
@@ -327,19 +334,28 @@ export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
 
     if (realPunchOut && realPunchOut !== '--:--' && realPunchOut !== 'null') {
         const [outHH, outMM] = String(realPunchOut).split(':').map(Number);
-        const realOutMins = (outHH * 60) + outMM;
         
-        let adjRealOut = realOutMins;
-        let adjBaseOut = (baseOutHH * 60) + baseOutMM;
+        // Inyección de Lógica Matemática de Medianoche (Overnight)
+        const fechaEntradaReal = new Date(2000, 0, 1, realHH, realMM);
+        const fechaSalidaReal = new Date(2000, 0, 1, outHH, outMM);
+        if (fechaSalidaReal < fechaEntradaReal && outHH < 12) {
+            fechaSalidaReal.setDate(fechaSalidaReal.getDate() + 1);
+        }
+
+        const fechaEntradaProgramada = new Date(2000, 0, 1, baseInHH, baseInMM);
+        const fechaSalidaProgramada = new Date(2000, 0, 1, baseOutHH, baseOutMM);
+        if (fechaSalidaProgramada < fechaEntradaProgramada) {
+            fechaSalidaProgramada.setDate(fechaSalidaProgramada.getDate() + 1);
+        }
         
-        // Ajuste para turnos que cruzan la medianoche
-        if (adjBaseOut <= baseTotalMins) adjBaseOut += 1440; 
-        if (adjRealOut <= realTotalMins && adjRealOut < 720) adjRealOut += 1440;
+        const adjRealOut = fechaSalidaReal.getTime() / 60000;
+        const adjBaseOut = fechaSalidaProgramada.getTime() / 60000;
 
         // REGLA: Si salió ANTES de la hora oficial, castigamos la K
         if (adjRealOut < adjBaseOut) {
-            // Redondea hacia abajo al bloque de 30 mins que sí completó
-            const snappedMins = Math.floor(adjRealOut / 30) * 30;
+            // Redondea hacia abajo al bloque de 30 mins que sí completó (ajustado sobre 0)
+            const baseEpoch = new Date(2000, 0, 1).getTime() / 60000;
+            const snappedMins = Math.floor((adjRealOut - baseEpoch) / 30) * 30;
             finalK_HH = Math.floor(snappedMins / 60) % 24;
             finalK_MM = snappedMins % 60;
         }
