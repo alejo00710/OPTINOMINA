@@ -469,7 +469,61 @@ export default function NominaPage() {
          // --- FIN INYECCIÓN ---
 
          const prefix = `${cedula}_${date}`;
-         return calculateDailyRecord(dayLog, overrides, prefix, HORA_INICIO_DIURNA, HORA_FIN_DIURNA, scheduledShift);
+         let finalRow = calculateDailyRecord(dayLog, overrides, prefix, HORA_INICIO_DIURNA, HORA_FIN_DIURNA, scheduledShift);
+
+         // --- APLICACIÓN DE LA REGLA DE ORO (PARSER VISUAL DE ESTADO) ---
+         // Destruimos el código duplicado/colapsado anterior y forzamos la corrección directamente en el renderizado
+         if (turnoStr.includes(" A ")) {
+             const partes = turnoStr.split(" A ");
+             const timeRegex = /(?:^|\b|\s)(\d{1,2})(?::(\d{2}))?\s*(A\.?M\.?|P\.?M\.?)?(?:\b|\s|$)/i;
+             const matchIn = partes[0].match(timeRegex);
+             const matchOut = partes[1].match(timeRegex);
+             
+             if (matchIn && matchOut) {
+                 const get24H = (m) => {
+                     let hh = parseInt(m[1], 10);
+                     const mm = parseInt(m[2] || "00", 10);
+                     const mod = m[3] ? m[3].replace(/\./g, '').toUpperCase() : undefined;
+                     if (mod === 'PM' && hh < 12) hh += 12;
+                     if (mod === 'AM' && hh === 12) hh = 0;
+                     return { hh, mm };
+                 };
+                 const in24 = get24H(matchIn);
+                 const out24 = get24H(matchOut);
+                 
+                 const fechaEntrada = new Date(2000, 0, 1, in24.hh, in24.mm);
+                 const fechaSalida = new Date(2000, 0, 1, out24.hh, out24.mm);
+                 
+                 // REGLA DE ORO ESTRICTA:
+                 if (fechaSalida < fechaEntrada) {
+                     fechaSalida.setDate(fechaSalida.getDate() + 1);
+                 }
+                 
+                 const pad = (n) => String(n).padStart(2, '0');
+                 const strIn = `${pad(in24.hh)}:${pad(in24.mm)}`;
+                 const strOut = `${pad(out24.hh)}:${pad(out24.mm)}`;
+                 
+                 // Si las variables colapsaron (entrando la misma hora en la salida) por caché u otros parsers
+                 if (finalRow.hr_ent_pago === finalRow.hr_sal_pago && String(finalRow.hr_ent_pago).trim() !== "") {
+                     finalRow.officialIn = strIn;
+                     finalRow.officialOut = strOut;
+                     finalRow.hr_ent_pago = strIn;
+                     finalRow.hr_sal_pago = strOut;
+                     
+                     // Forzar cálculo de horas laboradas
+                     const hrLabReales = (fechaSalida.getTime() - fechaEntrada.getTime()) / 3600000;
+                     finalRow.hr_lab = Math.max(0, hrLabReales - (finalRow.desc_lunch || 0));
+                     
+                     // Ajuste básico de compensación visual
+                     if (in24.hh >= 21 || in24.hh < 6) {
+                         finalRow.nocturnas = finalRow.hr_lab;
+                         finalRow.diurnas = 0;
+                     }
+                 }
+             }
+         }
+
+         return finalRow;
       });
       
       // 1. Sumatorias del Biométrico (Equivalente a Fila 24 de hojas individuales)
