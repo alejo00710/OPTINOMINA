@@ -45,7 +45,7 @@ const resolveValue = (overrides, key, formulaFn) => {
 
 export default function NominaPage() {
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [isDbLoading, setIsDbLoading] = useState(true);
+
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [deudaAnteriorModal, setDeudaAnteriorModal] = useState(0);
   const [detailsWorkerName, setDetailsWorkerName] = useState("");
@@ -242,73 +242,68 @@ export default function NominaPage() {
     }
   };
 
-  const loadEmployees = async () => {
+  const [isAppLoading, setIsAppLoading] = useState(true);
+
+  const reloadEmployees = async () => {
+    let masterEmployees = [];
+    const empRes = await loadEmployeesFromCloud();
+    if (empRes.success && empRes.data) {
+      masterEmployees = empRes.data.map((emp, index) => {
+        const esAdmin = emp.categoria === 'Administrativo' || emp.cargo?.toUpperCase() === 'ADMINISTRATIVO';
+        return {
+          consecutivo: index + 1,
+          cedula: emp.cedula,
+          biometric_id: emp.biometric_id || "",
+          nombre: emp.nombre,
+          cargo: emp.cargo,
+          categoria: emp.categoria,
+          area: emp.area || "Administrativo",
+          banco: emp.banco || "",
+          tipo_vinculacion: emp.tipo_vinculacion || "",
+          salario: Number(emp.salario_base || emp.salario || 0),
+          rodamiento: Number(emp.rodamiento || 0),
+          comisiones: 0,
+          poliza_bolivar: Number(emp.poliza_bolivar || 0),
+          poliza_sura: Number(emp.poliza_sura || 0),
+          optica: Number(emp.optica || 0),
+          prestamos: Number(emp.prestamos || 0),
+          dias_pagados: esAdmin ? 15 : 0,
+          horas_diurnas: esAdmin ? 88 : 0,
+          horas_nocturnas: 0,
+          extras_diurnas: 0,
+          extras_nocturnas: 0,
+          extras_festivas: 0,
+          total_devengados: 0,
+          total_deducciones: 0,
+          neto_pagar: 0
+        };
+      });
+    }
+    setNominaRows(masterEmployees);
+  };
+
+  const loadInitialData = async () => {
       try {
-        let masterEmployees = [];
-        const empRes = await loadEmployeesFromCloud();
-        if (empRes.success && empRes.data) {
-          masterEmployees = empRes.data.map((emp, index) => {
-            const esAdmin = emp.categoria === 'Administrativo' || emp.cargo?.toUpperCase() === 'ADMINISTRATIVO';
-            return {
-              consecutivo: index + 1,
-              cedula: emp.cedula,
-              biometric_id: emp.biometric_id || "",
-              nombre: emp.nombre,
-              cargo: emp.cargo,
-              categoria: emp.categoria,
-              area: emp.area || "Administrativo",
-              banco: emp.banco || "",
-              tipo_vinculacion: emp.tipo_vinculacion || "",
-              salario: Number(emp.salario_base || emp.salario || 0),
-              rodamiento: Number(emp.rodamiento || 0),
-              comisiones: 0,
-              poliza_bolivar: Number(emp.poliza_bolivar || 0),
-              poliza_sura: Number(emp.poliza_sura || 0),
-              optica: Number(emp.optica || 0),
-              prestamos: Number(emp.prestamos || 0),
-              // Transaccionales inicializados en 0
-              dias_pagados: esAdmin ? 15 : 0,
-              horas_diurnas: esAdmin ? 88 : 0,
-              horas_nocturnas: 0,
-              extras_diurnas: 0,
-              extras_nocturnas: 0,
-              extras_festivas: 0,
-              total_devengados: 0,
-              total_deducciones: 0,
-              neto_pagar: 0
-            };
-          });
-        }
+        setIsAppLoading(true);
+        await reloadEmployees();
 
-        // TAREA 3: Iniciar en blanco (solo cargar masterEmployees y estados vacíos)
-        setNominaRows(masterEmployees);
-
-        // Cargar borrador desde Supabase
+        // Cargar borrador activo desde Supabase
         const { data: cloudDraft, error: draftError } = await supabase
           .from('optimoldes_payroll')
           .select('*')
           .eq('id', 'quincena_activa')
           .single();
 
-        let blockReset = false;
-
         if (cloudDraft && !draftError) {
           try {
-            if (cloudDraft.attendance_logs && Object.keys(cloudDraft.attendance_logs).length > 0) {
-              setStartDate(cloudDraft.start_date || startDate);
-              setEndDate(cloudDraft.end_date || endDate);
-              setAttendanceLogs(cloudDraft.attendance_logs);
-              setOverrides(cloudDraft.overrides || {});
-              blockReset = true;
-              console.log("✅ Borrador restaurado desde la nube, ignorando plantillas vacías.");
-            }
+            setStartDate(cloudDraft.start_date || startDate);
+            setEndDate(cloudDraft.end_date || endDate);
+            setAttendanceLogs(cloudDraft.attendance_logs || {});
+            setOverrides(cloudDraft.overrides || {});
+            console.log("✅ Datos iniciales cargados y sincronizados desde la nube.");
           } catch (e) {
-            console.error("Error aplicando borrador desde la nube:", e);
+            console.error("Error aplicando datos desde la nube:", e);
           }
-        }
-
-        if (blockReset) {
-          console.warn("Candado Activo: Se restauró el borrador guardado en la nube.");
         } else {
           setAttendanceLogs({});
           setOverrides({});
@@ -316,27 +311,42 @@ export default function NominaPage() {
       } catch (e) {
         console.error("Error loading persisted payroll data from cloud:", e);
       } finally {
-        setIsDbLoading(false);
+        setIsAppLoading(false);
       }
     };
 
-
-
   useEffect(() => {
+    loadInitialData();
 
+    // Supabase Realtime Subscriptions
+    const payrollChannel = supabase
+      .channel('public:optimoldes_payroll')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'optimoldes_payroll', filter: "id=eq.quincena_activa" }, (payload) => {
+        console.log("🔄 Actualización de nómina recibida:", payload);
+        if (payload.eventType === 'DELETE') {
+          setAttendanceLogs({});
+          setOverrides({});
+        } else if (payload.new) {
+          setStartDate(prev => payload.new.start_date || prev);
+          setEndDate(prev => payload.new.end_date || prev);
+          setAttendanceLogs(payload.new.attendance_logs || {});
+          setOverrides(payload.new.overrides || {});
+        }
+      })
+      .subscribe();
 
-    const range = loadPersistedDateRange();
+    const employeesChannel = supabase
+      .channel('public:optimoldes_employees')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'optimoldes_employees' }, (payload) => {
+        console.log("🔄 Cambio en el directorio de empleados detectado:", payload);
+        reloadEmployees();
+      })
+      .subscribe();
 
-
-    setStartDate(range.start);
-
-
-    setEndDate(range.end);
-
-
-    loadEmployees();
-
-
+    return () => {
+      supabase.removeChannel(payrollChannel);
+      supabase.removeChannel(employeesChannel);
+    };
   }, []);
 
   useEffect(() => {
@@ -1192,8 +1202,14 @@ const handleSaveToCloud = async () => {
     reader.readAsText(file);
     if (e.target) e.target.value = '';
   };
-  if (!dataLoaded) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-semibold animate-pulse">Cargando área de trabajo, por favor espera...</div>;
-
+  if (isAppLoading || !dataLoaded) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center text-slate-500 font-semibold bg-slate-50/50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+        <p className="animate-pulse">Cargando base de datos en tiempo real...</p>
+      </div>
+    );
+  }
   return (
     <>
     <div className="w-full max-w-[98%] xl:max-w-[96%] mx-auto space-y-8 animate-stitch pb-12">
@@ -1307,7 +1323,7 @@ const handleSaveToCloud = async () => {
       {activeTab === "directorio" && (
         <TabDirectorio 
           employees={nominaRows} 
-          refreshEmployees={loadEmployees} 
+          refreshEmployees={reloadEmployees} 
         />
       )}
       
