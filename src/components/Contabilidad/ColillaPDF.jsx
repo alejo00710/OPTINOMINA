@@ -162,7 +162,7 @@ const DetailRowCombined = ({ label, qty, qtyLabel, money }) => {
   );
 };
 
-export default function ColillaPDF({ empleados = [], identificador = "SÁBANA CONSOLIDADA DETALLADA" }) {
+export default function ColillaPDF({ empleados = [], tituloReporte = "SÁBANA CONSOLIDADA DETALLADA", identificador = "" }) {
   return (
     <Document>
       <Page size="A4" orientation="portrait" style={styles.page}>
@@ -172,7 +172,7 @@ export default function ColillaPDF({ empleados = [], identificador = "SÁBANA CO
             <Text style={styles.companyName}>OPTIMOLDES</Text>
           </View>
           <View>
-            <Text style={styles.title}>{identificador}</Text>
+            <Text style={styles.title}>{tituloReporte}</Text>
           </View>
         </View>
 

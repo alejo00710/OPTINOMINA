@@ -14,6 +14,7 @@ export default function TabPanelHistorico() {
   const [empleadosPDF, setEmpleadosPDF] = useState([]);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [selectedQuincena, setSelectedQuincena] = useState('');
+  const [tipoConsolidado, setTipoConsolidado] = useState('');
 
   useEffect(() => {
     fetchNominas();
@@ -40,10 +41,15 @@ export default function TabPanelHistorico() {
     }
   };
 
-  const handleOpenColillas = async (nomina) => {
+  const isTemporal = (emp) => {
+    const tipo = String((emp.masterRow && emp.masterRow.tipo_vinculacion) || emp.tipo_vinculacion || '').toLowerCase();
+    const empresa = String((emp.masterRow && emp.masterRow.empresa) || emp.empresa || '').toLowerCase();
+    return tipo.includes('temporal') || tipo.includes('misión') || tipo.includes('mision') || empresa.includes('saitemp');
+  };
+
+  const handleOpenColillas = async (nomina, tipo) => {
     try {
       setLoadingPDFId(nomina.id);
-      setSelectedQuincena(nomina.identificador);
       
       const { data, error } = await supabase
         .from('historico_nominas_v2')
@@ -53,7 +59,22 @@ export default function TabPanelHistorico() {
         
       if (error) throw error;
       
-      setEmpleadosPDF(data.empleados_jsonb || []);
+      const empleadosRaw = data.empleados_jsonb || [];
+      let procesados = [];
+      
+      if (tipo === 'Optimoldes') {
+         procesados = empleadosRaw.filter(emp => !isTemporal(emp));
+         setSelectedQuincena(nomina.identificador);
+         setTipoConsolidado('CONSOLIDADO OPTIMOLDES');
+      } else {
+         procesados = empleadosRaw.filter(emp => isTemporal(emp));
+         setSelectedQuincena(nomina.identificador);
+         setTipoConsolidado('CONSOLIDADO SAITEMP');
+      }
+
+      procesados.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+      
+      setEmpleadosPDF(procesados);
       setIsViewerOpen(true);
     } catch (err) {
       console.error('Error fetching empleados JSON:', err);
@@ -160,17 +181,30 @@ export default function TabPanelHistorico() {
                         {formatCurrency(nomina.total_neto_pagado)}
                       </td>
                       <td className="p-5 text-center">
-                        <button
-                          onClick={() => handleOpenColillas(nomina)}
-                          disabled={loadingPDFId === nomina.id}
-                          className="bg-white border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl font-bold transition-all text-xs inline-flex items-center gap-2 shadow-sm active:scale-95 disabled:opacity-50"
-                        >
-                          {loadingPDFId === nomina.id ? (
-                            <><Loader2 size={14} className="animate-spin" /> Cargando...</>
-                          ) : (
-                            <>Sábana Consolidada <ArrowRight size={14} /></>
-                          )}
-                        </button>
+                        <div className="flex flex-col gap-2 items-center">
+                          <button
+                            onClick={() => handleOpenColillas(nomina, 'Optimoldes')}
+                            disabled={loadingPDFId === nomina.id}
+                            className="bg-white border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-xl font-bold transition-all text-[10px] inline-flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50 w-full justify-center"
+                          >
+                            {loadingPDFId === nomina.id ? (
+                              <><Loader2 size={12} className="animate-spin" /> Cargando...</>
+                            ) : (
+                              <>Consolidado Optimoldes <ArrowRight size={12} /></>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => handleOpenColillas(nomina, 'Saitemp')}
+                            disabled={loadingPDFId === nomina.id}
+                            className="bg-white border border-slate-200 hover:border-amber-300 hover:bg-amber-50 text-amber-600 px-3 py-1.5 rounded-xl font-bold transition-all text-[10px] inline-flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50 w-full justify-center"
+                          >
+                            {loadingPDFId === nomina.id ? (
+                              <><Loader2 size={12} className="animate-spin" /> Cargando...</>
+                            ) : (
+                              <>Consolidado Saitemp <ArrowRight size={12} /></>
+                            )}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -202,7 +236,7 @@ export default function TabPanelHistorico() {
           </div>
           <div className="flex-1 w-full bg-slate-800 relative h-[85vh]">
              <PDFViewer width="100%" height="100%" className="border-none" style={{ height: '85vh', width: '100%' }}>
-               <ColillaPDF empleados={empleadosPDF} identificador={selectedQuincena} />
+               <ColillaPDF empleados={empleadosPDF} tituloReporte={tipoConsolidado} identificador={selectedQuincena} />
              </PDFViewer>
           </div>
         </div>

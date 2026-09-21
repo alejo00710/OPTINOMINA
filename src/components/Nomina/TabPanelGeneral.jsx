@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import EditableCell from '@/components/Nomina/EditableCell';
 import SaitempModal from '@/components/Nomina/SaitempModal';
@@ -22,12 +22,50 @@ export default function TabPanelGeneral({
   globalSmmlv,
   setGlobalSmmlv,
   globalAuxTransporte,
-  setGlobalAuxTransporte
+  setGlobalAuxTransporte,
+  handleSaveDraft
 }) {
   const [vinculacionFiltro, setVinculacionFiltro] = useState('Empresa');
   const [isSaitempModalOpen, setIsSaitempModalOpen] = useState(false);
   const [empleadoSaitemp, setEmpleadoSaitemp] = useState(null);
   const [vacacionesModal, setVacacionesModal] = useState({ isOpen: false, empleado: null });
+  const lastProcessedDates = useRef({});
+
+  // Auto-conteo de días de vacaciones
+  useEffect(() => {
+    if (vacacionesModal.isOpen && vacacionesModal.empleado) {
+      const workerData = filteredPayrollData.find(d => d.masterRow?.nombre === vacacionesModal.empleado);
+      if (workerData && workerData.masterRow) {
+        const cedula = workerData.masterRow.cedula;
+        const inicioKey = `${cedula}_fecha_inicio_vacaciones`;
+        const finKey = `${cedula}_fecha_fin_vacaciones`;
+        
+        const fechaInicio = overrides[inicioKey] || workerData.fecha_inicio_vacaciones;
+        const fechaFin = overrides[finKey] || workerData.fecha_fin_vacaciones;
+        
+        const signature = `${fechaInicio}_${fechaFin}`;
+        
+        if (fechaInicio && fechaFin && lastProcessedDates.current[cedula] !== signature) {
+          const inicio = new Date(fechaInicio);
+          const fin = new Date(fechaFin);
+          
+          if (!isNaN(inicio.getTime()) && !isNaN(fin.getTime()) && fin >= inicio) {
+             const diffTime = Math.abs(fin - inicio);
+             const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+             
+             handleCellEdit(`${cedula}_dias_vacaciones`, diffDays);
+             lastProcessedDates.current[cedula] = signature;
+          }
+        }
+      }
+    }
+  }, [
+    vacacionesModal.isOpen, 
+    vacacionesModal.empleado, 
+    overrides, 
+    filteredPayrollData, 
+    handleCellEdit
+  ]);
 
   const COLUMNAS_ESENCIALES = ['salario', 'total_devengados', 'total_deducciones', 'neto_pagar'];
   const COLUMNAS_FIJAS = ['consecutivo', 'cedula', 'nombre', 'cargo'];
@@ -461,7 +499,8 @@ export default function TabPanelGeneral({
       <SaitempModal 
         isOpen={isSaitempModalOpen} 
         onClose={() => setIsSaitempModalOpen(false)} 
-        employee={empleadoSaitemp} 
+        employee={empleadoSaitemp}
+        onSaveToCloud={handleSaveDraft}
         onSave={async (data) => {
           if (!empleadoSaitemp) return;
           const cedula = empleadoSaitemp.cedula;
@@ -480,7 +519,6 @@ export default function TabPanelGeneral({
                   handleCellEdit(`${cedula}_incapacidad`, nov.novedad);
               }
           }
-          alert("Datos transferidos a la planilla.");
         }}
       />
 
@@ -561,6 +599,50 @@ export default function TabPanelGeneral({
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                                   {renderVacacionesCard('dias_vacaciones')}
                                   {renderVacacionesCard('val_vacaciones')}
+                                  
+                                  <div className="relative bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
+                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-emerald-600 transition-colors">
+                                       FECHA INICIAL
+                                     </span>
+                                     <input 
+                                       type="date"
+                                       className="w-full bg-slate-50 border-none outline-none focus:ring-0 text-slate-700 font-semibold p-1.5 rounded-lg"
+                                       value={overrides[`${workerData.masterRow.cedula}_fecha_inicio_vacaciones`] || workerData.fecha_inicio_vacaciones || ""}
+                                       onChange={(e) => handleCellEdit(`${workerData.masterRow.cedula}_fecha_inicio_vacaciones`, e.target.value)}
+                                     />
+                                  </div>
+                                  
+                                  <div className="relative bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
+                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-emerald-600 transition-colors">
+                                       FECHA FINAL
+                                     </span>
+                                     <input 
+                                       type="date"
+                                       className="w-full bg-slate-50 border-none outline-none focus:ring-0 text-slate-700 font-semibold p-1.5 rounded-lg"
+                                       value={overrides[`${workerData.masterRow.cedula}_fecha_fin_vacaciones`] || workerData.fecha_fin_vacaciones || ""}
+                                       onChange={(e) => handleCellEdit(`${workerData.masterRow.cedula}_fecha_fin_vacaciones`, e.target.value)}
+                                     />
+                                  </div>
+                                  
+                                  <div className="md:col-span-2 relative bg-amber-50/50 border border-amber-200/60 p-4 rounded-2xl flex items-center justify-between shadow-sm transition-all group">
+                                     <div className="flex flex-col">
+                                        <span className="text-sm font-bold text-amber-900">
+                                          ¿Se pagaron por anticipado?
+                                        </span>
+                                        <span className="text-xs text-amber-700 mt-0.5">
+                                          Al marcar esta opción, el valor de las vacaciones no se sumará al Total Devengado de esta nómina.
+                                        </span>
+                                     </div>
+                                     <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                       <input 
+                                         type="checkbox"
+                                         className="sr-only peer"
+                                         checked={overrides[`${workerData.masterRow.cedula}_vacaciones_pagadas`] || false}
+                                         onChange={(e) => handleCellEdit(`${workerData.masterRow.cedula}_vacaciones_pagadas`, e.target.checked)}
+                                       />
+                                       <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                                     </label>
+                                  </div>
                               </div>
                           );
                       })()}

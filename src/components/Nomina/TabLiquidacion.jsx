@@ -109,9 +109,11 @@ export default function TabLiquidacion({
   handleClearAttendanceData,
   selectedWorkerName,
   setSelectedWorkerName,
-  nominaRows
+  nominaRows,
+  handleSaveDraft
 }) {
   const [deudaAnterior, setDeudaAnterior] = useState(0);
+  const [saveStatus, setSaveStatus] = useState('idle');
 
   useEffect(() => {
     async function fetchDeudaAnterior() {
@@ -215,10 +217,21 @@ export default function TabLiquidacion({
                    Limpiar Biométrico
                 </button>
                 <button
-                  onClick={() => window.print()}
-                  className="bg-sky-100 hover:bg-sky-600 text-sky-600 hover:text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-lg transition-colors shadow-sm flex items-center gap-1"
+                  onClick={async () => {
+                    if (typeof handleSaveDraft !== 'function') return;
+                    setSaveStatus('saving');
+                    try {
+                      await handleSaveDraft();
+                      setSaveStatus('success');
+                      setTimeout(() => setSaveStatus('idle'), 1500);
+                    } catch (e) {
+                      setSaveStatus('idle');
+                    }
+                  }}
+                  disabled={saveStatus === 'saving'}
+                  className={`text-xs font-black uppercase tracking-wider px-3 py-2 rounded-lg transition-colors shadow-sm flex items-center gap-1 ${saveStatus === 'success' ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'bg-blue-100 hover:bg-blue-600 text-blue-600 hover:text-white'}`}
                 >
-                   <Printer size={16} /> Imprimir Colilla
+                  {saveStatus === 'saving' ? "⏳ Guardando..." : saveStatus === 'success' ? "✅ ¡Guardado!" : "💾 Guardar Liquidación"}
                 </button>
              </div>
           </div>

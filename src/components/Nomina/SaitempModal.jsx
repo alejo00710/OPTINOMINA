@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Save, Trash2, Plus } from 'lucide-react';
 
-export default function SaitempModal({ isOpen, onClose, employee, onSave }) {
+export default function SaitempModal({ isOpen, onClose, employee, onSave, onSaveToCloud }) {
+  const [saveStatus, setSaveStatus] = useState('idle'); // idle, saving, success
   const [novedades, setNovedades] = useState([
     { id: 1, novedad: '', fechaInicio: '', fechaFinal: '', totalDias: '' }
   ]);
@@ -28,15 +29,16 @@ export default function SaitempModal({ isOpen, onClose, employee, onSave }) {
         horasExtrasDiurnas: formatHour(employee.extras_diurnas),
         horasExtrasNocturnas: formatHour(employee.extras_nocturnas),
         horasExtrasFestivasDiurnas: formatHour(employee.extras_festivas),
-        descuentos: '',
-        auxilios: '',
-        comisiones: '',
+        descuentos: employee.prestamos ? String(employee.prestamos) : '',
+        auxilios: employee.rodamiento ? String(employee.rodamiento) : '',
+        comisiones: employee.comisiones ? String(employee.comisiones) : '',
         observaciones: ''
       });
+      setSaveStatus('idle');
     }
   }, [employee, isOpen]);
 
-  if (!isOpen || !employee) return null;
+  if (!isOpen) return null;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -56,14 +58,22 @@ export default function SaitempModal({ isOpen, onClose, employee, onSave }) {
   };
 
   const handleSave = async () => {
+    setSaveStatus('saving');
     try {
       if (typeof onSave === 'function') {
         await onSave({ novedades, ...formData });
       }
-      console.log("Reporte SAITEMP guardado para", employee?.nombre);
-      onClose();
+      if (typeof onSaveToCloud === 'function') {
+        await onSaveToCloud();
+      }
+      setSaveStatus('success');
+      setTimeout(() => {
+        setSaveStatus('idle');
+        onClose();
+      }, 1500);
     } catch (e) {
       console.error(e);
+      setSaveStatus('idle');
       alert("Error al guardar formato Saitemp");
     }
   };
@@ -244,10 +254,19 @@ export default function SaitempModal({ isOpen, onClose, employee, onSave }) {
           </button>
           <button 
             onClick={handleSave}
-            className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-sm shadow-md shadow-amber-200 transition-all active:scale-95 flex items-center gap-2"
+            disabled={saveStatus === 'saving'}
+            className={`px-6 py-2.5 text-white font-bold rounded-xl text-sm shadow-md transition-all active:scale-95 flex items-center gap-2 ${saveStatus === 'success' ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200' : 'bg-amber-500 hover:bg-amber-600 shadow-amber-200'}`}
           >
-            <Save size={18} />
-            Guardar Reporte
+            {saveStatus === 'saving' ? (
+              "⏳ Guardando..."
+            ) : saveStatus === 'success' ? (
+              "✅ ¡Guardado!"
+            ) : (
+              <>
+                <Save size={18} />
+                Guardar Reporte
+              </>
+            )}
           </button>
         </div>
 
