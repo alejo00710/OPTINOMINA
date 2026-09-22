@@ -113,7 +113,7 @@ export const getTimeDifferenceHHMM = (start, end, allowMidnight = true) => {
 };
 
 export const getTimeDifference = (start, end, allowMidnight = true) => {
-  if (!start || !end || start === "-" || end === "-" || start === "00:00" || end === "00:00") return 0;
+  if (!start || !end || start === "-" || end === "-") return 0;
   
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);
@@ -161,9 +161,13 @@ export const getOfficialShiftTime = (timeStr, type, turnoProgramadoDelDia = null
       if (match) {
           let hh = parseInt(match[1], 10);
           const mm = match[2] || "00";
-          const modifier = match[3] ? match[3].replace(/\./g, '').toUpperCase() : undefined;
-          if (modifier === 'PM' && hh < 12) hh += 12;
-          if (modifier === 'AM' && hh === 12) hh = 0;
+          const modifier = match[3] ? match[3].replace(/\./g, '').toUpperCase().trim() : undefined;
+          const isAM = modifier === 'AM';
+          const isPM = modifier === 'PM';
+          
+          if (isAM && hh === 12) hh = 0;
+          if (isPM && hh < 12) hh += 12;
+          
           return `${String(hh).padStart(2, "0")}:${mm}`;
       }
   }
@@ -176,9 +180,13 @@ export const getOfficialShiftTime = (timeStr, type, turnoProgramadoDelDia = null
       const match = isEntrada ? matches[0] : matches[1];
       let hh = parseInt(match[1], 10);
       const mm = match[2] || "00";
-      const modifier = match[3] ? match[3].replace(/\./g, '').toUpperCase() : undefined;
-      if (modifier === 'PM' && hh < 12) hh += 12;
-      if (modifier === 'AM' && hh === 12) hh = 0;
+      const modifier = match[3] ? match[3].replace(/\./g, '').toUpperCase().trim() : undefined;
+      const isAM = modifier === 'AM';
+      const isPM = modifier === 'PM';
+      
+      if (isAM && hh === 12) hh = 0;
+      if (isPM && hh < 12) hh += 12;
+      
       return `${String(hh).padStart(2, "0")}:${mm}`;
   }
   const parts = timeStr.split(":");
@@ -240,9 +248,13 @@ export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
                 const formatTime = (match) => {
                     let hh = parseInt(match[1], 10);
                     const mm = parseInt(match[2] || "00", 10);
-                    const mod = match[3] ? match[3].replace(/\./g, '').toUpperCase() : undefined;
-                    if (mod === 'PM' && hh < 12) hh += 12;
-                    if (mod === 'AM' && hh === 12) hh = 0;
+                    const mod = match[3] ? match[3].replace(/\./g, '').toUpperCase().trim() : undefined;
+                    const isAM = mod === 'AM';
+                    const isPM = mod === 'PM';
+                    
+                    if (isAM && hh === 12) hh = 0;
+                    if (isPM && hh < 12) hh += 12;
+                    
                     return { hh, mm };
                 };
                 
@@ -263,9 +275,13 @@ export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
                 const formatTime = (match) => {
                     let hh = parseInt(match[1], 10);
                     const mm = parseInt(match[2] || "00", 10);
-                    const mod = match[3] ? match[3].replace(/\./g, '').toUpperCase() : undefined;
-                    if (mod === 'PM' && hh < 12) hh += 12;
-                    if (mod === 'AM' && hh === 12) hh = 0;
+                    const mod = match[3] ? match[3].replace(/\./g, '').toUpperCase().trim() : undefined;
+                    const isAM = mod === 'AM';
+                    const isPM = mod === 'PM';
+                    
+                    if (isAM && hh === 12) hh = 0;
+                    if (isPM && hh < 12) hh += 12;
+                    
                     return { hh, mm };
                 };
                 const bIn = formatTime(matches[0]);
