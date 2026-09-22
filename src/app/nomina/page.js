@@ -603,7 +603,11 @@ processedLogs.forEach(day => {
       
       const comisiones = resolveValue(overrides, `${cedula}_comisiones`, () => 0);
       const rodamiento = resolveValue(overrides, `${cedula}_rodamiento`, () => parseLocalNumber(Number(emp.rodamiento || 0)));
-      const diasIncapacidad = resolveValue(overrides, `${cedula}_dias_incapacidad`, () => parseLocalNumber(Number(emp.dias_incapacidad || 0)));
+      const diasIncapacidad = resolveValue(overrides, `${cedula}_dias_incapacidad`, () => {
+          const keyIncap = Object.keys(novedadesResumen).find(k => k.includes('INCAPACIDAD GENERAL') || (k.includes('INCAP') && !k.includes('AT')));
+          const valCalculado = keyIncap ? novedadesResumen[keyIncap]?.length : 0;
+          return valCalculado > 0 ? valCalculado : parseLocalNumber(Number(emp.dias_incapacidad || 0));
+      });
       
       const basePrestamo = parseLocalNumber(Number(emp.prestamos || 0));
       const prestamos = resolveValue(overrides, `${cedula}_prestamos`, () => 0);
