@@ -480,6 +480,7 @@ export default function NominaPage() {
          if (turnoStr && !/\d/.test(turnoStr) && !["NORMAL", "DIURNO", "NOCTURNO", "TURNO", ""].includes(turnoStr)) {
              dayLog.estado = turnoStr;
              dayLog.novedad = turnoStr;
+             dayLog.ignorarBiometria = true;
          }
          // --- FIN INYECCIÓN ---
 
@@ -517,7 +518,17 @@ processedLogs.forEach(day => {
         estadoRaw = turnoValor;
     } else {
         // 3. Fallback: El estado crudo del biométrico o vacío
-        estadoRaw = String(day.estado_marcacion || day.estado || day.observacion || day.novedad || "").toUpperCase().trim();
+        if (!day.ignorarBiometria) {
+            const faltanMarcas = (!day.hr_ent || day.hr_ent === "") && (!day.hr_sal || day.hr_sal === "");
+            if (faltanMarcas && turnoValor) {
+                // Respeto por J y K: Si debía venir pero faltan marcas, marcar FALTA sin borrar turno programado
+                estadoRaw = "FALTA";
+            } else {
+                estadoRaw = String(day.estado_marcacion || day.estado || day.observacion || day.novedad || "").toUpperCase().trim();
+            }
+        } else {
+            estadoRaw = String(day.estado || turnoValor).toUpperCase().trim();
+        }
     }
     const estado = estadoRaw === "" ? "NORMAL" : estadoRaw;
 
