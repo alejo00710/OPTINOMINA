@@ -25,7 +25,7 @@ export const decimalToTimeStr = (dec) => {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 };
 export const diffTimeStr = (t1, t2) => {
-  if (!t1 || !t2) return "00:00";
+  if (t1 === undefined || t1 === null || t1 === "" || t2 === undefined || t2 === null || t2 === "") return "00:00";
   const dec1 = timeStrToDecimal(t1);
   const dec2 = timeStrToDecimal(t2);
   let diff = dec2 - dec1;
@@ -33,7 +33,7 @@ export const diffTimeStr = (t1, t2) => {
   return decimalToTimeStr(diff);
 };
 export const getDecimalHours = (t1, t2) => {
-  if (!t1 || !t2) return 0;
+  if (t1 === undefined || t1 === null || t1 === "" || t2 === undefined || t2 === null || t2 === "") return 0;
   const dec1 = timeStrToDecimal(t1);
   const dec2 = timeStrToDecimal(t2);
   if (isNaN(dec1) || isNaN(dec2)) return 0;
@@ -84,11 +84,14 @@ export const parseLocalNumber = (val) => {
 };
 
 export const getTimeDifferenceHHMM = (start, end, allowMidnight = true) => {
-  if (!start || !end || start === "-" || end === "-") return "00:00";
-  if (typeof start !== 'string' || typeof end !== 'string' || !start.includes(":") || !end.includes(":")) return "00:00";
-  
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
+  if (start === undefined || start === null || start === "" || start === "-" || end === undefined || end === null || end === "" || end === "-") return "00:00";
+  let sStr = start;
+  let eStr = end;
+  if (typeof start === "number" || (typeof start === "string" && !String(start).includes(":"))) sStr = decimalToTimeStr(start);
+  if (typeof end === "number" || (typeof end === "string" && !String(end).includes(":"))) eStr = decimalToTimeStr(end);
+
+  const [sh, sm] = String(sStr).split(":").map(Number);
+  const [eh, em] = String(eStr).split(":").map(Number);
   
   if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return "00:00";
   
@@ -113,10 +116,15 @@ export const getTimeDifferenceHHMM = (start, end, allowMidnight = true) => {
 };
 
 export const getTimeDifference = (start, end, allowMidnight = true) => {
-  if (!start || !end || start === "-" || end === "-") return 0;
+  if (start === undefined || start === null || start === "" || start === "-" || end === undefined || end === null || end === "" || end === "-") return 0;
   
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
+  let sStr = start;
+  let eStr = end;
+  if (typeof start === "number" || (typeof start === "string" && !String(start).includes(":"))) sStr = decimalToTimeStr(start);
+  if (typeof end === "number" || (typeof end === "string" && !String(end).includes(":"))) eStr = decimalToTimeStr(end);
+
+  const [sh, sm] = String(sStr).split(":").map(Number);
+  const [eh, em] = String(eStr).split(":").map(Number);
   
   if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return 0;
   
@@ -140,7 +148,7 @@ export const getTimeDifference = (start, end, allowMidnight = true) => {
 
 
 export const getOfficialShiftTime = (timeStr, type, turnoProgramadoDelDia = null) => {
-  if (!timeStr || timeStr === "-") return "-";
+  if (timeStr === undefined || timeStr === null || timeStr === "" || timeStr === "-") return "-";
   
   // 1. Escudo Anti-Crash Inmediato
   if (!turnoProgramadoDelDia || turnoProgramadoDelDia === 'null' || turnoProgramadoDelDia === 'undefined') {
@@ -155,7 +163,7 @@ export const getOfficialShiftTime = (timeStr, type, turnoProgramadoDelDia = null
   if (text.includes(" A ")) {
       const partes = text.split(" A ");
       const matchText = isEntrada ? partes[0] : partes[1];
-      const timeRegex = /(?:^|\b|\s)(\d{1,2})(?::(\d{2}))?\s*(A\.?M\.?|P\.?M\.?)?(?:\b|\s|$)/i;
+      const timeRegex = /(?:^|\b|\s)(\d{1,2})(?::(\d{2}))?\s*(A\.?\s*M\.?|P\.?\s*M\.?)?(?:\b|\s|$)/i;
       const match = matchText.match(timeRegex);
       
       if (match) {
@@ -173,7 +181,7 @@ export const getOfficialShiftTime = (timeStr, type, turnoProgramadoDelDia = null
   }
 
   // 2. Escáner de Fuerza Bruta: Fallback
-  const globalRegex = /(?:^|\b|\s)(\d{1,2})(?::(\d{2}))?\s*(A\.?M\.?|P\.?M\.?)?(?:\b|\s|$)/ig;
+  const globalRegex = /(?:^|\b|\s)(\d{1,2})(?::(\d{2}))?\s*(A\.?\s*M\.?|P\.?\s*M\.?)?(?:\b|\s|$)/ig;
   const matches = [...text.matchAll(globalRegex)];
 
   if (matches.length >= 2) {
@@ -225,8 +233,8 @@ export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
     if (String(dbShiftText).toUpperCase().includes('DESCANSO')) {
         return { officialIn: null, officialOut: null, isRestDay: true, lateMinutes: 0 };
     }
-    const isEmptyPunchIn = !realPunchIn || realPunchIn === '--:--' || realPunchIn === 'null' || String(realPunchIn).trim() === '' || realPunchIn === '-';
-    const isEmptyPunchOut = !realPunchOut || realPunchOut === '--:--' || realPunchOut === 'null' || String(realPunchOut).trim() === '' || realPunchOut === '-';
+    const isEmptyPunchIn = realPunchIn === undefined || realPunchIn === null || realPunchIn === '--:--' || realPunchIn === 'null' || String(realPunchIn).trim() === '' || realPunchIn === '-';
+    const isEmptyPunchOut = realPunchOut === undefined || realPunchOut === null || realPunchOut === '--:--' || realPunchOut === 'null' || String(realPunchOut).trim() === '' || realPunchOut === '-';
 
     let baseInHH = 6, baseInMM = 0, baseOutHH = 14, baseOutMM = 0;
     let usedDB = false;
@@ -239,7 +247,7 @@ export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
         // FIX ESTRICTO: Dividir el string en entrada y salida si contiene " A "
         if (textToParse.includes(" A ")) {
             const partes = textToParse.split(" A ");
-            const timeRegex = /(?:^|\b|\s)(\d{1,2})(?::(\d{2}))?\s*(A\.?M\.?|P\.?M\.?)?(?:\b|\s|$)/i;
+            const timeRegex = /(?:^|\b|\s)(\d{1,2})(?::(\d{2}))?\s*(A\.?\s*M\.?|P\.?\s*M\.?)?(?:\b|\s|$)/i;
             
             const matchIn = partes[0].match(timeRegex);
             const matchOut = partes[1].match(timeRegex);
@@ -269,7 +277,7 @@ export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
         
         // Fallback al escáner global si no tenía " A "
         if (!usedDB) {
-            const globalRegex = /(?:^|\b|\s)(\d{1,2})(?::(\d{2}))?\s*(A\.?M\.?|P\.?M\.?)?(?:\b|\s|$)/ig;
+            const globalRegex = /(?:^|\b|\s)(\d{1,2})(?::(\d{2}))?\s*(A\.?\s*M\.?|P\.?\s*M\.?)?(?:\b|\s|$)/ig;
             let matches = [...textToParse.matchAll(globalRegex)].filter(m => parseInt(m[1], 10) <= 24);
             if (matches.length >= 2) {
                 const formatTime = (match) => {
@@ -415,7 +423,7 @@ export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
         }
     }
 
-    let isMissingOut = !realPunchOut || realPunchOut === '--:--' || realPunchOut === 'null' || String(realPunchOut).trim() === '';
+    let isMissingOut = realPunchOut === undefined || realPunchOut === null || realPunchOut === '--:--' || realPunchOut === 'null' || String(realPunchOut).trim() === '';
 
     const pad = (n) => String(n).padStart(2, '0');
     return {
@@ -426,7 +434,7 @@ export const calculateSmartShift = (dbShiftText, realPunchIn, realPunchOut) => {
 };
 
 export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, horaFinDiurna, turnoProgramadoDelDia = null) => {
-  const isTime = (t) => t && String(t).trim() !== "" && String(t).trim() !== "-" && String(t).trim() !== "00:00";
+  const isTime = (t) => t !== undefined && t !== null && String(t).trim() !== "" && String(t).trim() !== "-";
 
   // Descansos (F y I)
   const hrEntDesc1 = overrides[`${prefix}_hr_ent_desc1`] !== undefined ? String(overrides[`${prefix}_hr_ent_desc1`]) : (day.hr_ent_desc1 || "-");
@@ -502,7 +510,7 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
       }
   }
 
-  const isValidPunch = (t) => t && String(t).trim() !== "" && String(t).trim() !== "-";
+  const isValidPunch = (t) => t !== undefined && t !== null && String(t).trim() !== "" && String(t).trim() !== "-";
   const diaIncompletoFlag = !isValidPunch(hrEntPago) || !isValidPunch(hrSalPago);
   
   if (diaIncompletoFlag) {
