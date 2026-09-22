@@ -440,12 +440,18 @@ export default function NominaPage() {
 
     // 5. Retorna el string buscando la llave en el datos_json de esa semana exacta.
     const posiblesIds = [emp.biometric_id, emp.id_biometrico, emp.cedula, emp.id].filter(Boolean).map(String).map(id => id.trim());
-    const cleanStr = (str) => String(str).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
 
     for (const id of posiblesIds) {
-      const targetKeyClean = cleanStr(`${id}_${diaSemanaMayuscula}`);
+      const cellKey = `${String(id)}_${diaSemanaMayuscula}`;
+      
+      // Intentar coincidencia exacta primero
+      if (semanaCorrecta.datos_json[cellKey] !== undefined) {
+        return semanaCorrecta.datos_json[cellKey];
+      }
+      
+      // Fallback a coincidencia insensible a mayúsculas (respetando tildes)
       for (const [k, v] of Object.entries(semanaCorrecta.datos_json)) {
-        if (cleanStr(k) === targetKeyClean) {
+        if (String(k).toUpperCase().trim() === cellKey.toUpperCase()) {
           return v;
         }
       }
@@ -470,7 +476,8 @@ export default function NominaPage() {
          dayLog.turno = scheduledShift;
          
          // CONEXIÓN MAESTRA: Si el horario semanal dicta novedad o descanso, el día nace con esa información
-         if (turnoStr && !["NORMAL", "DIURNO", "NOCTURNO", "TURNO", ""].includes(turnoStr)) {
+         // Regla de Estado: Si turnoStr NO está vacío y NO contiene números... asigne DIRECTAMENTE ese string
+         if (turnoStr && !/\d/.test(turnoStr) && !["NORMAL", "DIURNO", "NOCTURNO", "TURNO", ""].includes(turnoStr)) {
              dayLog.estado = turnoStr;
              dayLog.novedad = turnoStr;
          }
@@ -495,7 +502,8 @@ processedLogs.forEach(day => {
     if (day.hr_lab > 0) diasLaborados++;
 
     const turnoValor = String(typeof day.turno === 'object' ? (day.turno?.novedad || day.turno?.tipo || day.turno?.nombre || "") : day.turno).toUpperCase().trim();
-    const esTurnoNormal = ["NORMAL", "DESCANSO", "DIURNO", "NOCTURNO", "TURNO"].some(t => turnoValor.includes(t)) || turnoValor === "";
+    const tieneNumeros = /\d/.test(turnoValor);
+    const esTurnoNormal = ["NORMAL", "DESCANSO", "DIURNO", "NOCTURNO", "TURNO"].some(t => turnoValor.includes(t)) || turnoValor === "" || tieneNumeros;
 
     // Si el turno tiene una novedad explícita (ej. CALAMIDAD), gana el turno. Si es un turno normal o vacío, lee el biométrico.
     // 1. Prioridad Absoluta: El cambio manual en la pantalla (override)
@@ -504,8 +512,8 @@ processedLogs.forEach(day => {
     let estadoRaw;
     if (manualOverride) {
         estadoRaw = String(manualOverride).toUpperCase().trim();
-    } else if (!esTurnoNormal && turnoValor) {
-        // 2. Prioridad Secundaria: La novedad programada en el horario semanal
+    } else if (turnoValor && !tieneNumeros && !["NORMAL", "DIURNO", "NOCTURNO", "TURNO", ""].includes(turnoValor)) {
+        // 2. Prioridad Secundaria: La novedad programada en el horario semanal (direct pass-through)
         estadoRaw = turnoValor;
     } else {
         // 3. Fallback: El estado crudo del biométrico o vacío
