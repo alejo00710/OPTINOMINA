@@ -635,20 +635,41 @@ processedLogs.forEach(day => {
       const extNocturnasParaCalculo = getValExactoInput('extras_nocturnas', finalExtNoc);
       const extFestivasParaCalculo = getValExactoInput('extras_festivas', finalExtFesDiu + finalExtFesNoc);
 
-      const resumenNov = novedadesResumen || {};
-
-      // Helper para dar prioridad absoluta a lo que el usuario edite en las tarjetas visuales
-      const getDiaOverride = (campo, rawValue) => {
-          const val = overrides[`${cedula}_${campo}`];
-          return val !== undefined && val !== "" ? Number(val) : rawValue;
+      // Mapeo Estricto de Novedades (Auditoría de Liquidación)
+      const getNoveltyCount = (conditionFn) => {
+          const key = Object.keys(novedadesResumen).find(conditionFn);
+          return key ? novedadesResumen[key]?.length : 0;
       };
 
-      const dias_vacaciones = getDiaOverride('dias_vacaciones', resumenNov['VACACIONES']?.length || 0);
-      const dias_lic_rem = getDiaOverride('dias_lic_rem', resumenNov['LICENCIA REMUNERADA']?.length || 0);
-      const dias_lic_norem = getDiaOverride('dias_lic_norem', resumenNov['LICENCIA NO REMUNERADA']?.length || 0);
-      const dias_incap_at = getDiaOverride('dias_incap_at', resumenNov['INCAPACIDAD ACCIDENTE LABORAL']?.length || 0);
-      const dias_calamidad = getDiaOverride('dias_calamidad', resumenNov['CALAMIDAD']?.length || 0);
-      const dias_sancion = getDiaOverride('dias_sancion', resumenNov['SANCIONADO']?.length || 0);
+      const dias_vacaciones = resolveValue(overrides, `${cedula}_dias_vacaciones`, () => {
+          const val = getNoveltyCount(k => k.includes('VACACIONES'));
+          return val > 0 ? val : parseLocalNumber(Number(emp.dias_vacaciones || 0));
+      });
+
+      const dias_lic_rem = resolveValue(overrides, `${cedula}_dias_lic_rem`, () => {
+          const val = getNoveltyCount(k => k.includes('LICENCIA REMUNERADA') && !k.includes('NO'));
+          return val > 0 ? val : parseLocalNumber(Number(emp.dias_lic_rem || 0));
+      });
+
+      const dias_lic_norem = resolveValue(overrides, `${cedula}_dias_lic_norem`, () => {
+          const val = getNoveltyCount(k => k.includes('LICENCIA NO REMUNERADA'));
+          return val > 0 ? val : parseLocalNumber(Number(emp.dias_lic_norem || 0));
+      });
+
+      const dias_incap_at = resolveValue(overrides, `${cedula}_dias_incap_at`, () => {
+          const val = getNoveltyCount(k => k.includes('AT') || k.includes('ACCIDENTE'));
+          return val > 0 ? val : parseLocalNumber(Number(emp.dias_incap_at || 0));
+      });
+
+      const dias_calamidad = resolveValue(overrides, `${cedula}_dias_calamidad`, () => {
+          const val = getNoveltyCount(k => k.includes('CALAMIDAD'));
+          return val > 0 ? val : parseLocalNumber(Number(emp.dias_calamidad || 0));
+      });
+
+      const dias_sancion = resolveValue(overrides, `${cedula}_dias_sancion`, () => {
+          const val = getNoveltyCount(k => k.includes('SANCION') || k.includes('SUSPENSION'));
+          return val > 0 ? val : parseLocalNumber(Number(emp.dias_sancion || 0));
+      });
 
       const dias_ausentes_total = (dias_vacaciones || 0) + (dias_lic_rem || 0) + (dias_lic_norem || 0) + (typeof diasIncapacidad !== 'undefined' ? diasIncapacidad : 0) + (dias_incap_at || 0) + (dias_calamidad || 0) + (dias_sancion || 0);
 
