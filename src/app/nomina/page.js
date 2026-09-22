@@ -418,39 +418,42 @@ export default function NominaPage() {
   const getScheduledShift = (emp, dateStr, schedules) => {
     if (!schedules || !Array.isArray(schedules) || schedules.length === 0) return null;
 
-    // 1. Parsea dateStr de forma absoluta evitando el desfase de Timezone de new Date()
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const targetDate = new Date(Date.UTC(year, month - 1, day));
+    const targetWeek = schedules.find(s => {
+        const inicio = s.fecha_inicio || s.startDate || s.id_semana;
+        const fin = s.fecha_fin || s.endDate;
+        
+        if (!inicio) return false;
+        
+        let finStr = fin;
+        if (!finStr) {
+            // Fallback seguro de +6 días en local
+            const [iy, im, id] = inicio.split('-');
+            const dObj = new Date(iy, im - 1, id);
+            dObj.setDate(dObj.getDate() + 6);
+            finStr = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getDate()).padStart(2, '0')}`;
+        }
+        return dateStr >= inicio && dateStr <= finStr;
+    });
 
-    // 2. Extrae el día de la semana de la fecha analizada
-    const dayOfWeek = targetDate.getUTCDay();
-    const nameMap = { 1: 'LUNES', 2: 'MARTES', 3: 'MIÉRCOLES', 4: 'JUEVES', 5: 'VIERNES', 6: 'SÁBADO', 0: 'DOMINGO' };
-    const diaSemanaMayuscula = nameMap[dayOfWeek];
+    if (!targetWeek || !targetWeek.datos_json) return null;
 
-    // 3. Calcula la fecha del LUNES correspondiente a esa semana específica en formato estricto YYYY-MM-DD
-    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const mondayDate = new Date(Date.UTC(year, month - 1, day + diffToMonday));
-    const mondayStr = mondayDate.toISOString().split("T")[0];
+    const [y, m, d] = dateStr.split('-');
+    const dateObj = new Date(y, m - 1, d); // Absolutamente local y seguro
+    const dayNames = { 0: "DOMINGO", 1: "LUNES", 2: "MARTES", 3: "MIÉRCOLES", 4: "JUEVES", 5: "VIERNES", 6: "SÁBADO" };
+    const targetDayName = dayNames[dateObj.getDay()];
 
-    // 4. Filtra el array schedules buscando EXACTAMENTE la fila donde fecha_inicio === eseLunes
-    // (o id_semana por compatibilidad hacia atrás si la tabla lo usa).
-    const semanaCorrecta = schedules.find(w => w.fecha_inicio === mondayStr || w.id_semana === mondayStr);
-
-    if (!semanaCorrecta || !semanaCorrecta.datos_json) return null;
-
-    // 5. Retorna el string buscando la llave en el datos_json de esa semana exacta.
     const posiblesIds = [emp.biometric_id, emp.id_biometrico, emp.cedula, emp.id].filter(Boolean).map(String).map(id => id.trim());
 
     for (const id of posiblesIds) {
-      const cellKey = `${String(id)}_${diaSemanaMayuscula}`;
+      const cellKey = `${String(id)}_${targetDayName}`;
       
       // Intentar coincidencia exacta primero
-      if (semanaCorrecta.datos_json[cellKey] !== undefined) {
-        return semanaCorrecta.datos_json[cellKey];
+      if (targetWeek.datos_json[cellKey] !== undefined) {
+        return targetWeek.datos_json[cellKey];
       }
       
       // Fallback a coincidencia insensible a mayúsculas (respetando tildes)
-      for (const [k, v] of Object.entries(semanaCorrecta.datos_json)) {
+      for (const [k, v] of Object.entries(targetWeek.datos_json)) {
         if (String(k).toUpperCase().trim() === cellKey.toUpperCase()) {
           return v;
         }
