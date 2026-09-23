@@ -892,28 +892,30 @@ processedLogs.forEach(day => {
           // en frozenOverrides. Si lo hiciéramos, resolveValue las leería como un 'override manual'
           // al recargar la página, congelando el cálculo en 0 y anulando el biométrico futuro.
           // El estado dinámico se recalcula solo al cargar attendanceLogs.
-          // INYECCIÓN DIRECTA DE J y K: Si el JSON dicta el turno, guardamos el formato correcto (HH:mm) para no romper la UI.
-          if (row.workerDays && Array.isArray(row.workerDays)) {
-              row.workerDays.forEach(day => {
-                  const turnoJSON = day.turnoPuroDelJSON || "";
-                  if (typeof turnoJSON === 'string' && turnoJSON.trim() !== "") {
-                      const prefix = `${cedula}_${day.dia}`;
-                      if (!/\d/.test(turnoJSON)) {
-                          // Es texto puro (ej. INCAPACIDAD GENERAL), bloqueamos los inputs de tiempo para no causar "NaN" o "--:--".
-                          frozenOverrides[`${prefix}_hr_ent_pago`] = "-";
-                          frozenOverrides[`${prefix}_hr_sal_pago`] = "-";
-                      } else {
-                          // Es un turno con horas, usamos el string formateado por calculateSmartShift ("22:00")
-                          frozenOverrides[`${prefix}_hr_ent_pago`] = day.officialIn || "-";
-                          frozenOverrides[`${prefix}_hr_sal_pago`] = day.officialOut || "-";
-                      }
-                  }
-              });
-          }
+          // Los campos de tiempo J y K tampoco se inyectan más.
+
         });
       }
 
-      // Sincronizar el estado visual de overrides inmediatamente
+      // 2. RUTINA DE SANITIZACIÓN ESTRICTA (PURGA ESTRUCTURAL)
+      // Eliminamos de la base de datos todas las llaves dinámicas que nunca deben tratarse como overrides manuales.
+      Object.keys(frozenOverrides).forEach(key => {
+          if (
+              key.includes('_dias_incapacidad') ||
+              key.includes('_dias_calamidad') ||
+              key.includes('_dias_lic_rem') ||
+              key.includes('_dias_vacaciones') ||
+              key.includes('_dias_lic_norem') ||
+              key.includes('_dias_incap_at') ||
+              key.includes('_dias_sancion') ||
+              key.includes('_hr_ent_pago') ||
+              key.includes('_hr_sal_pago')
+          ) {
+              delete frozenOverrides[key];
+          }
+      });
+
+      // Sincronizar el estado visual de overrides inmediatamente con el objeto limpio
       setOverrides(frozenOverrides);
       overridesRef.current = frozenOverrides;
 
