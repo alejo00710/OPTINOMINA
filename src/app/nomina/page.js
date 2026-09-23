@@ -888,6 +888,18 @@ processedLogs.forEach(day => {
           injectOverride('dias_calamidad', row.dias_calamidad || 0);
           injectOverride('dias_sancion', row.dias_sancion || 0);
           injectOverride('incapacidad', row.incapacidad || "");
+          
+          // PURGADOR: Eliminar overrides "fantasma" de J y K si el JSON de horarios ya está dictando el turno.
+          if (row.workerDays && Array.isArray(row.workerDays)) {
+              row.workerDays.forEach(day => {
+                  const turnoJSON = day.turnoPuroDelJSON || "";
+                  if (typeof turnoJSON === 'string' && turnoJSON.trim() !== "") {
+                      const prefix = `${cedula}_${day.dia}`;
+                      delete frozenOverrides[`${prefix}_hr_ent_pago`];
+                      delete frozenOverrides[`${prefix}_hr_sal_pago`];
+                  }
+              });
+          }
         });
       }
 

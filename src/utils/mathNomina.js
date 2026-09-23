@@ -485,8 +485,16 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   const baseHrEnt = smartShift.officialIn;
   const baseHrSal = smartShift.officialOut;
 
-  const hrEntPago = overrides[`${prefix}_hr_ent_pago`] !== undefined ? String(overrides[`${prefix}_hr_ent_pago`]) : baseHrEnt;
-  const hrSalPago = overrides[`${prefix}_hr_sal_pago`] !== undefined ? String(overrides[`${prefix}_hr_sal_pago`]) : baseHrSal;
+  // REGLA ESTRICTA DE PRIORIDAD: Si el JSON tiene un turno (texto), ignora cualquier override histórico.
+  const isJSONShiftActive = typeof turnoProgramadoDelDia === 'string' && turnoProgramadoDelDia.trim() !== "";
+
+  const hrEntPago = isJSONShiftActive 
+      ? baseHrEnt 
+      : (overrides[`${prefix}_hr_ent_pago`] !== undefined ? String(overrides[`${prefix}_hr_ent_pago`]) : baseHrEnt);
+      
+  const hrSalPago = isJSONShiftActive 
+      ? baseHrSal 
+      : (overrides[`${prefix}_hr_sal_pago`] !== undefined ? String(overrides[`${prefix}_hr_sal_pago`]) : baseHrSal);
   
   // Col L: Hr. Lab = Diferencia entre J y K
   let hrLab = 0;
