@@ -283,7 +283,15 @@ export default function NominaPage() {
             setStartDate(cloudDraft.start_date || startDate);
             setEndDate(cloudDraft.end_date || endDate);
             setAttendanceLogs(cloudDraft.attendance_logs || {});
-            setOverrides(cloudDraft.overrides || {});
+            
+            let loadedOverrides = cloudDraft.overrides || {};
+            if (loadedOverrides['_MASTER_SCHEDULE_JSON']) {
+                setWeeklySchedules(loadedOverrides['_MASTER_SCHEDULE_JSON']);
+                delete loadedOverrides['_MASTER_SCHEDULE_JSON'];
+                console.log("✅ Horarios recuperados exitosamente del borrador.");
+            }
+            setOverrides(loadedOverrides);
+            
             console.log("✅ Datos iniciales cargados y sincronizados desde la nube.");
           } catch (e) {
             console.error("Error aplicando datos desde la nube:", e);
@@ -862,7 +870,7 @@ processedLogs.forEach(day => {
 
       return finalRow;
     });
-  }, [nominaRows, attendanceLogs, overrides, activeFormulas, startDate, endDate]);
+  }, [nominaRows, attendanceLogs, overrides, activeFormulas, startDate, endDate, weeklySchedules]);
 
   // Filtering based on SearchTerm and Position selector
   const filteredPayrollData = useMemo(() => {
@@ -915,9 +923,18 @@ processedLogs.forEach(day => {
           }
       });
 
+      // 3. PERSISTENCIA DE HORARIOS (AMNESIA FIX)
+      // Guardamos el estado exacto de los horarios semanales para que la app no los olvide al recargar
+      if (weeklySchedules && weeklySchedules.length > 0) {
+          frozenOverrides['_MASTER_SCHEDULE_JSON'] = weeklySchedules;
+      }
+
       // Sincronizar el estado visual de overrides inmediatamente con el objeto limpio
-      setOverrides(frozenOverrides);
-      overridesRef.current = frozenOverrides;
+      // Removemos el MASTER_SCHEDULE del estado local de overrides para no contaminar la UI
+      const stateOverrides = { ...frozenOverrides };
+      delete stateOverrides['_MASTER_SCHEDULE_JSON'];
+      setOverrides(stateOverrides);
+      overridesRef.current = stateOverrides;
 
       const payload = {
         id: 'quincena_activa',
