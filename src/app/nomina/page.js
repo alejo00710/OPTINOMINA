@@ -879,24 +879,25 @@ processedLogs.forEach(day => {
             frozenOverrides[`${cedula}_${key}`] = value;
           };
 
-          // GUARDAMOS EL ESTADO DERIVADO COMO FOTOGRAFÍA ESTÁTICA
-          injectOverride('dias_incapacidad', row.dias_incapacidad || 0);
-          injectOverride('dias_vacaciones', row.dias_vacaciones || 0);
-          injectOverride('dias_lic_rem', row.dias_lic_rem || 0);
-          injectOverride('dias_lic_norem', row.dias_lic_norem || 0);
-          injectOverride('dias_incap_at', row.dias_incap_at || 0);
-          injectOverride('dias_calamidad', row.dias_calamidad || 0);
-          injectOverride('dias_sancion', row.dias_sancion || 0);
-          injectOverride('incapacidad', row.incapacidad || "");
-          
-          // PURGADOR: Eliminar overrides "fantasma" de J y K si el JSON de horarios ya está dictando el turno.
+          // NOTA ARQUITECTÓNICA: NO inyectamos novedades calculadas dinámicamente (dias_incapacidad, etc.) 
+          // en frozenOverrides. Si lo hiciéramos, resolveValue las leería como un 'override manual'
+          // al recargar la página, congelando el cálculo en 0 y anulando el biométrico futuro.
+          // El estado dinámico se recalcula solo al cargar attendanceLogs.
+          // INYECCIÓN DIRECTA DE J y K: Si el JSON dicta el turno, guardamos el formato correcto (HH:mm) para no romper la UI.
           if (row.workerDays && Array.isArray(row.workerDays)) {
               row.workerDays.forEach(day => {
                   const turnoJSON = day.turnoPuroDelJSON || "";
                   if (typeof turnoJSON === 'string' && turnoJSON.trim() !== "") {
                       const prefix = `${cedula}_${day.dia}`;
-                      delete frozenOverrides[`${prefix}_hr_ent_pago`];
-                      delete frozenOverrides[`${prefix}_hr_sal_pago`];
+                      if (!/\d/.test(turnoJSON)) {
+                          // Es texto puro (ej. INCAPACIDAD GENERAL), bloqueamos los inputs de tiempo para no causar "NaN" o "--:--".
+                          frozenOverrides[`${prefix}_hr_ent_pago`] = "-";
+                          frozenOverrides[`${prefix}_hr_sal_pago`] = "-";
+                      } else {
+                          // Es un turno con horas, usamos el string formateado por calculateSmartShift ("22:00")
+                          frozenOverrides[`${prefix}_hr_ent_pago`] = day.officialIn || "-";
+                          frozenOverrides[`${prefix}_hr_sal_pago`] = day.officialOut || "-";
+                      }
                   }
               });
           }
