@@ -152,38 +152,6 @@ export default function NominaPage() {
     fetchDeudaModal();
   }, [isDetailsModalOpen, detailsWorkerName]);
 
-  const handleSaveDraft = async () => {
-    setSaveStatus('saving');
-    try {
-      const payload = {
-        id: 'quincena_activa',
-        start_date: startDate,
-        end_date: endDate,
-        attendance_logs: attendanceLogs,
-        overrides: overridesRef.current,
-        updated_at: new Date().toISOString()
-      };
-
-      const { error } = await supabase
-        .from('optimoldes_payroll')
-        .upsert(payload, { onConflict: 'id' });
-
-      if (error) throw error;
-      
-      setSaveStatus('success');
-      setToast({ message: "Borrador guardado en la nube", type: "success" });
-      setTimeout(() => setToast(null), 3000);
-      
-      setTimeout(() => {
-        setSaveStatus('idle');
-      }, 1500);
-    } catch (err) {
-      console.error("Error guardando borrador:", err);
-      setSaveStatus('idle');
-      setToast({ message: "Error al guardar el borrador", type: "error" });
-      setTimeout(() => setToast(null), 3000);
-    }
-  };
 
   const handleCerrarQuincena = async () => {
     if (!window.confirm("🚨 ALERTA: Estás a punto de CERRAR esta quincena. Se guardará una fotografía estática e inmutable de todos los cálculos. ¿Estás absolutamente seguro de continuar?")) return;
@@ -896,6 +864,66 @@ processedLogs.forEach(day => {
       return nameMatch && posMatch;
     });
   }, [payrollData, searchTerm, filterPosition]);
+
+  const handleSaveDraft = async () => {
+    setSaveStatus('saving');
+    try {
+      // 1. Snapshot de valores derivados actuales para que no se pierdan
+      let frozenOverrides = { ...overridesRef.current };
+
+      if (typeof filteredPayrollData !== 'undefined' && filteredPayrollData.length > 0) {
+        filteredPayrollData.forEach(row => {
+          const cedula = row.masterRow ? row.masterRow.cedula : row.cedula;
+          
+          const injectOverride = (key, value) => {
+            frozenOverrides[`${cedula}_${key}`] = value;
+          };
+
+          // GUARDAMOS EL ESTADO DERIVADO COMO FOTOGRAFÍA ESTÁTICA
+          injectOverride('dias_incapacidad', row.dias_incapacidad || 0);
+          injectOverride('dias_vacaciones', row.dias_vacaciones || 0);
+          injectOverride('dias_lic_rem', row.dias_lic_rem || 0);
+          injectOverride('dias_lic_norem', row.dias_lic_norem || 0);
+          injectOverride('dias_incap_at', row.dias_incap_at || 0);
+          injectOverride('dias_calamidad', row.dias_calamidad || 0);
+          injectOverride('dias_sancion', row.dias_sancion || 0);
+          injectOverride('incapacidad', row.incapacidad || "");
+        });
+      }
+
+      // Sincronizar el estado visual de overrides inmediatamente
+      setOverrides(frozenOverrides);
+      overridesRef.current = frozenOverrides;
+
+      const payload = {
+        id: 'quincena_activa',
+        start_date: startDate,
+        end_date: endDate,
+        attendance_logs: attendanceLogs,
+        overrides: frozenOverrides,
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('optimoldes_payroll')
+        .upsert(payload, { onConflict: 'id' });
+
+      if (error) throw error;
+      
+      setSaveStatus('success');
+      setToast({ message: "Borrador guardado en la nube", type: "success" });
+      setTimeout(() => setToast(null), 3000);
+      
+      setTimeout(() => {
+        setSaveStatus('idle');
+      }, 1500);
+    } catch (err) {
+      console.error("Error guardando borrador:", err);
+      setSaveStatus('idle');
+      setToast({ message: "Error al guardar el borrador", type: "error" });
+      setTimeout(() => setToast(null), 3000);
+    }
+  };
 
   // Auto-select first worker when entering liquidacion tab
   useEffect(() => {
