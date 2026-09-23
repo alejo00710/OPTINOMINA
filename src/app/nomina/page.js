@@ -29,7 +29,16 @@ const safeParseNumber = (val) => {
 
 // Helper to look up overridden state values and ensure they are parsed as numbers for math formulas
 const resolveValue = (overrides, key, formulaFn) => {
-  if (overrides[key] !== undefined && overrides[key] !== "") {
+  // REGLA ESTRICTA (IGNORAR BD): Ciertos campos SIEMPRE se calculan dinámicamente y rechazan la BD.
+  const isBlocked = key.includes('_dias_incapacidad') || 
+                    key.includes('_dias_calamidad') || 
+                    key.includes('_dias_lic_rem') || 
+                    key.includes('_dias_vacaciones') ||
+                    key.includes('_dias_lic_norem') ||
+                    key.includes('_dias_incap_at') ||
+                    key.includes('_dias_sancion');
+
+  if (!isBlocked && overrides[key] !== undefined && overrides[key] !== "") {
     const val = typeof overrides[key] === "string" ? parseLocalNumber(overrides[key]) : overrides[key];
     if (typeof val === "number" && isNaN(val)) {
       return 0;

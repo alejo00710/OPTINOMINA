@@ -361,8 +361,10 @@ export default function TabLiquidacion({
 
   const entValue = overrides[`${prefix}_hr_ent`] !== undefined ? overrides[`${prefix}_hr_ent`] : (day.hr_ent || "");
   const salValue = overrides[`${prefix}_hr_sal`] !== undefined ? overrides[`${prefix}_hr_sal`] : (day.hr_sal || "");
-  const pagoEntValue = overrides[`${prefix}_hr_ent_pago`] !== undefined ? overrides[`${prefix}_hr_ent_pago`] : (day.hr_ent_pago || "");
-  const pagoSalValue = overrides[`${prefix}_hr_sal_pago`] !== undefined ? overrides[`${prefix}_hr_sal_pago`] : (day.hr_sal_pago || "");
+  
+  // REGLA ESTRICTA (IGNORAR BD): J y K solo muestran el cálculo dinámico del motor.
+  const pagoEntValue = day.hr_ent_pago || "";
+  const pagoSalValue = day.hr_sal_pago || "";
 
   return (
                             <tr key={displayDate} className={`${getRowColor(statusVal)} ${isDiaDescanso ? 'bg-red-50/60 border-l-4 border-red-300' : ''}`}>

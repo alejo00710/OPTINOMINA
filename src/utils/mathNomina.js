@@ -485,9 +485,9 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   const baseHrEnt = smartShift.officialIn;
   const baseHrSal = smartShift.officialOut;
 
-  const hrEntPago = overrides[`${prefix}_hr_ent_pago`] !== undefined ? String(overrides[`${prefix}_hr_ent_pago`]) : baseHrEnt;
-  const hrSalPago = overrides[`${prefix}_hr_sal_pago`] !== undefined ? String(overrides[`${prefix}_hr_sal_pago`]) : baseHrSal;
-  
+  // REGLA ESTRICTA (IGNORAR BD): J y K solo deben venir del motor dinámico, nunca de la BD.
+  const hrEntPago = baseHrEnt;
+  const hrSalPago = baseHrSal;
   // Col L: Hr. Lab = Diferencia entre J y K
   let hrLab = 0;
   if (isTime(hrEntPago) && isTime(hrSalPago)) {
