@@ -21,7 +21,14 @@ export default function ConsolidadoSaitemp({ empleadosLiquidados }) {
       (Number(emp.celular) || 0);
 
     const obsArray = [];
-    if (Number(emp.prestamos) > 0) obsArray.push("Abono a Préstamo");
+    if (emp.raw_prestamos_saitemp) {
+        String(emp.raw_prestamos_saitemp).split('\n').forEach(line => {
+            if (line.trim()) obsArray.push(line.trim());
+        });
+    } else if (Number(emp.prestamos) > 0) {
+        obsArray.push("Abono a Préstamo");
+    }
+    
     if (Number(emp.poliza_bolivar) > 0) obsArray.push("Póliza Bolívar");
     if (Number(emp.poliza_plenitud) > 0) obsArray.push("Póliza Plenitud");
     if (Number(emp.libranza_comfama) > 0) obsArray.push("Libranza Comfama");
@@ -29,10 +36,13 @@ export default function ConsolidadoSaitemp({ empleadosLiquidados }) {
     if (Number(emp.optica) > 0) obsArray.push("Óptica");
     if (Number(emp.celular) > 0) obsArray.push("Celular");
 
+    const novedadesText = emp.novedadesResumen ? Object.keys(emp.novedadesResumen).join(', ') : '';
+
     return {
       cedula: emp.cedula || '',
       nombre: emp.nombre || '',
       diasNovedad: formatNovedad(emp.dias_incapacidad),
+      textoNovedad: novedadesText || emp.novedad || '',
       recargoNocturno: formatHour(emp.horas_nocturnas),
       extrasDiurnas: formatHour(emp.extras_diurnas),
       extrasNocturnas: formatHour(emp.extras_nocturnas),

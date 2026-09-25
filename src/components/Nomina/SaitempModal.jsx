@@ -223,7 +223,7 @@ export default function SaitempModal({ isOpen, onClose, employee, onSave, onSave
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">DESCUENTOS DE NÓMINA</label>
-                  <input type="text" name="descuentos" value={formData.descuentos} onChange={handleChange} placeholder="Ej. 9886.0 - Poliza" className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-amber-500 outline-none transition-shadow" />
+                  <textarea name="descuentos" value={formData.descuentos} onChange={handleChange} placeholder="Ej. 9886.0 - Poliza&#10;50000.0 - Préstamo" rows={3} className="w-full px-4 py-2 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-amber-500 outline-none transition-shadow resize-y" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">AUXILIO DE RODAMIENTO A COMERCIAL</label>

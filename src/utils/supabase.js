@@ -40,7 +40,7 @@ export const loadEmployeesFromCloud = async () => {
   try {
     const { data, error } = await supabase
       .from('optimoldes_employees')
-      .select('cedula, biometric_id, nombre, cargo, categoria, area, banco, tipo_vinculacion, salario_base, aux_transporte, rodamiento, poliza_bolivar, poliza_sura, optica, prestamos')
+      .select('*')
       .eq('is_active', true);
 
     if (error) throw error;

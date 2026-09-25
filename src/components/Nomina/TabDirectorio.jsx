@@ -121,7 +121,10 @@ export default function TabDirectorio({ employees, refreshEmployees }) {
               <th className="py-4 px-6 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('tipo_vinculacion')}>Vinculación{getSortIcon('tipo_vinculacion')}</th>
               <th className="py-4 px-6 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('salario_base')}>Salario Base{getSortIcon('salario_base')}</th>
               <th className="py-4 px-6 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('rodamiento')}>Rodamiento{getSortIcon('rodamiento')}</th>
-              <th className="py-4 px-6 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('prestamos')}>Préstamos{getSortIcon('prestamos')}</th>
+              <th className="py-4 px-6 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('prestamo_total')}>Total Préstamo{getSortIcon('prestamo_total')}</th>
+              <th className="py-4 px-6 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('cuota_prestamo')}>Cuota Préstamo{getSortIcon('cuota_prestamo')}</th>
+              <th className="py-4 px-6 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('optica_total')}>Total Óptica{getSortIcon('optica_total')}</th>
+              <th className="py-4 px-6 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('cuota_optica')}>Cuota Óptica{getSortIcon('cuota_optica')}</th>
               <th className="py-4 px-6 cursor-pointer hover:bg-slate-200 transition-colors text-center" onClick={() => handleSort('is_active')}>Estado{getSortIcon('is_active')}</th>
               <th className="py-4 px-6 text-center">Acciones</th>
             </tr>
@@ -151,7 +154,10 @@ export default function TabDirectorio({ employees, refreshEmployees }) {
                 </td>
                 <td className="py-3 px-6 text-sm text-slate-900 font-bold">{fmtCOP(emp.salario_base || emp.salario)}</td>
                 <td className="py-3 px-6 text-sm text-slate-600">{fmtCOP(emp.rodamiento)}</td>
-                <td className="py-3 px-6 text-sm text-slate-600">{fmtCOP(emp.prestamos)}</td>
+                <td className="py-3 px-6 text-sm text-slate-600">{fmtCOP(emp.prestamo_total || 0)}</td>
+                <td className="py-3 px-6 text-sm text-slate-600">{fmtCOP(emp.cuota_prestamo || 0)}</td>
+                <td className="py-3 px-6 text-sm text-slate-600">{fmtCOP(emp.optica_total || 0)}</td>
+                <td className="py-3 px-6 text-sm text-slate-600">{fmtCOP(emp.cuota_optica || 0)}</td>
                 <td className="py-3 px-6 text-center">
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${emp.is_active !== false ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
                     {emp.is_active !== false ? 'Activo' : 'Inactivo'}

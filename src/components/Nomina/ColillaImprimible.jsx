@@ -104,133 +104,183 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
           </thead>
           <tbody>
             {/* DEVENGADOS */}
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.horas_diurnas)} Hrs. DIURNAS</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.sueldo))}</td>
-              <td className="px-2 text-right"></td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.horas_nocturnas)} Hrs. RECARGO NOCTURNO</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.recargo_nocturno))}</td>
-              <td className="px-2 text-right"></td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.extras_diurnas)} Hrs. EXTRAS DIURNAS</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.val_extras_diurnas))}</td>
-              <td className="px-2 text-right"></td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.extras_nocturnas)} Hrs. EXTRAS NOCTURNAS</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.val_extras_nocturnas))}</td>
-              <td className="px-2 text-right"></td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.extras_festivas)} Hrs. EXTRAS FESTIVAS</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.val_extras_festivas))}</td>
-              <td className="px-2 text-right"></td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">{safeNumber(empleado.dias_incapacidad)} DÍAS INCAPACIDAD</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.incapacidad))}</td>
-              <td className="px-2 text-right"></td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">{safeNumber(empleado.dias_pagados)} DÍAS AUXILIO DE TRANSPORTE</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.aux_transporte || empleado.transporte))}</td>
-              <td className="px-2 text-right"></td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">AUXILIO DE RODAMIENTO</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.rodamiento))}</td>
-              <td className="px-2 text-right"></td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">COMISIONES DE VENTA</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.comisiones))}</td>
-              <td className="px-2 text-right"></td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">BONIFICACIÓN NO SALARIAL</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.bonificacion))}</td>
-              <td className="px-2 text-right"></td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">AJUSTE DE VACACIONES PAGADAS</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.vacaciones))}</td>
-              <td className="px-2 text-right"></td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">PRIMA DE SERVICIOS</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.prima))}</td>
-              <td className="px-2 text-right"></td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">INTERESES A LAS CESANTIAS</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.intereses_cesantias))}</td>
-              <td className="px-2 text-right"></td>
-            </tr>
+            {safeNumber(empleado.sueldo) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.horas_diurnas)} Hrs. DIURNAS</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.sueldo))}</td>
+                <td className="px-2 text-right"></td>
+              </tr>
+            )}
+            {safeNumber(empleado.recargo_nocturno) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.horas_nocturnas)} Hrs. RECARGO NOCTURNO</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.recargo_nocturno))}</td>
+                <td className="px-2 text-right"></td>
+              </tr>
+            )}
+            {safeNumber(empleado.val_extras_diurnas) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.extras_diurnas)} Hrs. EXTRAS DIURNAS</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.val_extras_diurnas))}</td>
+                <td className="px-2 text-right"></td>
+              </tr>
+            )}
+            {safeNumber(empleado.val_extras_nocturnas) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.extras_nocturnas)} Hrs. EXTRAS NOCTURNAS</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.val_extras_nocturnas))}</td>
+                <td className="px-2 text-right"></td>
+              </tr>
+            )}
+            {safeNumber(empleado.val_extras_festivas) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.extras_festivas)} Hrs. EXTRAS FESTIVAS</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.val_extras_festivas))}</td>
+                <td className="px-2 text-right"></td>
+              </tr>
+            )}
+            {safeNumber(empleado.incapacidad) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">{safeNumber(empleado.dias_incapacidad)} DÍAS INCAPACIDAD</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.incapacidad))}</td>
+                <td className="px-2 text-right"></td>
+              </tr>
+            )}
+            {safeNumber(empleado.aux_transporte || empleado.transporte) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">{safeNumber(empleado.dias_pagados)} DÍAS AUXILIO DE TRANSPORTE</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.aux_transporte || empleado.transporte))}</td>
+                <td className="px-2 text-right"></td>
+              </tr>
+            )}
+            {safeNumber(empleado.rodamiento) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">AUXILIO DE RODAMIENTO</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.rodamiento))}</td>
+                <td className="px-2 text-right"></td>
+              </tr>
+            )}
+            {safeNumber(empleado.comisiones) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">COMISIONES DE VENTA</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.comisiones))}</td>
+                <td className="px-2 text-right"></td>
+              </tr>
+            )}
+            {safeNumber(empleado.bonificacion) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">BONIFICACIÓN NO SALARIAL</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.bonificacion))}</td>
+                <td className="px-2 text-right"></td>
+              </tr>
+            )}
+            {safeNumber(empleado.vacaciones) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">AJUSTE DE VACACIONES PAGADAS</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.vacaciones))}</td>
+                <td className="px-2 text-right"></td>
+              </tr>
+            )}
+            {safeNumber(empleado.prima) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">PRIMA DE SERVICIOS</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.prima))}</td>
+                <td className="px-2 text-right"></td>
+              </tr>
+            )}
+            {safeNumber(empleado.intereses_cesantias) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">INTERESES A LAS CESANTIAS</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.intereses_cesantias))}</td>
+                <td className="px-2 text-right"></td>
+              </tr>
+            )}
 
             {/* DEDUCCIONES */}
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">APORTES A SALUD TRABAJADOR (4%)</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right"></td>
-              <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.salud))}</td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">APORTES A PENSIÓN TRABAJADOR (4%)</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right"></td>
-              <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.pension))}</td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">APORTES A FSP (1%)</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right"></td>
-              <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.solidaridad))}</td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">ABONO A PRÉSTAMOS</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right"></td>
-              <td className="px-2 text-right">{formatCurrency(prestamos)}</td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">POLIZA DE BOLIVAR</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right"></td>
-              <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.poliza_bolivar))}</td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">CONVENIO PLENITUD</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right"></td>
-              <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.poliza_plenitud))}</td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">LIBRANZA COMFAMA</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right"></td>
-              <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.libranza_comfama))}</td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">POLIZA SURA</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right"></td>
-              <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.poliza_sura))}</td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">ÓPTICA</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right"></td>
-              <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.optica))}</td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">CELULAR</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right"></td>
-              <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.celular))}</td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">SEMANA DE LA SALUD</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right"></td>
-              <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.semana_salud))}</td>
-            </tr>
-            <tr>
-              <td className="border-r border-[#9ca3af] px-2 text-left">RETENCIÓN SOBRE SALARIOS</td>
-              <td className="border-r border-[#9ca3af] px-2 text-right"></td>
-              <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.retencion))}</td>
-            </tr>
+            {safeNumber(empleado.salud) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">APORTES A SALUD TRABAJADOR (4%)</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
+                <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.salud))}</td>
+              </tr>
+            )}
+            {safeNumber(empleado.pension) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">APORTES A PENSIÓN TRABAJADOR (4%)</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
+                <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.pension))}</td>
+              </tr>
+            )}
+            {safeNumber(empleado.solidaridad) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">APORTES A FSP (1%)</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
+                <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.solidaridad))}</td>
+              </tr>
+            )}
+            {safeNumber(prestamos) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">ABONO A PRÉSTAMOS</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
+                <td className="px-2 text-right">{formatCurrency(prestamos)}</td>
+              </tr>
+            )}
+            {safeNumber(empleado.poliza_bolivar) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">POLIZA DE BOLIVAR</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
+                <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.poliza_bolivar))}</td>
+              </tr>
+            )}
+            {safeNumber(empleado.poliza_plenitud) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">CONVENIO PLENITUD</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
+                <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.poliza_plenitud))}</td>
+              </tr>
+            )}
+            {safeNumber(empleado.libranza_comfama) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">LIBRANZA COMFAMA</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
+                <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.libranza_comfama))}</td>
+              </tr>
+            )}
+            {safeNumber(empleado.poliza_sura) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">POLIZA SURA</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
+                <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.poliza_sura))}</td>
+              </tr>
+            )}
+            {safeNumber(empleado.optica) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">ÓPTICA</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
+                <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.optica))}</td>
+              </tr>
+            )}
+            {safeNumber(empleado.celular) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">CELULAR</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
+                <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.celular))}</td>
+              </tr>
+            )}
+            {safeNumber(empleado.semana_salud) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">SEMANA DE LA SALUD</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
+                <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.semana_salud))}</td>
+              </tr>
+            )}
+            {safeNumber(empleado.retencion) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">RETENCIÓN SOBRE SALARIOS</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
+                <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.retencion))}</td>
+              </tr>
+            )}
 
             {/* Espaciador para completar tabla */}
             <tr>

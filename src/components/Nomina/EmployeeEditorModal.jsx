@@ -18,8 +18,10 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
     rodamiento: 0,
     poliza_bolivar: 0,
     poliza_sura: 0,
-    optica: 0,
-    prestamos: 0,
+    prestamo_total: 0,
+    cuota_prestamo: 0,
+    optica_total: 0,
+    cuota_optica: 0,
     banco: '',
     tipo_vinculacion: 'Empresa'
   });
@@ -38,8 +40,10 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         rodamiento: employee.rodamiento || 0,
         poliza_bolivar: employee.poliza_bolivar || 0,
         poliza_sura: employee.poliza_sura || 0,
-        optica: employee.optica || 0,
-        prestamos: employee.prestamos || 0,
+        prestamo_total: employee.prestamo_total || 0,
+        cuota_prestamo: employee.cuota_prestamo || 0,
+        optica_total: employee.optica_total || 0,
+        cuota_optica: employee.cuota_optica || 0,
         banco: employee.banco || '',
         tipo_vinculacion: employee.tipo_vinculacion || 'Empresa'
       });
@@ -55,8 +59,10 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         rodamiento: 0,
         poliza_bolivar: 0,
         poliza_sura: 0,
-        optica: 0,
-        prestamos: 0,
+        prestamo_total: 0,
+        cuota_prestamo: 0,
+        optica_total: 0,
+        cuota_optica: 0,
         banco: '',
         tipo_vinculacion: 'Empresa'
       });
@@ -87,8 +93,10 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         rodamiento: parseLocalNumber(formData.rodamiento),
         poliza_bolivar: parseLocalNumber(formData.poliza_bolivar),
         poliza_sura: parseLocalNumber(formData.poliza_sura),
-        optica: parseLocalNumber(formData.optica),
-        prestamos: parseLocalNumber(formData.prestamos),
+        prestamo_total: parseLocalNumber(formData.prestamo_total),
+        cuota_prestamo: parseLocalNumber(formData.cuota_prestamo),
+        optica_total: parseLocalNumber(formData.optica_total),
+        cuota_optica: parseLocalNumber(formData.cuota_optica),
         banco: formData.banco ? formData.banco.toUpperCase() : '',
         tipo_vinculacion: formData.tipo_vinculacion,
         is_active: true
@@ -305,24 +313,42 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
             </div>
 
             <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-emerald-600 transition-colors">Óptica</span>
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-emerald-600 transition-colors">Valor Total Préstamos</span>
               <EditableCell
-                value={formData.optica}
-                onChange={(v) => handleNumChange('optica', v)}
+                value={formData.prestamo_total}
+                onChange={(v) => handleNumChange('prestamo_total', v)}
                 isCurrency={true}
               />
             </div>
 
             <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-emerald-600 transition-colors">Préstamos</span>
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-emerald-600 transition-colors">Cuota de Préstamo (Quincenal)</span>
               <EditableCell
-                value={formData.prestamos}
-                onChange={(v) => handleNumChange('prestamos', v)}
+                value={formData.cuota_prestamo}
+                onChange={(v) => handleNumChange('cuota_prestamo', v)}
+                isCurrency={true}
+              />
+            </div>
+
+            <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-emerald-600 transition-colors">Valor Total Óptica</span>
+              <EditableCell
+                value={formData.optica_total}
+                onChange={(v) => handleNumChange('optica_total', v)}
+                isCurrency={true}
+              />
+            </div>
+
+            <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-emerald-600 transition-colors">Cuota de Óptica (Quincenal)</span>
+              <EditableCell
+                value={formData.cuota_optica}
+                onChange={(v) => handleNumChange('cuota_optica', v)}
                 isCurrency={true}
               />
             </div>
             
-                      </div>
+          </div>
             
             <div className="mt-8 flex justify-end gap-3 z-10 relative pt-6 border-t border-slate-100">
               <button

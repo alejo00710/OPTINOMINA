@@ -150,14 +150,14 @@ const DetailRow = ({ label, value, isMoney = true, forceShow = false }) => {
 };
 
 const DetailRowCombined = ({ label, qty, qtyLabel, money }) => {
-  const numQty = Number(qty) || 0;
   const numMoney = Number(money) || 0;
-  if (numQty === 0 && numMoney === 0) return null;
+  if (numMoney === 0) return null; // Solo imprimir conceptos que realmente tienen dinero
   
+  const numQty = Number(qty) || 0;
   return (
     <View style={styles.detailRow}>
       <Text style={styles.detailConcept}>{label} {numQty > 0 ? `(${numQty} ${qtyLabel})` : ''}</Text>
-      <Text style={styles.detailValue}>{numMoney !== 0 ? formatMoney(money) : '-'}</Text>
+      <Text style={styles.detailValue}>{formatMoney(money)}</Text>
     </View>
   );
 };

@@ -249,8 +249,10 @@ export default function NominaPage() {
           comisiones: 0,
           poliza_bolivar: Number(emp.poliza_bolivar || 0),
           poliza_sura: Number(emp.poliza_sura || 0),
-          optica: Number(emp.optica || 0),
-          prestamos: Number(emp.prestamos || 0),
+          prestamo_total: Number(emp.prestamo_total || 0),
+          cuota_prestamo: Number(emp.cuota_prestamo || 0),
+          optica_total: Number(emp.optica_total || 0),
+          cuota_optica: Number(emp.cuota_optica || 0),
           dias_pagados: esAdmin ? 15 : 0,
           horas_diurnas: esAdmin ? 88 : 0,
           horas_nocturnas: 0,
@@ -589,20 +591,27 @@ processedLogs.forEach(day => {
       const comisiones = resolveValue(overrides, `${cedula}_comisiones`, () => 0);
       const rodamiento = resolveValue(overrides, `${cedula}_rodamiento`, () => parseLocalNumber(Number(emp.rodamiento || 0)));
       const diasIncapacidad = resolveValue(overrides, `${cedula}_dias_incapacidad`, () => {
-          const keyIncap = Object.keys(novedadesResumen).find(k => k.includes('INCAPACIDAD GENERAL') || (k.includes('INCAP') && !k.includes('AT')));
+          const keyIncap = Object.keys(novedadesResumen).find(k => k === 'INCAPACIDAD GENERAL');
           const valCalculado = keyIncap ? novedadesResumen[keyIncap]?.length : 0;
           return valCalculado > 0 ? valCalculado : parseLocalNumber(Number(emp.dias_incapacidad || 0));
       });
       
-      const basePrestamo = parseLocalNumber(Number(emp.prestamos || 0));
-      const prestamos = resolveValue(overrides, `${cedula}_prestamos`, () => 0);
-      const saldoPrestamo = basePrestamo - prestamos;
+      const basePrestamo = parseLocalNumber(Number(emp.cuota_prestamo || 0));
+      const rawDescuentosSaitemp = overrides[`${cedula}_prestamos`] !== undefined 
+          ? String(overrides[`${cedula}_prestamos`]) 
+          : (emp.cuota_prestamo ? String(emp.cuota_prestamo) : '');
+      const prestamos = resolveValue(overrides, `${cedula}_prestamos`, () => basePrestamo);
+      const prestamoTotal = parseLocalNumber(Number(emp.prestamo_total || 0));
+      const saldoPrestamo = prestamoTotal - prestamos;
 
       const polizaBolivar = resolveValue(overrides, `${cedula}_poliza_bolivar`, () => parseLocalNumber(Number(emp.poliza_bolivar || 0)));
       const polizaPlenitud = resolveValue(overrides, `${cedula}_poliza_plenitud`, () => parseLocalNumber(Number(emp.poliza_plenitud || 0)));
       const libranzaComfama = resolveValue(overrides, `${cedula}_libranza_comfama`, () => parseLocalNumber(Number(emp.libranza_comfama || 0)));
       const polizaSura = resolveValue(overrides, `${cedula}_poliza_sura`, () => parseLocalNumber(Number(emp.poliza_sura || 0)));
-      const optica = resolveValue(overrides, `${cedula}_optica`, () => parseLocalNumber(Number(emp.optica || 0)));
+      
+      const baseOptica = parseLocalNumber(Number(emp.cuota_optica || 0));
+      const optica = resolveValue(overrides, `${cedula}_optica`, () => baseOptica);
+      
       const celular = resolveValue(overrides, `${cedula}_celular`, () => parseLocalNumber(Number(emp.celular || 0)));
       const retencion = resolveValue(overrides, `${cedula}_retencion`, () => parseLocalNumber(Number(emp.retencion || 0)));
       const bonificacion = resolveValue(overrides, `${cedula}_bonificacion`, () => 0);
@@ -627,32 +636,32 @@ processedLogs.forEach(day => {
       };
 
       const dias_vacaciones = resolveValue(overrides, `${cedula}_dias_vacaciones`, () => {
-          const val = getNoveltyCount(k => k.includes('VACACIONES'));
+          const val = getNoveltyCount(k => k === 'VACACIONES');
           return val > 0 ? val : parseLocalNumber(Number(emp.dias_vacaciones || 0));
       });
 
       const dias_lic_rem = resolveValue(overrides, `${cedula}_dias_lic_rem`, () => {
-          const val = getNoveltyCount(k => k.includes('LICENCIA REMUNERADA') && !k.includes('NO'));
+          const val = getNoveltyCount(k => k === 'LICENCIA REMUNERADA');
           return val > 0 ? val : parseLocalNumber(Number(emp.dias_lic_rem || 0));
       });
 
       const dias_lic_norem = resolveValue(overrides, `${cedula}_dias_lic_norem`, () => {
-          const val = getNoveltyCount(k => k.includes('LICENCIA NO REMUNERADA'));
+          const val = getNoveltyCount(k => k === 'LICENCIA NO REMUNERADA');
           return val > 0 ? val : parseLocalNumber(Number(emp.dias_lic_norem || 0));
       });
 
       const dias_incap_at = resolveValue(overrides, `${cedula}_dias_incap_at`, () => {
-          const val = getNoveltyCount(k => k.includes('AT') || k.includes('ACCIDENTE'));
+          const val = getNoveltyCount(k => k === 'INCAPACIDAD AT' || k === 'INCAPACIDAD ACCIDENTE LABORAL');
           return val > 0 ? val : parseLocalNumber(Number(emp.dias_incap_at || 0));
       });
 
       const dias_calamidad = resolveValue(overrides, `${cedula}_dias_calamidad`, () => {
-          const val = getNoveltyCount(k => k.includes('CALAMIDAD'));
+          const val = getNoveltyCount(k => k === 'CALAMIDAD');
           return val > 0 ? val : parseLocalNumber(Number(emp.dias_calamidad || 0));
       });
 
       const dias_sancion = resolveValue(overrides, `${cedula}_dias_sancion`, () => {
-          const val = getNoveltyCount(k => k.includes('SANCION') || k.includes('SUSPENSION'));
+          const val = getNoveltyCount(k => k === 'SANCION' || k === 'SANCIONADO');
           return val > 0 ? val : parseLocalNumber(Number(emp.dias_sancion || 0));
       });
 
@@ -681,6 +690,7 @@ processedLogs.forEach(day => {
         comisiones: comisiones,
         rodamiento: rodamiento,
         prestamos: prestamos,
+        raw_prestamos_saitemp: rawDescuentosSaitemp,
         saldo_prestamo: saldoPrestamo,
         poliza_bolivar: polizaBolivar,
         poliza_plenitud: polizaPlenitud,

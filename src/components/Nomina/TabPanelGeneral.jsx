@@ -260,8 +260,17 @@ export default function TabPanelGeneral({
         (Number(emp.optica) || 0) + 
         (Number(emp.celular) || 0);
 
+      const rawDescuentos = overrides[`${emp.cedula}_prestamos`] !== undefined 
+          ? String(overrides[`${emp.cedula}_prestamos`]) 
+          : (emp.prestamos ? String(emp.prestamos) : '');
+
       const obsArray = [];
-      if (Number(emp.prestamos) > 0) obsArray.push("Abono a Préstamo");
+      if (rawDescuentos) {
+          rawDescuentos.split('\n').forEach(line => {
+              if (line.trim()) obsArray.push(line.trim());
+          });
+      }
+
       if (Number(emp.poliza_bolivar) > 0) obsArray.push("Póliza Bolívar");
       if (Number(emp.poliza_plenitud) > 0) obsArray.push("Póliza Plenitud");
       if (Number(emp.libranza_comfama) > 0) obsArray.push("Libranza Comfama");
@@ -269,12 +278,15 @@ export default function TabPanelGeneral({
       if (Number(emp.optica) > 0) obsArray.push("Óptica");
       if (Number(emp.celular) > 0) obsArray.push("Celular");
 
+      // Novedades Text (Not money)
+      const novedadesText = emp.novedadesResumen ? Object.keys(emp.novedadesResumen).join(', ') : '';
+
       return [
         index + 1,
         (emp.cargo || '').toUpperCase(),
         emp.cedula,
         emp.nombre,
-        emp.novedad || emp.incapacidad || "",
+        novedadesText || emp.novedad || "",
         "", // Inicio
         "", // Fin
         formatNovedad(emp.dias_incapacidad),

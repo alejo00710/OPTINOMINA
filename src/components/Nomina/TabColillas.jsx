@@ -131,6 +131,7 @@ export default function TabColillas({
           <ColillaImprimible 
              empleado={selectedWorkerData} 
              periodo={textoPeriodo} 
+             fechaCorte={`${startDate || 'Inicio'} al ${endDate || 'Fin'}`}
           />
         </div>
       )}
