@@ -23,7 +23,17 @@ export default function SaitempModal({ isOpen, onClose, employee, onSave, onSave
 
   useEffect(() => {
     if (employee && isOpen) {
-      setNovedades([{ id: 1, novedad: '', fechaInicio: '', fechaFinal: '', totalDias: '' }]);
+      let savedNovedades = [{ id: 1, novedad: '', fechaInicio: '', fechaFinal: '', totalDias: '' }];
+      if (employee.novedades_saitemp_json) {
+        try {
+          const parsed = JSON.parse(employee.novedades_saitemp_json);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            savedNovedades = parsed;
+          }
+        } catch (e) {}
+      }
+      setNovedades(savedNovedades);
+      
       setFormData({
         recargoNocturno: formatHour(employee.horas_nocturnas),
         horasExtrasDiurnas: formatHour(employee.extras_diurnas),
@@ -46,7 +56,26 @@ export default function SaitempModal({ isOpen, onClose, employee, onSave, onSave
   };
 
   const handleNovedadChange = (id, field, value) => {
-    setNovedades(prev => prev.map(nov => nov.id === id ? { ...nov, [field]: value } : nov));
+    setNovedades(prev => prev.map(nov => {
+      if (nov.id !== id) return nov;
+      
+      const updatedNov = { ...nov, [field]: value };
+      
+      // Auto-calculate totalDias if we have valid start and end dates
+      if ((field === 'fechaInicio' || field === 'fechaFinal') && updatedNov.fechaInicio && updatedNov.fechaFinal) {
+        const start = new Date(updatedNov.fechaInicio + "T00:00:00");
+        const end = new Date(updatedNov.fechaFinal + "T00:00:00");
+        if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end >= start) {
+          const diffTime = Math.abs(end - start);
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // inclusive
+          updatedNov.totalDias = diffDays;
+        } else {
+          updatedNov.totalDias = '';
+        }
+      }
+      
+      return updatedNov;
+    }));
   };
 
   const addNovedad = () => {

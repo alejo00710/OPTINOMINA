@@ -520,12 +520,19 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   // Col N: Hr. Pag = L3 - M3
   const hrPag = hrLab > 0 ? hrLab - des : 0;
   
-  const MAX_ORDINARY = 7.0;
+  let targetOrd = 7.6;
+  if (turnoProgramadoDelDia) {
+      const uShift = String(turnoProgramadoDelDia).replace(/\s/g, '').toUpperCase();
+      if (uShift.includes("7:30") && (uShift.includes("5PM") || uShift.includes("5:00PM") || uShift.includes("17:00"))) {
+          targetOrd = 8.5;
+      } else if (uShift.includes("7:30") && (uShift.includes("4PM") || uShift.includes("4:00PM") || uShift.includes("16:00"))) {
+          targetOrd = 7.5;
+      }
+  }
 
-  let diurn = 0;
-  let noct = 0;
-  let extDiu = 0;
-  let extNoc = 0;
+  let finalExtNoc = 0;
+  let netDiu = 0;
+  let netNoc = 0;
 
   if (smartShift.isRestDay) {
       day.estado = "DESCANSO";
@@ -548,9 +555,6 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
       
       rawNoc = (end - start) - rawDiu;
       
-      let netDiu = rawDiu;
-      let netNoc = rawNoc;
-      
       if (rawDiu >= rawNoc) {
           netDiu = Math.max(0, rawDiu - des);
           let remainder = des - (rawDiu - netDiu);
@@ -560,28 +564,48 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
           let remainder = des - (rawNoc - netNoc);
           netDiu = Math.max(0, rawDiu - remainder);
       }
-      
-      // Prioridad a las nocturnas para la base ordinaria
-      noct = Math.min(netNoc, MAX_ORDINARY);
-      let remainingOrd = Math.max(0, MAX_ORDINARY - noct);
-      diurn = Math.min(netDiu, remainingOrd);
-      
-      extNoc = Math.max(0, netNoc - noct);
-      extDiu = Math.max(0, netDiu - diurn);
   }
-  
-  // Manuals overriding or defaults to 0
+
+  // MANUAL OVERRIDES OR DEFAULTS
   let fesDiu = overrides[`${prefix}_fes_diu`] !== undefined ? Number(overrides[`${prefix}_fes_diu`]) : Number(day.fes_diu || 0);
   let fesNoc = overrides[`${prefix}_fes_noc`] !== undefined ? Number(overrides[`${prefix}_fes_noc`]) : Number(day.fes_noc || 0);
   let extFesDiu = overrides[`${prefix}_ext_fes_diu`] !== undefined ? Number(overrides[`${prefix}_ext_fes_diu`]) : Number(day.ext_fes_diu || 0);
   let extFesNoc = overrides[`${prefix}_ext_fes_noc`] !== undefined ? Number(overrides[`${prefix}_ext_fes_noc`]) : Number(day.ext_fes_noc || 0);
+
+  // LOGICA ESTRICTA DE DISTRIBUCION (As requested by Management)
+  let real_diurnas = netDiu;
+  let real_nocturnas = netNoc;
+  let ord_nocturna = 0;
+  let ord_diurna = 0;
   
-  // Apply overrides for computed fields
-  let finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : diurn;
-  let finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : noct;
-  let finalExtDiu = overrides[`${prefix}_ext_diu`] !== undefined ? Number(overrides[`${prefix}_ext_diu`]) : extDiu;
-  extNoc = overrides[`${prefix}_ext_noc`] !== undefined ? Number(overrides[`${prefix}_ext_noc`]) : extNoc;
-  
+  if (hrPag > 0 && !smartShift.isRestDay) {
+      if (real_diurnas === 0) {
+          ord_nocturna = targetOrd;
+          ord_diurna = 0;
+      } else if (real_nocturnas === 0) {
+          ord_diurna = targetOrd;
+          ord_nocturna = 0;
+      } else {
+          ord_nocturna = Math.min(targetOrd, real_nocturnas);
+          ord_diurna = targetOrd - ord_nocturna;
+      }
+  }
+
+  // 3. Aplica overrides manuales a ordinarias si existen
+  let finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : ord_nocturna;
+  let finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : ord_diurna;
+
+  // 4. Calcula EXT.N (T) restando lo ordinario de lo real (SIN Math.max)
+  let ext_nocturna = (hrPag > 0 || overrides[`${prefix}_nocturnas`] !== undefined) ? (real_nocturnas - finalNocturnas) : 0;
+  finalExtNoc = overrides[`${prefix}_ext_noc`] !== undefined ? Number(overrides[`${prefix}_ext_noc`]) : ext_nocturna;
+
+  // 5. TRUCO DE ORO: EXT.D (S) como bolsa de balanceador absoluto
+  let ext_diurna = 0;
+  if (hrPag > 0 || overrides[`${prefix}_diurnas`] !== undefined) {
+      ext_diurna = hrPag - (finalDiurnas + finalNocturnas + fesDiu + fesNoc + finalExtNoc + extFesDiu + extFesNoc);
+  }
+  let finalExtDiu = overrides[`${prefix}_ext_diu`] !== undefined ? Number(overrides[`${prefix}_ext_diu`]) : ext_diurna;
+
   const calcLlegadaTardeMin = smartShift.lateMinutes || 0;
   const calcLlegadaTarde = calcLlegadaTardeMin > 0 ? 1 : 0;
   
@@ -597,7 +621,7 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
       fesDiu = 0;
       fesNoc = 0;
       finalExtDiu = 0;
-      extNoc = 0;
+      finalExtNoc = 0;
       extFesDiu = 0;
       extFesNoc = 0;
       llegadaTarde = 0;
@@ -617,11 +641,11 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
 // 1. Limpiar extras falsas tolerando la imprecisión de decimales (1.500001)
 if (hrLab <= 9.6) {
     if (finalExtDiu >= 1.4 && finalExtDiu <= 1.6) finalExtDiu = 0;
-    if (extNoc >= 1.4 && extNoc <= 1.6) extNoc = 0;
+    if (finalExtNoc >= 1.4 && finalExtNoc <= 1.6) finalExtNoc = 0;
 }
 if (hrLab <= 8.1) {
     if (finalExtDiu >= 0.4 && finalExtDiu <= 0.6) finalExtDiu = 0;
-    if (extNoc >= 0.4 && extNoc <= 0.6) extNoc = 0;
+    if (finalExtNoc >= 0.4 && finalExtNoc <= 0.6) finalExtNoc = 0;
 }
 
 // 2 & 3. Corregir llegada tarde del Taller (Escáner Global)
@@ -657,10 +681,12 @@ console.log(`🔎 EMPLEADO: ${idEmpleado} | FECHA: ${fechaDia} | TURNO BRUTO:`, 
     hr_pag: hrPag,
     diurnas: finalDiurnas,
     nocturnas: finalNocturnas,
+    net_diu: netDiu,
+    net_noc: netNoc,
     fes_diu: fesDiu,
     fes_noc: fesNoc,
     ext_diu: finalExtDiu,
-    ext_noc: extNoc,
+    ext_noc: finalExtNoc,
     ext_fes_diu: extFesDiu,
     ext_fes_noc: extFesNoc,
     llegada_tarde: llegadaTarde,

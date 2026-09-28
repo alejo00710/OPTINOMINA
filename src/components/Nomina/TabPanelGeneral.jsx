@@ -250,7 +250,9 @@ export default function TabPanelGeneral({
     const formatValue = (val) => (val && Number(val) > 0) ? Math.round(Number(val)) : '';
     const formatNovedad = (val) => (val && Number(val) > 0) ? Number(val) : '';
 
-    const bodyData = empleadosMision.map((emp, index) => {
+    const bodyData = [];
+    
+    empleadosMision.forEach((emp, index) => {
       const deduccionesSaitemp = 
         (Number(emp.prestamos) || 0) + 
         (Number(emp.poliza_bolivar) || 0) + 
@@ -265,40 +267,105 @@ export default function TabPanelGeneral({
           : (emp.prestamos ? String(emp.prestamos) : '');
 
       const obsArray = [];
+      const deducArray = [];
+
       if (rawDescuentos) {
           rawDescuentos.split('\n').forEach(line => {
-              if (line.trim()) obsArray.push(line.trim());
+              if (line.trim()) {
+                  obsArray.push(line.trim());
+                  
+                  // Intentamos extraer un valor numérico si el usuario usó el formato "1000 - Motivo"
+                  const matchVal = line.match(/^[\d.,]+/);
+                  if (matchVal) {
+                      const num = parseFloat(matchVal[0].replace(/,/g, ''));
+                      deducArray.push(!isNaN(num) ? formatValue(num) : line.trim());
+                  } else {
+                      // Fallback: si no hay número obvio, metemos toda la línea
+                      deducArray.push(line.trim());
+                  }
+              }
           });
       }
 
-      if (Number(emp.poliza_bolivar) > 0) obsArray.push("Póliza Bolívar");
-      if (Number(emp.poliza_plenitud) > 0) obsArray.push("Póliza Plenitud");
-      if (Number(emp.libranza_comfama) > 0) obsArray.push("Libranza Comfama");
-      if (Number(emp.poliza_sura) > 0) obsArray.push("Póliza Sura");
-      if (Number(emp.optica) > 0) obsArray.push("Óptica");
-      if (Number(emp.celular) > 0) obsArray.push("Celular");
+      if (Number(emp.poliza_bolivar) > 0) {
+          obsArray.push("Póliza Bolívar");
+          deducArray.push(formatValue(emp.poliza_bolivar));
+      }
+      if (Number(emp.poliza_plenitud) > 0) {
+          obsArray.push("Póliza Plenitud");
+          deducArray.push(formatValue(emp.poliza_plenitud));
+      }
+      if (Number(emp.libranza_comfama) > 0) {
+          obsArray.push("Libranza Comfama");
+          deducArray.push(formatValue(emp.libranza_comfama));
+      }
+      if (Number(emp.poliza_sura) > 0) {
+          obsArray.push("Póliza Sura");
+          deducArray.push(formatValue(emp.poliza_sura));
+      }
+      if (Number(emp.optica) > 0) {
+          obsArray.push("Óptica");
+          deducArray.push(formatValue(emp.optica));
+      }
+      if (Number(emp.celular) > 0) {
+          obsArray.push("Celular");
+          deducArray.push(formatValue(emp.celular));
+      }
 
-      // Novedades Text (Not money)
-      const novedadesText = emp.novedadesResumen ? Object.keys(emp.novedadesResumen).join(', ') : '';
+      const obsString = obsArray.join('\n');
+      const deducString = deducArray.join('\n');
 
-      return [
-        index + 1,
-        (emp.cargo || '').toUpperCase(),
-        emp.cedula,
-        emp.nombre,
-        novedadesText || emp.novedad || "",
-        "", // Inicio
-        "", // Fin
-        formatNovedad(emp.dias_incapacidad),
-        formatHour(emp.horas_nocturnas),
-        formatHour(emp.extras_diurnas),
-        formatHour(emp.extras_nocturnas),
-        formatHour(emp.extras_festivas),
-        formatValue(emp.rodamiento),
-        formatValue(emp.comisiones),
-        formatValue(deduccionesSaitemp),
-        obsArray.join(", ")
-      ];
+      let savedNovedades = [];
+      const jsonNovs = overrides[`${emp.cedula}_novedades_saitemp_json`];
+      if (jsonNovs) {
+          try {
+              savedNovedades = JSON.parse(jsonNovs);
+          } catch (e) {}
+      }
+
+      if (savedNovedades && savedNovedades.length > 0) {
+          savedNovedades.forEach((nov, i) => {
+              bodyData.push([
+                  i === 0 ? index + 1 : "",
+                  i === 0 ? (emp.cargo || '').toUpperCase() : "",
+                  i === 0 ? emp.cedula : "",
+                  i === 0 ? emp.nombre : "",
+                  nov.novedad || "",
+                  nov.fechaInicio ? nov.fechaInicio.split('-').reverse().join('-') : "",
+                  nov.fechaFinal ? nov.fechaFinal.split('-').reverse().join('-') : "",
+                  formatNovedad(nov.totalDias),
+                  i === 0 ? formatHour(emp.horas_nocturnas) : "",
+                  i === 0 ? formatHour(emp.extras_diurnas) : "",
+                  i === 0 ? formatHour(emp.extras_nocturnas) : "",
+                  i === 0 ? formatHour(emp.extras_festivas) : "",
+                  i === 0 ? formatValue(emp.rodamiento) : "",
+                  i === 0 ? formatValue(emp.comisiones) : "",
+                  i === 0 ? deducString : "",
+                  i === 0 ? obsString : ""
+              ]);
+          });
+      } else {
+          // Fallback nativo
+          const novedadesText = emp.novedadesResumen ? Object.keys(emp.novedadesResumen).join(', ') : '';
+          bodyData.push([
+            index + 1,
+            (emp.cargo || '').toUpperCase(),
+            emp.cedula,
+            emp.nombre,
+            novedadesText || emp.novedad || "",
+            "", // Inicio
+            "", // Fin
+            formatNovedad(emp.dias_incapacidad),
+            formatHour(emp.horas_nocturnas),
+            formatHour(emp.extras_diurnas),
+            formatHour(emp.extras_nocturnas),
+            formatHour(emp.extras_festivas),
+            formatValue(emp.rodamiento),
+            formatValue(emp.comisiones),
+            deducString,
+            obsString
+          ]);
+      }
     });
 
     const doc = new jsPDF('landscape');
@@ -482,7 +549,11 @@ export default function TabPanelGeneral({
                                     horas_nocturnas: overrides[`${row.cedula}_horas_nocturnas`] !== undefined ? overrides[`${row.cedula}_horas_nocturnas`] : row.horas_nocturnas,
                                     extras_diurnas: overrides[`${row.cedula}_extras_diurnas`] !== undefined ? overrides[`${row.cedula}_extras_diurnas`] : row.extras_diurnas,
                                     extras_nocturnas: overrides[`${row.cedula}_extras_nocturnas`] !== undefined ? overrides[`${row.cedula}_extras_nocturnas`] : row.extras_nocturnas,
-                                    extras_festivas: overrides[`${row.cedula}_extras_festivas`] !== undefined ? overrides[`${row.cedula}_extras_festivas`] : row.extras_festivas
+                                    extras_festivas: overrides[`${row.cedula}_extras_festivas`] !== undefined ? overrides[`${row.cedula}_extras_festivas`] : row.extras_festivas,
+                                    prestamos: overrides[`${row.cedula}_prestamos`] !== undefined ? overrides[`${row.cedula}_prestamos`] : row.prestamos,
+                                    comisiones: overrides[`${row.cedula}_comisiones`] !== undefined ? overrides[`${row.cedula}_comisiones`] : row.comisiones,
+                                    rodamiento: overrides[`${row.cedula}_rodamiento`] !== undefined ? overrides[`${row.cedula}_rodamiento`] : row.rodamiento,
+                                    novedades_saitemp_json: overrides[`${row.cedula}_novedades_saitemp_json`] !== undefined ? overrides[`${row.cedula}_novedades_saitemp_json`] : null
                                  };
                                  setEmpleadoSaitemp(mergedData);
                                  setIsSaitempModalOpen(true);
@@ -525,11 +596,14 @@ export default function TabPanelGeneral({
           if (data.auxilios !== '') handleCellEdit(`${cedula}_rodamiento`, data.auxilios);
           
           if (data.novedades && data.novedades.length > 0) {
-              const nov = data.novedades[0];
-              if (nov.novedad && nov.totalDias !== '') {
-                  handleCellEdit(`${cedula}_dias_incapacidad`, nov.totalDias);
-                  handleCellEdit(`${cedula}_incapacidad`, nov.novedad);
+              // Guardar la primera por retrocompatibilidad con las columnas de tabla
+              const nov1 = data.novedades[0];
+              if (nov1.novedad && nov1.totalDias !== '') {
+                  handleCellEdit(`${cedula}_dias_incapacidad`, nov1.totalDias);
+                  handleCellEdit(`${cedula}_incapacidad`, nov1.novedad);
               }
+              // Guardar TODO el array para el PDF (Serializado)
+              handleCellEdit(`${cedula}_novedades_saitemp_json`, JSON.stringify(data.novedades));
           }
         }}
       />

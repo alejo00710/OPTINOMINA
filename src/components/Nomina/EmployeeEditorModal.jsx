@@ -67,6 +67,9 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         tipo_vinculacion: 'Empresa'
       });
     }
+    if (isOpen) {
+      setSaveStatus('idle');
+    }
   }, [employee, isOpen]);
 
   if (!isOpen) return null;

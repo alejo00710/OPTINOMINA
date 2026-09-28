@@ -482,6 +482,7 @@ export default function NominaPage() {
       // 1. Sumatorias del Biométrico (Equivalente a Fila 24 de hojas individuales)
       let sumDiurnas = 0, sumNocturnas = 0, sumFesDiu = 0, sumFesNoc = 0;
       let sumExtDiu = 0, sumExtNoc = 0, sumExtFesDiu = 0, sumExtFesNoc = 0;
+      let sumNetDiu = 0, sumNetNoc = 0, sumHrPag = 0;
 // --- INICIO CORRECCIÓN DÍAS PAGADOS ---
 // --- INICIO CÁLCULO DE NOVEDADES ---
 let diasLaborados = 0;
@@ -541,8 +542,12 @@ processedLogs.forEach(day => {
         novedadesResumen[estado].push(fechaCorta);
     }
 
+    sumHrPag += Number(day.hr_pag || 0);
+
     sumDiurnas += Number(day.diurnas || 0);
     sumNocturnas += Number(day.nocturnas || 0);
+    sumNetDiu += Number(day.net_diu || 0);
+    sumNetNoc += Number(day.net_noc || 0);
     sumFesDiu += Number(day.fes_diu || 0);
     sumFesNoc += Number(day.fes_noc || 0);
     sumExtDiu += Number(day.ext_diu || 0);
@@ -568,8 +573,24 @@ processedLogs.forEach(day => {
       let finalNocturnas = resolveValue(overrides, `${cedula}_horas_nocturnas`, () => sumNocturnas);
       let finalFesDiu = resolveValue(overrides, `${cedula}_festivas_diurnas`, () => sumFesDiu);
       let finalFesNoc = resolveValue(overrides, `${cedula}_festivas_nocturnas`, () => sumFesNoc);
-      let finalExtDiu = resolveValue(overrides, `${cedula}_extras_diurnas`, () => sumExtDiu);
-      let finalExtNoc = resolveValue(overrides, `${cedula}_extras_nocturnas`, () => sumExtNoc);
+      
+      // Reactividad Quincenal (El Balanceador Maestro de Excel):
+      let finalExtNoc = resolveValue(overrides, `${cedula}_extras_nocturnas`, () => {
+          return overrides[`${cedula}_horas_nocturnas`] !== undefined 
+              ? (sumNetNoc - Number(overrides[`${cedula}_horas_nocturnas`])) 
+              : sumExtNoc;
+      });
+      
+      let finalExtDiu = resolveValue(overrides, `${cedula}_extras_diurnas`, () => {
+          // Si el usuario overrideó extras_diurnas globalmente, manda eso.
+          // Si no, la extra diurna balancea TODO contra el total pagado (sumHrPag)
+          const baseCalculada = sumHrPag - (finalDiurnas + finalNocturnas + finalFesDiu + finalFesNoc + finalExtNoc + sumExtFesDiu + sumExtFesNoc);
+          // Usamos la calculada si hay modificaciones en los ordinarios, sino caemos al default sumado
+          return (overrides[`${cedula}_horas_diurnas`] !== undefined || overrides[`${cedula}_horas_nocturnas`] !== undefined) 
+              ? baseCalculada 
+              : sumExtDiu;
+      });
+      
       let finalExtFesDiu = resolveValue(overrides, `${cedula}_extras_festivas`, () => sumExtFesDiu);
       let finalExtFesNoc = resolveValue(overrides, `${cedula}_extras_festivas_nocturnas`, () => sumExtFesNoc);
 
