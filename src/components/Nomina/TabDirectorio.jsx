@@ -154,9 +154,23 @@ export default function TabDirectorio({ employees, refreshEmployees }) {
                 </td>
                 <td className="py-3 px-6 text-sm text-slate-900 font-bold">{fmtCOP(emp.salario_base || emp.salario)}</td>
                 <td className="py-3 px-6 text-sm text-slate-600">{fmtCOP(emp.rodamiento)}</td>
-                <td className="py-3 px-6 text-sm text-slate-600">{fmtCOP(emp.prestamo_total || 0)}</td>
+                <td className="py-3 px-6 text-sm text-slate-600">
+                  <div className="flex flex-col items-start">
+                    <span>{fmtCOP(emp.prestamo_total || 0)}</span>
+                    {Number(emp.prestamo_total) > 0 && Number(emp.prestamo_total) <= (Number(emp.cuota_prestamo) * 2) && (
+                      <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold mt-0.5 whitespace-nowrap">Últimas cuotas</span>
+                    )}
+                  </div>
+                </td>
                 <td className="py-3 px-6 text-sm text-slate-600">{fmtCOP(emp.cuota_prestamo || 0)}</td>
-                <td className="py-3 px-6 text-sm text-slate-600">{fmtCOP(emp.optica_total || 0)}</td>
+                <td className="py-3 px-6 text-sm text-slate-600">
+                  <div className="flex flex-col items-start">
+                    <span>{fmtCOP(emp.optica_total || 0)}</span>
+                    {Number(emp.optica_total) > 0 && Number(emp.optica_total) <= (Number(emp.cuota_optica) * 2) && (
+                      <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold mt-0.5 whitespace-nowrap">Últimas cuotas</span>
+                    )}
+                  </div>
+                </td>
                 <td className="py-3 px-6 text-sm text-slate-600">{fmtCOP(emp.cuota_optica || 0)}</td>
                 <td className="py-3 px-6 text-center">
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${emp.is_active !== false ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>

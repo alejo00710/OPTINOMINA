@@ -199,6 +199,31 @@ export default function NominaPage() {
 
       if (error) throw error;
 
+      // 3.5 Amortización de deudas a largo plazo (Préstamos y Óptica)
+      const debtPromises = nominaParaGuardar.map(async (empRow) => {
+          const deduccionPrestamo = Number(empRow.prestamos) || 0;
+          const deduccionOptica = Number(empRow.optica) || 0;
+          
+          if (deduccionPrestamo > 0 || deduccionOptica > 0) {
+              const currentPrestamoTotal = Number(empRow.masterRow?.prestamo_total || empRow.prestamo_total || 0);
+              const currentOpticaTotal = Number(empRow.masterRow?.optica_total || empRow.optica_total || 0);
+              
+              const newPrestamoTotal = Math.max(0, currentPrestamoTotal - deduccionPrestamo);
+              const newOpticaTotal = Math.max(0, currentOpticaTotal - deduccionOptica);
+              
+              return supabase
+                  .from('optimoldes_employees')
+                  .update({ 
+                      prestamo_total: newPrestamoTotal,
+                      optica_total: newOpticaTotal
+                  })
+                  .eq('cedula', empRow.cedula);
+          }
+          return Promise.resolve();
+      });
+
+      await Promise.all(debtPromises);
+
       // 4. Limpiar estado activo si el proceso fue exitoso
       await supabase
         .from('optimoldes_payroll')
@@ -617,12 +642,12 @@ processedLogs.forEach(day => {
           return valCalculado > 0 ? valCalculado : parseLocalNumber(Number(emp.dias_incapacidad || 0));
       });
       
-      const basePrestamo = parseLocalNumber(Number(emp.cuota_prestamo || 0));
+      const prestamoTotal = parseLocalNumber(Number(emp.prestamo_total || 0));
+      const basePrestamo = Math.min(parseLocalNumber(Number(emp.cuota_prestamo || 0)), prestamoTotal);
       const rawDescuentosSaitemp = overrides[`${cedula}_prestamos`] !== undefined 
           ? String(overrides[`${cedula}_prestamos`]) 
-          : (emp.cuota_prestamo ? String(emp.cuota_prestamo) : '');
+          : (basePrestamo > 0 ? String(basePrestamo) : '');
       const prestamos = resolveValue(overrides, `${cedula}_prestamos`, () => basePrestamo);
-      const prestamoTotal = parseLocalNumber(Number(emp.prestamo_total || 0));
       const saldoPrestamo = prestamoTotal - prestamos;
 
       const polizaBolivar = resolveValue(overrides, `${cedula}_poliza_bolivar`, () => parseLocalNumber(Number(emp.poliza_bolivar || 0)));
@@ -630,8 +655,10 @@ processedLogs.forEach(day => {
       const libranzaComfama = resolveValue(overrides, `${cedula}_libranza_comfama`, () => parseLocalNumber(Number(emp.libranza_comfama || 0)));
       const polizaSura = resolveValue(overrides, `${cedula}_poliza_sura`, () => parseLocalNumber(Number(emp.poliza_sura || 0)));
       
-      const baseOptica = parseLocalNumber(Number(emp.cuota_optica || 0));
+      const opticaTotal = parseLocalNumber(Number(emp.optica_total || 0));
+      const baseOptica = Math.min(parseLocalNumber(Number(emp.cuota_optica || 0)), opticaTotal);
       const optica = resolveValue(overrides, `${cedula}_optica`, () => baseOptica);
+      const saldoOptica = opticaTotal - optica;
       
       const celular = resolveValue(overrides, `${cedula}_celular`, () => parseLocalNumber(Number(emp.celular || 0)));
       const retencion = resolveValue(overrides, `${cedula}_retencion`, () => parseLocalNumber(Number(emp.retencion || 0)));
@@ -718,6 +745,7 @@ processedLogs.forEach(day => {
         libranza_comfama: libranzaComfama,
         poliza_sura: polizaSura,
         optica: optica,
+        saldo_optica: saldoOptica,
         celular: celular,
         retencion: retencion,
         bonificacion: bonificacion,
@@ -870,6 +898,7 @@ processedLogs.forEach(day => {
         libranza_comfama: variables['libranza_comfama'] || 0,
         poliza_sura: variables['poliza_sura'] || 0,
         optica: variables['optica'] || 0,
+        saldo_optica: variables['saldo_optica'] || 0,
         celular: variables['celular'] || 0,
         retencion: variables['retencion'] || 0,
         total_deducciones: variables['total_deducciones'] || 0,
