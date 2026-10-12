@@ -65,6 +65,19 @@ export default function TabHistorico() {
         { header: 'Cédula', key: 'cedula', width: 15 },
         { header: 'Cargo', key: 'cargo', width: 25 },
         { header: 'Total Devengado', key: 'devengado', width: 20 },
+        { header: 'Salud', key: 'salud', width: 15 },
+        { header: 'Pensión', key: 'pension', width: 15 },
+        { header: 'Solidaridad', key: 'solidaridad', width: 15 },
+        { header: 'Préstamos', key: 'prestamos', width: 15 },
+        { header: 'Póliza Bolívar', key: 'poliza_bolivar', width: 15 },
+        { header: 'Póliza Plenitud', key: 'poliza_plenitud', width: 15 },
+        { header: 'Comfama', key: 'comfama', width: 15 },
+        { header: 'Póliza Sura', key: 'poliza_sura', width: 15 },
+        { header: 'Óptica', key: 'optica', width: 15 },
+        { header: 'Celular', key: 'celular', width: 15 },
+        { header: 'Retención', key: 'retencion', width: 15 },
+        { header: 'Otros Descuentos', key: 'otros_descuentos', width: 18 },
+        { header: 'Motivo Otros', key: 'motivo_otros', width: 25 },
         { header: 'Total Deducido', key: 'deducido', width: 20 },
         { header: 'Neto a Pagar', key: 'neto', width: 20 }
       ];
@@ -75,6 +88,19 @@ export default function TabHistorico() {
           cedula: emp.cedula,
           cargo: emp.cargo,
           devengado: emp.total_devengados || emp.total_devengado || 0,
+          salud: emp.salud || 0,
+          pension: emp.pension || 0,
+          solidaridad: emp.solidaridad || 0,
+          prestamos: emp.prestamos || 0,
+          poliza_bolivar: emp.poliza_bolivar || 0,
+          poliza_plenitud: emp.poliza_plenitud || 0,
+          comfama: emp.comfama || emp.libranza_comfama || 0,
+          poliza_sura: emp.poliza_sura || 0,
+          optica: emp.optica || 0,
+          celular: emp.celular || 0,
+          retencion: emp.retencion || 0,
+          otros_descuentos: emp.otros_descuentos || 0,
+          motivo_otros: emp.motivo_otros || '',
           deducido: emp.total_deducciones || emp.total_deducido || 0,
           neto: emp.neto_pagar || 0
         });
@@ -97,7 +123,6 @@ export default function TabHistorico() {
         const wsEmp = workbook.addWorksheet(finalSheetName);
         
         const safeNumber = (val) => isNaN(Number(val)) ? 0 : Number(val);
-        const polizas = safeNumber(emp.poliza_bolivar) + safeNumber(emp.poliza_sura) + safeNumber(emp.poliza_plenitud);
 
         const aoaData = [
           ['--- INFORMACIÓN DEL EMPLEADO ---', ''],
@@ -131,10 +156,15 @@ export default function TabHistorico() {
           ['Pensión', safeNumber(emp.pension)],
           ['Solidaridad', safeNumber(emp.solidaridad)],
           ['Préstamos', safeNumber(emp.prestamos)],
-          ['Pólizas / Seguros', polizas],
+          ['Póliza Bolívar', safeNumber(emp.poliza_bolivar)],
+          ['Póliza Plenitud', safeNumber(emp.poliza_plenitud)],
+          ['Comfama', safeNumber(emp.comfama || emp.libranza_comfama)],
+          ['Póliza Sura', safeNumber(emp.poliza_sura)],
           ['Óptica', safeNumber(emp.optica)],
+          ['Celular', safeNumber(emp.celular)],
           ['Retención', safeNumber(emp.retencion)],
-          ['Libranzas / Otros', safeNumber(emp.libranza_comfama)],
+          ['Otros Descuentos', safeNumber(emp.otros_descuentos)],
+          ['Motivo Otros Descuentos', emp.motivo_otros || ''],
           ['', ''],
           ['--- RESUMEN FINAL ---', ''],
           ['TOTAL DEVENGADO', safeNumber(emp.total_devengados || emp.total_devengado)],

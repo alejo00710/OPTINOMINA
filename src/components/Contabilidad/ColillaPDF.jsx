@@ -248,11 +248,14 @@ export default function ColillaPDF({ empleados = [], tituloReporte = "SÁBANA CO
                 <DetailRow label="Préstamos" value={emp.prestamos} />
                 <DetailRow label="Póliza Bolívar" value={emp.poliza_bolivar} />
                 <DetailRow label="Póliza Plenitud" value={emp.poliza_plenitud} />
-                <DetailRow label="Comfama" value={emp.libranza_comfama} />
+                <DetailRow label="Comfama" value={emp.comfama || emp.libranza_comfama} />
                 <DetailRow label="Póliza Sura" value={emp.poliza_sura} />
                 <DetailRow label="Óptica" value={emp.optica} />
                 <DetailRow label="Celular" value={emp.celular} />
                 <DetailRow label="Retención" value={emp.retencion} />
+                {Number(emp.otros_descuentos || 0) > 0 && (
+                  <DetailRow label={`Otros: ${emp.motivo_otros || 'Descuento extra'}`} value={emp.otros_descuentos} />
+                )}
                 <DetailRow label="Saldo Préstamo" value={emp.saldo_prestamo} />
                 
                 <View style={styles.totalRow}>

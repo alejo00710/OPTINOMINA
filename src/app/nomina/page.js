@@ -167,7 +167,34 @@ export default function NominaPage() {
     
     setIsClosing(true);
     try {
-      const nominaParaGuardar = typeof filteredPayrollData !== 'undefined' ? filteredPayrollData : nominaRows;
+      const rawRows = typeof filteredPayrollData !== 'undefined' ? filteredPayrollData : nominaRows;
+      
+      // Mapeo explícito de campos de liquidación y deducciones para la fotografía histórica inmutable
+      const nominaParaGuardar = rawRows.map(emp => {
+        const poliza_bolivar = Number(emp.poliza_bolivar || emp.masterRow?.poliza_bolivar || 0);
+        const poliza_plenitud = Number(emp.poliza_plenitud || emp.masterRow?.poliza_plenitud || 0);
+        const comfama = Number(emp.comfama || emp.libranza_comfama || emp.masterRow?.comfama || emp.masterRow?.libranza_comfama || 0);
+        const poliza_sura = Number(emp.poliza_sura || emp.masterRow?.poliza_sura || 0);
+        const optica = Number(emp.optica || emp.masterRow?.optica || emp.cuota_optica || emp.masterRow?.cuota_optica || 0);
+        const celular = Number(emp.celular || emp.masterRow?.celular || 0);
+        const retencion = Number(emp.retencion || emp.masterRow?.retencion || 0);
+        const otros_descuentos = Number(emp.otros_descuentos || emp.masterRow?.otros_descuentos || 0);
+        const motivo_otros = emp.motivo_otros || emp.masterRow?.motivo_otros || '';
+
+        return {
+          ...emp,
+          poliza_bolivar,
+          poliza_plenitud,
+          libranza_comfama: comfama,
+          comfama,
+          poliza_sura,
+          optica,
+          celular,
+          retencion,
+          otros_descuentos,
+          motivo_otros
+        };
+      });
 
       // 1. Calcular KPIs globales sumando toda la grilla
       const total_devengado = nominaParaGuardar.reduce((acc, emp) => acc + (Number(emp.total_devengados) || 0), 0);
@@ -199,7 +226,22 @@ export default function NominaPage() {
 
       if (error) throw error;
 
-      // 3.5 Amortización de deudas a largo plazo (Préstamos y Óptica)
+      // 3.1 Compatibilidad dual con historial_nominas (legado)
+      try {
+        await supabase
+          .from('historial_nominas')
+          .insert([{
+            identificador: `Quincena del ${startDate} al ${endDate}`,
+            rango_fechas: `${startDate} al ${endDate}`,
+            payload_json: {
+              nomina_calculada: nominaParaGuardar
+            }
+          }]);
+      } catch (errLegado) {
+        console.warn("Aviso: No se pudo guardar copia en historial legado:", errLegado);
+      }
+
+      // 3.2 Amortización de deudas a largo plazo (Préstamos y Óptica)
       const debtPromises = nominaParaGuardar.map(async (empRow) => {
           const deduccionPrestamo = Number(empRow.prestamos) || 0;
           const deduccionOptica = Number(empRow.optica) || 0;
@@ -223,6 +265,7 @@ export default function NominaPage() {
       });
 
       await Promise.all(debtPromises);
+
 
       // 4. Limpiar estado activo si el proceso fue exitoso
       await supabase
@@ -274,6 +317,12 @@ export default function NominaPage() {
           comisiones: 0,
           poliza_bolivar: Number(emp.poliza_bolivar || 0),
           poliza_sura: Number(emp.poliza_sura || 0),
+          poliza_plenitud: Number(emp.poliza_plenitud || 0),
+          comfama: Number(emp.comfama || emp.libranza_comfama || 0),
+          celular: Number(emp.celular || 0),
+          retencion: Number(emp.retencion || 0),
+          otros_descuentos: Number(emp.otros_descuentos || 0),
+          motivo_otros: emp.motivo_otros || '',
           prestamo_total: Number(emp.prestamo_total || 0),
           cuota_prestamo: Number(emp.cuota_prestamo || 0),
           optica_total: Number(emp.optica_total || 0),
@@ -652,7 +701,8 @@ processedLogs.forEach(day => {
 
       const polizaBolivar = resolveValue(overrides, `${cedula}_poliza_bolivar`, () => parseLocalNumber(Number(emp.poliza_bolivar || 0)));
       const polizaPlenitud = resolveValue(overrides, `${cedula}_poliza_plenitud`, () => parseLocalNumber(Number(emp.poliza_plenitud || 0)));
-      const libranzaComfama = resolveValue(overrides, `${cedula}_libranza_comfama`, () => parseLocalNumber(Number(emp.libranza_comfama || 0)));
+      const comfama = resolveValue(overrides, `${cedula}_comfama`, () => resolveValue(overrides, `${cedula}_libranza_comfama`, () => parseLocalNumber(Number(emp.comfama || emp.libranza_comfama || 0))));
+      const libranzaComfama = comfama;
       const polizaSura = resolveValue(overrides, `${cedula}_poliza_sura`, () => parseLocalNumber(Number(emp.poliza_sura || 0)));
       
       const opticaTotal = parseLocalNumber(Number(emp.optica_total || 0));
@@ -662,6 +712,8 @@ processedLogs.forEach(day => {
       
       const celular = resolveValue(overrides, `${cedula}_celular`, () => parseLocalNumber(Number(emp.celular || 0)));
       const retencion = resolveValue(overrides, `${cedula}_retencion`, () => parseLocalNumber(Number(emp.retencion || 0)));
+      const otrosDescuentos = resolveValue(overrides, `${cedula}_otros_descuentos`, () => parseLocalNumber(Number(emp.otros_descuentos || 0)));
+      const motivoOtros = overrides[`${cedula}_motivo_otros`] !== undefined ? overrides[`${cedula}_motivo_otros`] : (emp.motivo_otros || '');
       const bonificacion = resolveValue(overrides, `${cedula}_bonificacion`, () => 0);
       
       // Extracción estricta del valor visual que renderiza el <input>
@@ -743,11 +795,14 @@ processedLogs.forEach(day => {
         poliza_bolivar: polizaBolivar,
         poliza_plenitud: polizaPlenitud,
         libranza_comfama: libranzaComfama,
+        comfama: comfama,
         poliza_sura: polizaSura,
         optica: optica,
         saldo_optica: saldoOptica,
         celular: celular,
         retencion: retencion,
+        otros_descuentos: otrosDescuentos,
+        motivo_otros: motivoOtros,
         bonificacion: bonificacion,
         bonificacion_no_salarial: bonificacion
       };
@@ -823,7 +878,7 @@ processedLogs.forEach(day => {
       // FASE 2: Suma de Devengados (SOLO LLAVES OFICIALES)
       const fase2 = ['total_devengados', 'ibc_seguridad_social', 'ibc_fsp'];
       // FASE 3: Deducciones Base
-      const fase3 = ['salud', 'pension', 'solidaridad', 'prestamos', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'poliza_sura', 'optica', 'celular', 'retencion'];
+      const fase3 = ['salud', 'pension', 'solidaridad', 'prestamos', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'comfama', 'poliza_sura', 'optica', 'celular', 'retencion', 'otros_descuentos'];
       // FASE 4: Suma de Deducciones (SOLO LLAVES OFICIALES)
       const fase4 = ['total_deducciones'];
       // FASE 5: Totales Finales (Dependen obligatoriamente de la Fase 2 y Fase 4 completadas)
@@ -836,6 +891,22 @@ processedLogs.forEach(day => {
           });
       });
 
+      // Asegurar matemáticamente que total_deducciones sume todas las deducciones incluyendo los nuevos campos:
+      if (overrides[`${cedula}_total_deducciones`] === undefined) {
+         variables['total_deducciones'] = safeParseNumber(variables['salud']) 
+            + safeParseNumber(variables['pension']) 
+            + safeParseNumber(variables['solidaridad']) 
+            + safeParseNumber(variables['prestamos']) 
+            + safeParseNumber(variables['poliza_bolivar']) 
+            + safeParseNumber(variables['poliza_plenitud']) 
+            + safeParseNumber(variables['comfama'] || variables['libranza_comfama']) 
+            + safeParseNumber(variables['poliza_sura']) 
+            + safeParseNumber(variables['optica']) 
+            + safeParseNumber(variables['celular']) 
+            + safeParseNumber(variables['retencion']) 
+            + safeParseNumber(variables['otros_descuentos']);
+      }
+
       console.log("💰 ESCÁNER DE NÓMINA - Cédula:", cedula, {
           dias_capturados: variables.dias_calamidad,
           salario: variables.salario_base,
@@ -843,9 +914,12 @@ processedLogs.forEach(day => {
           resultado_final_plata: variables.val_calamidad
       });
 
-      // Si después de todo, total_pagar es 0 o NaN, FUERZA la resta matemática:
-      if (!variables['total_pagar']) {
+      // Si total_pagar no tiene override manual, fuerza el cálculo de resta (Neto a pagar):
+      if (overrides[`${cedula}_total_pagar`] === undefined) {
           variables['total_pagar'] = safeParseNumber(variables['total_devengados']) - safeParseNumber(variables['total_deducciones']);
+      }
+      if (overrides[`${cedula}_neto_pagar`] === undefined) {
+          variables['neto_pagar'] = safeParseNumber(variables['total_pagar']) + safeParseNumber(variables['bonificacion']);
       }
 
       const finalRow = {
@@ -896,11 +970,14 @@ processedLogs.forEach(day => {
         poliza_bolivar: variables['poliza_bolivar'] || 0,
         poliza_plenitud: variables['poliza_plenitud'] || 0,
         libranza_comfama: variables['libranza_comfama'] || 0,
+        comfama: variables['comfama'] || variables['libranza_comfama'] || 0,
         poliza_sura: variables['poliza_sura'] || 0,
         optica: variables['optica'] || 0,
         saldo_optica: variables['saldo_optica'] || 0,
         celular: variables['celular'] || 0,
         retencion: variables['retencion'] || 0,
+        otros_descuentos: variables['otros_descuentos'] || 0,
+        motivo_otros: variables['motivo_otros'] || emp.motivo_otros || '',
         total_deducciones: variables['total_deducciones'] || 0,
         total_deducido: variables['total_deducciones'] || 0, // Alias para UI
         bonificacion: variables['bonificacion'] || 0,
@@ -1117,7 +1194,15 @@ processedLogs.forEach(day => {
 
   const handleCellEdit = (cellKey, val) => {
     setOverrides(prev => {
-      const newOverrides = { ...prev, [cellKey]: val };
+      const newOverrides = { ...prev };
+
+      // Si el usuario borró el contenido del input ('', null o undefined), ELIMINA el override
+      const isCleared = val === '' || val === null || val === undefined;
+      if (isCleared) {
+        delete newOverrides[cellKey];
+      } else {
+        newOverrides[cellKey] = val;
+      }
       
       // Limpieza de Overrides en Cascada (Cache Invalidation)
       const parts = cellKey.split('_');
@@ -1125,7 +1210,7 @@ processedLogs.forEach(day => {
       const campoEditado = parts.slice(1).join('_');
 
       const devengadosBase = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento'];
-      const deduccionesBase = ['salud', 'pension', 'solidaridad', 'prestamos', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'poliza_sura', 'optica', 'celular', 'retencion'];
+      const deduccionesBase = ['salud', 'pension', 'solidaridad', 'prestamos', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'comfama', 'poliza_sura', 'optica', 'celular', 'retencion', 'otros_descuentos'];
       const totalesIntermedios = ['total_devengados', 'total_devengado', 'total_deducciones', 'total_deducido'];
 
       if (devengadosBase.includes(campoEditado) || campoEditado === 'dias_pagados') {
@@ -1897,7 +1982,7 @@ const handleSaveToCloud = async () => {
              const devengosBasicos = ['salario', 'dias_pagados', 'sueldo', 'transporte', 'rodamiento', 'comisiones', 'bonificacion_no_salarial', 'bonificacion', 'total_devengados'];
              const novedadesFinancieras = ['dias_lic_rem', 'val_lic_rem', 'dias_lic_norem', 'val_lic_norem', 'dias_incapacidad', 'incapacidad', 'dias_incap_at', 'val_incap_at', 'dias_calamidad', 'val_calamidad', 'dias_sancion', 'val_sancion'];
              const suplementario = ['horas_diurnas', 'horas_nocturnas', 'extras_diurnas', 'extras_nocturnas', 'extras_festivas', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas'];
-             const deducciones = ['salud', 'pension', 'solidaridad', 'prestamos', 'saldo_prestamo', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'poliza_sura', 'optica', 'celular', 'retencion', 'total_deducciones'];
+             const deducciones = ['salud', 'pension', 'solidaridad', 'prestamos', 'saldo_prestamo', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'poliza_sura', 'optica', 'celular', 'retencion', 'otros_descuentos', 'total_deducciones'];
              const resultados = ['total_pagar', 'neto_pagar', 'verificacion'];
 
              const renderCategory = (title, keys, titleColor) => {

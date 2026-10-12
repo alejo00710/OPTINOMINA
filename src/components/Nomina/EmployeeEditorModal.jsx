@@ -18,6 +18,12 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
     rodamiento: 0,
     poliza_bolivar: 0,
     poliza_sura: 0,
+    poliza_plenitud: 0,
+    comfama: 0,
+    celular: 0,
+    retencion: 0,
+    otros_descuentos: 0,
+    motivo_otros: '',
     prestamo_total: 0,
     cuota_prestamo: 0,
     optica_total: 0,
@@ -40,6 +46,12 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         rodamiento: employee.rodamiento || 0,
         poliza_bolivar: employee.poliza_bolivar || 0,
         poliza_sura: employee.poliza_sura || 0,
+        poliza_plenitud: employee.poliza_plenitud || 0,
+        comfama: employee.comfama || employee.libranza_comfama || 0,
+        celular: employee.celular || 0,
+        retencion: employee.retencion || 0,
+        otros_descuentos: employee.otros_descuentos || 0,
+        motivo_otros: employee.motivo_otros || '',
         prestamo_total: employee.prestamo_total || 0,
         cuota_prestamo: employee.cuota_prestamo || 0,
         optica_total: employee.optica_total || 0,
@@ -50,7 +62,7 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
     } else {
       setFormData({
         cedula: '',
-    biometric_id: '',
+        biometric_id: '',
         nombre: '',
         cargo: '',
         categoria: 'OTROS',
@@ -59,6 +71,12 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         rodamiento: 0,
         poliza_bolivar: 0,
         poliza_sura: 0,
+        poliza_plenitud: 0,
+        comfama: 0,
+        celular: 0,
+        retencion: 0,
+        otros_descuentos: 0,
+        motivo_otros: '',
         prestamo_total: 0,
         cuota_prestamo: 0,
         optica_total: 0,
@@ -96,6 +114,12 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         rodamiento: parseLocalNumber(formData.rodamiento),
         poliza_bolivar: parseLocalNumber(formData.poliza_bolivar),
         poliza_sura: parseLocalNumber(formData.poliza_sura),
+        poliza_plenitud: parseLocalNumber(formData.poliza_plenitud),
+        comfama: parseLocalNumber(formData.comfama),
+        celular: parseLocalNumber(formData.celular),
+        retencion: parseLocalNumber(formData.retencion),
+        otros_descuentos: parseLocalNumber(formData.otros_descuentos),
+        motivo_otros: formData.motivo_otros ? String(formData.motivo_otros).trim() : '',
         prestamo_total: parseLocalNumber(formData.prestamo_total),
         cuota_prestamo: parseLocalNumber(formData.cuota_prestamo),
         optica_total: parseLocalNumber(formData.optica_total),
@@ -312,6 +336,62 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
                 value={formData.poliza_sura}
                 onChange={(v) => handleNumChange('poliza_sura', v)}
                 isCurrency={true}
+              />
+            </div>
+
+            <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-emerald-600 transition-colors">Póliza Plenitud</span>
+              <EditableCell
+                value={formData.poliza_plenitud}
+                onChange={(v) => handleNumChange('poliza_plenitud', v)}
+                isCurrency={true}
+              />
+            </div>
+
+            <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-emerald-600 transition-colors">Comfama</span>
+              <EditableCell
+                value={formData.comfama}
+                onChange={(v) => handleNumChange('comfama', v)}
+                isCurrency={true}
+              />
+            </div>
+
+            <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-emerald-600 transition-colors">Celular</span>
+              <EditableCell
+                value={formData.celular}
+                onChange={(v) => handleNumChange('celular', v)}
+                isCurrency={true}
+              />
+            </div>
+
+            <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-emerald-600 transition-colors">Retención en la Fuente</span>
+              <EditableCell
+                value={formData.retencion}
+                onChange={(v) => handleNumChange('retencion', v)}
+                isCurrency={true}
+              />
+            </div>
+
+            <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-emerald-600 transition-colors">Otros Descuentos</span>
+              <EditableCell
+                value={formData.otros_descuentos}
+                onChange={(v) => handleNumChange('otros_descuentos', v)}
+                isCurrency={true}
+              />
+            </div>
+
+            <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col shadow-sm">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Motivo Otros Descuentos</span>
+              <input
+                type="text"
+                value={formData.motivo_otros}
+                onChange={(e) => setFormData({...formData, motivo_otros: e.target.value})}
+                className="w-full text-right text-sm font-medium text-slate-900 focus:ring-0 outline-none"
+                placeholder="Ej: Descuento extra / Casino"
               />
             </div>
 

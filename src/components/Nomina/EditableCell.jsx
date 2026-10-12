@@ -16,6 +16,10 @@ export default function EditableCell({ value, onChange, isOverridden, isCalculat
 
   const handleBlur = () => {
     setIsEditing(false);
+    if (localVal === '' || localVal === null || localVal === undefined || (typeof localVal === 'string' && localVal.trim() === '')) {
+      onChange('');
+      return;
+    }
     const cleanNum = parseLocalNumber(localVal);
     onChange(cleanNum);
   };

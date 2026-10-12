@@ -239,11 +239,11 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
                 <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.poliza_plenitud))}</td>
               </tr>
             )}
-            {safeNumber(empleado.libranza_comfama) > 0 && (
+            {safeNumber(empleado.comfama || empleado.libranza_comfama) > 0 && (
               <tr>
-                <td className="border-r border-[#9ca3af] px-2 text-left">LIBRANZA COMFAMA</td>
+                <td className="border-r border-[#9ca3af] px-2 text-left">COMFAMA</td>
                 <td className="border-r border-[#9ca3af] px-2 text-right"></td>
-                <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.libranza_comfama))}</td>
+                <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.comfama || empleado.libranza_comfama))}</td>
               </tr>
             )}
             {safeNumber(empleado.poliza_sura) > 0 && (
@@ -279,6 +279,13 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
                 <td className="border-r border-[#9ca3af] px-2 text-left">RETENCIÓN SOBRE SALARIOS</td>
                 <td className="border-r border-[#9ca3af] px-2 text-right"></td>
                 <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.retencion))}</td>
+              </tr>
+            )}
+            {safeNumber(empleado.otros_descuentos) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left uppercase">OTROS: {empleado.motivo_otros || 'DESCUENTO EXTRA'}</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
+                <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.otros_descuentos))}</td>
               </tr>
             )}
 

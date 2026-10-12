@@ -160,6 +160,7 @@ export const PLANILLA_COLUMNS = [
   { key: "optica", label: "Óptica (AF)", letter: "AF", type: "number", isCurrency: true, editable: true },
   { key: "celular", label: "Celular (AG)", letter: "AG", type: "number", isCurrency: true, editable: true },
   { key: "retencion", label: "Retención (AH)", letter: "AH", type: "number", isCurrency: true, editable: true },
+  { key: "otros_descuentos", label: "Otros Descuentos", letter: "OTR", type: "number", isCurrency: true, editable: true },
   { key: "total_deducciones", label: "Total Deducido (AI)", letter: "AI", type: "number", isCurrency: true, bg: "bg-rose-500/5 font-extrabold text-rose-800", editable: true },
   
   { key: "total_pagar", label: "Total a Pagar (AJ)", letter: "AJ", type: "number", isCurrency: true, editable: true },
@@ -226,7 +227,7 @@ export const DEFAULT_FORMULAS = {
   salud: 'ibc_seguridad_social * 0.04',
   pension: 'ibc_seguridad_social * 0.04',
   solidaridad: 'ibc_fsp >= (smlv_base * 4) ? ibc_fsp * 0.01 : 0',
-  total_deducciones: 'salud + pension + solidaridad + prestamos + poliza_bolivar + poliza_plenitud + libranza_comfama + poliza_sura + optica + celular + retencion',
+  total_deducciones: 'salud + pension + solidaridad + prestamos + poliza_bolivar + poliza_plenitud + (comfama || libranza_comfama || 0) + poliza_sura + optica + celular + retencion + (otros_descuentos || 0)',
   total_pagar: 'total_devengados - total_deducciones',
   neto_pagar: 'total_pagar + bonificacion_no_salarial',
   verificacion: '(total_devengados + bonificacion_no_salarial) * 0.40'
