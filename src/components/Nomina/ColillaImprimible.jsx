@@ -190,8 +190,15 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
             )}
             {safeNumber(empleado.intereses_cesantias) > 0 && (
               <tr>
-                <td className="border-r border-[#9ca3af] px-2 text-left">INTERESES A LAS CESANTIAS</td>
+                <td className="border-r border-[#9ca3af] px-2 text-left">INTERESES CESANTÍAS</td>
                 <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.intereses_cesantias))}</td>
+                <td className="px-2 text-right"></td>
+              </tr>
+            )}
+            {safeNumber(empleado.devoluciones) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left uppercase">DEVOLUCIÓN: {empleado.motivo_devoluciones || 'AJUSTE'}</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.devoluciones))}</td>
                 <td className="px-2 text-right"></td>
               </tr>
             )}

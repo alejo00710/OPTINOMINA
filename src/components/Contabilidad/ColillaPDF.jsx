@@ -209,6 +209,12 @@ export default function ColillaPDF({ empleados = [], tituloReporte = "SÁBANA CO
                 <DetailRow label="Auxilio de Transporte" value={emp.transporte} />
                 <DetailRow label="Rodamiento" value={emp.rodamiento} />
                 <DetailRow label="Bonif. No Salarial" value={emp.bonificacion_no_salarial || emp.bonificacion} />
+                {Number(emp.intereses_cesantias || 0) > 0 && (
+                  <DetailRow label="Intereses Cesantías" value={emp.intereses_cesantias} />
+                )}
+                {Number(emp.devoluciones || 0) > 0 && (
+                  <DetailRow label={`Devolución: ${emp.motivo_devoluciones || 'Ajuste'}`} value={emp.devoluciones} />
+                )}
                 
                 <View style={styles.totalRow}>
                   <Text style={styles.totalConcept}>Total Devengado</Text>

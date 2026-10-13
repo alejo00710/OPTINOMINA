@@ -118,9 +118,9 @@ export default function NominaPage() {
     detail: "",
   });
 
-  // Prevent hydration mismatch by using same initial state on server and client, then updating after mount
-  const [startDate, setStartDate] = useState("2026-05-01");
-  const [endDate, setEndDate] = useState("2026-05-15");
+  // Inicialización dinámica con fecha actual (YYYY-MM-DD) para liquidaciones nuevas
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   const [globalSmmlv, setGlobalSmmlv] = useState(1750905);
   const [globalAuxTransporte, setGlobalAuxTransporte] = useState(249095);
@@ -180,9 +180,15 @@ export default function NominaPage() {
         const retencion = Number(emp.retencion || emp.masterRow?.retencion || 0);
         const otros_descuentos = Number(emp.otros_descuentos || emp.masterRow?.otros_descuentos || 0);
         const motivo_otros = emp.motivo_otros || emp.masterRow?.motivo_otros || '';
+        const intereses_cesantias = Number(emp.intereses_cesantias || emp.masterRow?.intereses_cesantias || 0);
+        const devoluciones = Number(emp.devoluciones || emp.masterRow?.devoluciones || 0);
+        const motivo_devoluciones = emp.motivo_devoluciones || emp.masterRow?.motivo_devoluciones || '';
 
         return {
           ...emp,
+          intereses_cesantias,
+          devoluciones,
+          motivo_devoluciones,
           poliza_bolivar,
           poliza_plenitud,
           libranza_comfama: comfama,
@@ -268,11 +274,21 @@ export default function NominaPage() {
 
 
       // 4. Limpiar estado activo si el proceso fue exitoso
+      const todayReset = new Date().toISOString().split('T')[0];
       await supabase
         .from('optimoldes_payroll')
-        .update({ attendance_logs: {}, overrides: {} })
+        .update({ attendance_logs: {}, overrides: {}, start_date: null, end_date: null })
         .eq('id', 'quincena_activa');
 
+      try {
+        localStorage.removeItem(NOMINA_DATE_RANGE_KEY);
+        localStorage.removeItem('optinomina_draft');
+      } catch (errCache) {
+        console.warn("No se pudo limpiar localStorage:", errCache);
+      }
+
+      setStartDate(todayReset);
+      setEndDate(todayReset);
       setOverrides({});
       setAttendanceLogs({});
 
@@ -323,6 +339,9 @@ export default function NominaPage() {
           retencion: Number(emp.retencion || 0),
           otros_descuentos: Number(emp.otros_descuentos || 0),
           motivo_otros: emp.motivo_otros || '',
+          intereses_cesantias: Number(emp.intereses_cesantias || 0),
+          devoluciones: Number(emp.devoluciones || 0),
+          motivo_devoluciones: emp.motivo_devoluciones || '',
           prestamo_total: Number(emp.prestamo_total || 0),
           cuota_prestamo: Number(emp.cuota_prestamo || 0),
           optica_total: Number(emp.optica_total || 0),
@@ -354,10 +373,18 @@ export default function NominaPage() {
           .eq('id', 'quincena_activa')
           .single();
 
-        if (cloudDraft && !draftError) {
+        const today = new Date().toISOString().split('T')[0];
+
+        // Determinar si hay una quincena activa con progreso guardado en la base de datos
+        const hasActiveDraft = cloudDraft && !draftError && Boolean(cloudDraft.start_date) && (
+          (cloudDraft.attendance_logs && Object.keys(cloudDraft.attendance_logs).length > 0) ||
+          (cloudDraft.overrides && Object.keys(cloudDraft.overrides).filter(k => k !== '_MASTER_SCHEDULE_JSON').length > 0)
+        );
+
+        if (hasActiveDraft) {
           try {
-            setStartDate(cloudDraft.start_date || startDate);
-            setEndDate(cloudDraft.end_date || endDate);
+            setStartDate(cloudDraft.start_date);
+            setEndDate(cloudDraft.end_date || cloudDraft.start_date);
             setAttendanceLogs(cloudDraft.attendance_logs || {});
             
             let loadedOverrides = cloudDraft.overrides || {};
@@ -373,6 +400,13 @@ export default function NominaPage() {
             console.error("Error aplicando datos desde la nube:", e);
           }
         } else {
+          // Si NO hay quincena activa cargada (liquidación nueva), ignorar y purgar caché de localStorage y tomar por defecto la fecha actual
+          try {
+            localStorage.removeItem(NOMINA_DATE_RANGE_KEY);
+            localStorage.removeItem('optinomina_draft');
+          } catch (e) {}
+          setStartDate(today);
+          setEndDate(today);
           setAttendanceLogs({});
           setOverrides({});
         }
@@ -685,6 +719,9 @@ processedLogs.forEach(day => {
       
       const comisiones = resolveValue(overrides, `${cedula}_comisiones`, () => 0);
       const rodamiento = resolveValue(overrides, `${cedula}_rodamiento`, () => parseLocalNumber(Number(emp.rodamiento || 0)));
+      const interesesCesantias = resolveValue(overrides, `${cedula}_intereses_cesantias`, () => parseLocalNumber(emp.intereses_cesantias));
+      const devoluciones = resolveValue(overrides, `${cedula}_devoluciones`, () => parseLocalNumber(emp.devoluciones));
+      const motivoDevoluciones = overrides[`${cedula}_motivo_devoluciones`] !== undefined ? overrides[`${cedula}_motivo_devoluciones`] : (emp.motivo_devoluciones || '');
       const diasIncapacidad = resolveValue(overrides, `${cedula}_dias_incapacidad`, () => {
           const keyIncap = Object.keys(novedadesResumen).find(k => k === 'INCAPACIDAD GENERAL');
           const valCalculado = keyIncap ? novedadesResumen[keyIncap]?.length : 0;
@@ -789,6 +826,9 @@ processedLogs.forEach(day => {
         dias_incapacidad: diasIncapacidad,
         comisiones: comisiones,
         rodamiento: rodamiento,
+        intereses_cesantias: interesesCesantias,
+        devoluciones: devoluciones,
+        motivo_devoluciones: motivoDevoluciones,
         prestamos: prestamos,
         raw_prestamos_saitemp: rawDescuentosSaitemp,
         saldo_prestamo: saldoPrestamo,
@@ -874,7 +914,7 @@ processedLogs.forEach(day => {
       };
 
       // FASE 1: Devengados Base
-      const fase1 = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento', 'val_vacaciones', 'val_lic_rem', 'val_lic_norem', 'val_incap_at', 'val_calamidad', 'val_sancion'];
+      const fase1 = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento', 'intereses_cesantias', 'devoluciones', 'val_vacaciones', 'val_lic_rem', 'val_lic_norem', 'val_incap_at', 'val_calamidad', 'val_sancion'];
       // FASE 2: Suma de Devengados (SOLO LLAVES OFICIALES)
       const fase2 = ['total_devengados', 'ibc_seguridad_social', 'ibc_fsp'];
       // FASE 3: Deducciones Base
@@ -890,6 +930,26 @@ processedLogs.forEach(day => {
               computeField(campoId); 
           });
       });
+
+      // Asegurar matemáticamente que total_devengados sume todos los devengos incluyendo los nuevos campos:
+      if (overrides[`${cedula}_total_devengados`] === undefined && overrides[`${cedula}_total_devengado`] === undefined) {
+         variables['total_devengados'] = safeParseNumber(variables['sueldo']) 
+            + safeParseNumber(variables['recargo_nocturno']) 
+            + safeParseNumber(variables['val_extras_diurnas']) 
+            + safeParseNumber(variables['val_extras_nocturnas']) 
+            + safeParseNumber(variables['val_extras_festivas']) 
+            + safeParseNumber(variables['comisiones']) 
+            + safeParseNumber(variables['transporte']) 
+            + safeParseNumber(variables['rodamiento']) 
+            + safeParseNumber(variables['incapacidad']) 
+            + safeParseNumber(variables['val_vacaciones']) 
+            + safeParseNumber(variables['val_lic_rem']) 
+            + safeParseNumber(variables['val_incap_at']) 
+            + safeParseNumber(variables['val_calamidad'])
+            + safeParseNumber(variables['intereses_cesantias']) 
+            + safeParseNumber(variables['devoluciones']);
+         variables['total_devengado'] = variables['total_devengados'];
+      }
 
       // Asegurar matemáticamente que total_deducciones sume todas las deducciones incluyendo los nuevos campos:
       if (overrides[`${cedula}_total_deducciones`] === undefined) {
@@ -944,6 +1004,9 @@ processedLogs.forEach(day => {
         comisiones: variables['comisiones'] || 0,
         transporte: variables['transporte'] || 0,
         rodamiento: variables['rodamiento'] || 0,
+        intereses_cesantias: variables['intereses_cesantias'] || 0,
+        devoluciones: variables['devoluciones'] || 0,
+        motivo_devoluciones: variables['motivo_devoluciones'] || '',
         dias_incapacidad: diasIncapacidad,
         dias_vacaciones: variables['dias_vacaciones'] || 0,
         dias_lic_rem: variables['dias_lic_rem'] || 0,
@@ -1279,11 +1342,15 @@ processedLogs.forEach(day => {
         });
 
         // 2. Actualizar el estado visual
+        const todayReset = new Date().toISOString().split('T')[0];
+        setStartDate(todayReset);
+        setEndDate(todayReset);
         setOverrides(newOverrides);
         setNominaRows(freshRows);
         
         // 3. Destruir caché local
         localStorage.removeItem('optinomina_draft');
+        localStorage.removeItem(NOMINA_DATE_RANGE_KEY);
         
         // 4. DESTRUIR EL BORRADOR DE LA NUBE PARA EVITAR EL "CANDADO ACTIVO" ZOMBIE
         await supabase.from('optimoldes_payroll').delete().eq('id', 'quincena_activa');
@@ -1979,7 +2046,7 @@ const handleSaveToCloud = async () => {
                 )
              };
 
-             const devengosBasicos = ['salario', 'dias_pagados', 'sueldo', 'transporte', 'rodamiento', 'comisiones', 'bonificacion_no_salarial', 'bonificacion', 'total_devengados'];
+             const devengosBasicos = ['salario', 'dias_pagados', 'sueldo', 'transporte', 'rodamiento', 'comisiones', 'intereses_cesantias', 'devoluciones', 'bonificacion_no_salarial', 'bonificacion', 'total_devengados'];
              const novedadesFinancieras = ['dias_lic_rem', 'val_lic_rem', 'dias_lic_norem', 'val_lic_norem', 'dias_incapacidad', 'incapacidad', 'dias_incap_at', 'val_incap_at', 'dias_calamidad', 'val_calamidad', 'dias_sancion', 'val_sancion'];
              const suplementario = ['horas_diurnas', 'horas_nocturnas', 'extras_diurnas', 'extras_nocturnas', 'extras_festivas', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas'];
              const deducciones = ['salud', 'pension', 'solidaridad', 'prestamos', 'saldo_prestamo', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'poliza_sura', 'optica', 'celular', 'retencion', 'otros_descuentos', 'total_deducciones'];
@@ -1995,6 +2062,34 @@ const handleSaveToCloud = async () => {
                          </h4>
                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                              {columns.map(renderCard)}
+                             {title === "Devengos Básicos" && (
+                               <div className="relative bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
+                                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-emerald-600 transition-colors" title="Motivo Devoluciones">
+                                   Motivo Devoluciones
+                                 </span>
+                                 <input
+                                   type="text"
+                                   placeholder="Ej: Ajuste de quincena"
+                                   value={overrides[`${workerData.masterRow.cedula}_motivo_devoluciones`] !== undefined ? overrides[`${workerData.masterRow.cedula}_motivo_devoluciones`] : (workerData.motivo_devoluciones || '')}
+                                   onChange={(e) => handleCellEdit(`${workerData.masterRow.cedula}_motivo_devoluciones`, e.target.value)}
+                                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800 focus:bg-white focus:border-indigo-400 outline-none transition-all"
+                                 />
+                               </div>
+                             )}
+                             {title === "Deducciones y Retenciones" && (
+                               <div className="relative bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-rose-300 hover:shadow-md transition-all group">
+                                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-rose-600 transition-colors" title="Motivo Otros Descuentos">
+                                   Motivo Otros Descuentos
+                                 </span>
+                                 <input
+                                   type="text"
+                                   placeholder="Ej: Descuento extra / Casino"
+                                   value={overrides[`${workerData.masterRow.cedula}_motivo_otros`] !== undefined ? overrides[`${workerData.masterRow.cedula}_motivo_otros`] : (workerData.motivo_otros || '')}
+                                   onChange={(e) => handleCellEdit(`${workerData.masterRow.cedula}_motivo_otros`, e.target.value)}
+                                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800 focus:bg-white focus:border-rose-400 outline-none transition-all"
+                                 />
+                               </div>
+                             )}
                          </div>
                      </div>
                  );

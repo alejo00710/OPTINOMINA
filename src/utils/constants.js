@@ -94,8 +94,9 @@ export const getTemplatesForCategory = (category) => {
 };
 export const NOMINA_DATE_RANGE_KEY = "nomina_date_range_v1";
 export const loadPersistedDateRange = () => {
+  const today = new Date().toISOString().split('T')[0];
   if (typeof window === "undefined") {
-    return { start: "2026-04-25", end: "2026-05-15" };
+    return { start: today, end: today };
   }
   try {
     const raw = localStorage.getItem(NOMINA_DATE_RANGE_KEY);
@@ -106,7 +107,7 @@ export const loadPersistedDateRange = () => {
   } catch {
     /* ignore */
   }
-  return { start: "2026-04-25", end: "2026-05-15" };
+  return { start: today, end: today };
 };
 export const PLANILLA_COLUMNS = [
   { key: "consecutivo", label: "Consecutivo", letter: "B", type: "number", center: true, sticky: "left-0", width: "w-16", editable: false },
@@ -131,6 +132,8 @@ export const PLANILLA_COLUMNS = [
   { key: "comisiones", label: "Comisiones (R)", letter: "R", type: "number", isCurrency: true, editable: true },
   { key: "transporte", label: "Aux. Transp (S)", letter: "S", type: "number", isCurrency: true, editable: true },
   { key: "rodamiento", label: "Rodamiento (T)", letter: "T", type: "number", isCurrency: true, editable: true },
+  { key: "intereses_cesantias", label: "Intereses Cesantías", letter: "IC", type: "number", isCurrency: true, editable: true },
+  { key: "devoluciones", label: "Devoluciones", letter: "DEV", type: "number", isCurrency: true, editable: true },
   { key: "dias_incapacidad", label: "Días Incap (U)", letter: "U", type: "number", center: true, editable: true },
   { key: "incapacidad", label: "Valor Incap (V)", letter: "V", type: "number", isCurrency: true, editable: true },
   
@@ -223,7 +226,7 @@ export const DEFAULT_FORMULAS = {
   val_sancion: '0',
   ibc_seguridad_social: 'sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + comisiones + incapacidad',
   ibc_fsp: 'sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + incapacidad',
-  total_devengados: 'sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + comisiones + transporte + rodamiento + incapacidad + val_vacaciones + val_lic_rem + val_incap_at + val_calamidad',
+  total_devengados: 'sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + comisiones + transporte + rodamiento + (intereses_cesantias || 0) + (devoluciones || 0) + incapacidad + val_vacaciones + val_lic_rem + val_incap_at + val_calamidad',
   salud: 'ibc_seguridad_social * 0.04',
   pension: 'ibc_seguridad_social * 0.04',
   solidaridad: 'ibc_fsp >= (smlv_base * 4) ? ibc_fsp * 0.01 : 0',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import ColillaImprimible from './ColillaImprimible';
 
 export default function TabColillas({
@@ -11,6 +11,14 @@ export default function TabColillas({
   const [selectedWorkerName, setSelectedWorkerName] = useState("");
   const [periodoForzado, setPeriodoForzado] = useState("");
 
+  const sortedEmployees = useMemo(() => {
+    return [...(nominaRows || [])].sort((a, b) => {
+      const nameA = a.nombre_completo || a.nombre || "";
+      const nameB = b.nombre_completo || b.nombre || "";
+      return nameA.localeCompare(nameB);
+    });
+  }, [nominaRows]);
+
   const obtenerPeriodoAutomatico = (fecha) => {
       if (!fecha) return "Periodo no definido";
       const dia = new Date(fecha).getDate();
@@ -22,12 +30,16 @@ export default function TabColillas({
 
   const textoPeriodo = periodoForzado || obtenerPeriodoAutomatico(startDate);
   useEffect(() => {
-    if (nominaRows.length > 0 && !nominaRows.find(r => r.nombre === selectedWorkerName)) {
-      setSelectedWorkerName(nominaRows[0].nombre);
+    if (sortedEmployees.length > 0 && !sortedEmployees.find(r => (r.nombre_completo || r.nombre) === selectedWorkerName)) {
+      setSelectedWorkerName(sortedEmployees[0].nombre_completo || sortedEmployees[0].nombre);
     }
-  }, [nominaRows, selectedWorkerName]);
+  }, [sortedEmployees, selectedWorkerName]);
 
-  const selectedWorkerData = payrollData.find(d => d.masterRow && d.masterRow.nombre === selectedWorkerName) || payrollData.find(d => d.nombre === selectedWorkerName) || null;
+  const selectedWorkerData = payrollData.find(d => 
+    (d.masterRow && (d.masterRow.nombre_completo === selectedWorkerName || d.masterRow.nombre === selectedWorkerName)) || 
+    d.nombre_completo === selectedWorkerName || 
+    d.nombre === selectedWorkerName
+  ) || null;
 
   const handleDownloadColillasPNG = async () => {
     const element = document.getElementById('colilla-imprimible');
@@ -107,11 +119,14 @@ export default function TabColillas({
               onChange={(e) => setSelectedWorkerName(e.target.value)}
               className="bg-slate-50 border border-slate-200 text-xs font-black text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
             >
-              {nominaRows.map(member => (
-                <option key={member.nombre} value={member.nombre}>
-                  {member.nombre}
-                </option>
-              ))}
+              {sortedEmployees.map(member => {
+                const nombre = member.nombre_completo || member.nombre;
+                return (
+                  <option key={member.cedula || nombre} value={nombre}>
+                    {nombre}
+                  </option>
+                );
+              })}
             </select>
           </div>
           <div className="flex flex-col justify-end h-full">
