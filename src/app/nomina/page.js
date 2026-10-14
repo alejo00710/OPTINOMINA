@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Search, Filter, Coins, Info, SlidersHorizontal, Download, RotateCcw, AlertTriangle, Briefcase, FileSpreadsheet, CheckCircle2, ChevronDown, ChevronRight, Calculator, Plus, Trash2, Calendar as CalendarIcon, UploadCloud, Users, ChevronLeft, CalendarRange } from "lucide-react";
 import TabDirectorio from "@/components/Nomina/TabDirectorio";
@@ -29,16 +30,7 @@ const safeParseNumber = (val) => {
 
 // Helper to look up overridden state values and ensure they are parsed as numbers for math formulas
 const resolveValue = (overrides, key, formulaFn) => {
-  // REGLA ESTRICTA (IGNORAR BD): Ciertos campos SIEMPRE se calculan dinámicamente y rechazan la BD.
-  const isBlocked = key.includes('_dias_incapacidad') || 
-                    key.includes('_dias_calamidad') || 
-                    key.includes('_dias_lic_rem') || 
-                    key.includes('_dias_vacaciones') ||
-                    key.includes('_dias_lic_norem') ||
-                    key.includes('_dias_incap_at') ||
-                    key.includes('_dias_sancion');
-
-  if (!isBlocked && overrides[key] !== undefined && overrides[key] !== "") {
+  if (overrides[key] !== undefined && overrides[key] !== "") {
     const val = typeof overrides[key] === "string" ? parseLocalNumber(overrides[key]) : overrides[key];
     if (typeof val === "number" && isNaN(val)) {
       return 0;
@@ -52,6 +44,47 @@ const resolveValue = (overrides, key, formulaFn) => {
   return computed;
 };
 
+const NOVEDADES_MANUALES_MAP = {
+  dias_incapacidad: {
+    fechasKey: 'fechas_incap',
+    altFechasKey: 'fechas_incapacidad',
+    titulo: 'INCAPACIDAD GENERAL',
+    diasKey: 'dias_incapacidad',
+    altDiasKey: 'dias_incap'
+  },
+  dias_lic_rem: {
+    fechasKey: 'fechas_lic_rem',
+    titulo: 'LICENCIA REMUNERADA',
+    diasKey: 'dias_lic_rem'
+  },
+  dias_lic_norem: {
+    fechasKey: 'fechas_lic_norem',
+    titulo: 'LICENCIA NO REMUNERADA',
+    diasKey: 'dias_lic_norem'
+  },
+  dias_incap_at: {
+    fechasKey: 'fechas_incap_at',
+    titulo: 'INCAPACIDAD AT',
+    diasKey: 'dias_incap_at'
+  },
+  dias_calamidad: {
+    fechasKey: 'fechas_calamidad',
+    titulo: 'CALAMIDAD',
+    diasKey: 'dias_calamidad'
+  },
+  dias_sancion: {
+    fechasKey: 'fechas_sancion',
+    titulo: 'SANCIÓN',
+    diasKey: 'dias_sancion'
+  }
+};
+
+const MESES_NOMBRES = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+];
+const DIAS_SEMANA_CORTO = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
 export default function NominaPage() {
   const [activeTab, setActiveTab] = useState("dashboard");
 
@@ -61,6 +94,138 @@ export default function NominaPage() {
   const [detailsWorkerName, setDetailsWorkerName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterPosition, setFilterPosition] = useState("all");
+
+  const [noveltyCalendarModal, setNoveltyCalendarModal] = useState({
+    isOpen: false,
+    fieldKey: null,
+    cedula: null,
+    workerName: null,
+    titulo: null,
+    fechasKey: null,
+    altFechasKey: null
+  });
+  const [noveltyCalendarMonth, setNoveltyCalendarMonth] = useState(() => new Date());
+
+  const handleOpenNoveltyCalendar = (fieldKey, workerData) => {
+    const config = NOVEDADES_MANUALES_MAP[fieldKey];
+    if (!config || !workerData?.masterRow) return;
+    const cedula = workerData.masterRow.cedula;
+    const rawFechas = overrides[`${cedula}_${config.fechasKey}`] ?? overrides[`${cedula}_${config.altFechasKey || ''}`];
+    let dates = [];
+    if (Array.isArray(rawFechas)) dates = rawFechas;
+    else if (typeof rawFechas === 'string' && rawFechas.trim()) {
+      try {
+        const p = JSON.parse(rawFechas);
+        if (Array.isArray(p)) dates = p;
+      } catch(e) {
+        if (rawFechas.includes(',')) dates = rawFechas.split(',').map(s => s.trim());
+      }
+    }
+    if (dates.length > 0 && typeof dates[0] === 'string') {
+      const [y, m] = dates[0].split('-').map(Number);
+      if (y && m) setNoveltyCalendarMonth(new Date(y, m - 1, 1));
+    } else if (startDate) {
+      const [y, m] = startDate.split('-').map(Number);
+      if (y && m) setNoveltyCalendarMonth(new Date(y, m - 1, 1));
+    }
+    setNoveltyCalendarModal({
+      isOpen: true,
+      fieldKey,
+      cedula,
+      workerName: workerData.masterRow.nombre,
+      titulo: config.titulo,
+      fechasKey: config.fechasKey,
+      altFechasKey: config.altFechasKey
+    });
+  };
+
+  const handleToggleNoveltyDate = (dateStr) => {
+    if (!noveltyCalendarModal.cedula || !noveltyCalendarModal.fechasKey) return;
+    const { cedula, fechasKey, altFechasKey } = noveltyCalendarModal;
+    const raw = overrides[`${cedula}_${fechasKey}`] ?? overrides[`${cedula}_${altFechasKey || ''}`];
+    let dates = [];
+    if (Array.isArray(raw)) dates = [...raw];
+    else if (typeof raw === 'string' && raw.trim()) {
+      try {
+        const p = JSON.parse(raw);
+        if (Array.isArray(p)) dates = [...p];
+      } catch(e) {
+        if (raw.includes(',')) dates = raw.split(',').map(s => s.trim());
+        else dates = [raw.trim()];
+      }
+    }
+    let nextDates;
+    if (dates.includes(dateStr)) {
+      nextDates = dates.filter(d => d !== dateStr);
+    } else {
+      nextDates = [...dates, dateStr];
+    }
+    nextDates.sort();
+
+    setOverrides(prev => {
+      const updated = {
+        ...prev,
+        [`${cedula}_${fechasKey}`]: nextDates
+      };
+      if (altFechasKey) {
+        updated[`${cedula}_${altFechasKey}`] = nextDates;
+      }
+      return updated;
+    });
+    overridesRef.current = {
+      ...overridesRef.current,
+      [`${cedula}_${fechasKey}`]: nextDates
+    };
+    if (altFechasKey) {
+      overridesRef.current[`${cedula}_${altFechasKey}`] = nextDates;
+    }
+  };
+
+  const handleClearNoveltyDates = () => {
+    if (!noveltyCalendarModal.cedula || !noveltyCalendarModal.fechasKey) return;
+    const { cedula, fechasKey, altFechasKey } = noveltyCalendarModal;
+    setOverrides(prev => {
+      const updated = {
+        ...prev,
+        [`${cedula}_${fechasKey}`]: []
+      };
+      if (altFechasKey) {
+        updated[`${cedula}_${altFechasKey}`] = [];
+      }
+      return updated;
+    });
+    overridesRef.current = {
+      ...overridesRef.current,
+      [`${cedula}_${fechasKey}`]: []
+    };
+    if (altFechasKey) {
+      overridesRef.current[`${cedula}_${altFechasKey}`] = [];
+    }
+  };
+
+  const handleSelectSuggestedNoveltyDates = (targetCount, isAdministrativo) => {
+    if (!startDate || !endDate || !noveltyCalendarModal.cedula || !noveltyCalendarModal.fechasKey) return;
+    const { cedula, fechasKey, altFechasKey } = noveltyCalendarModal;
+    const dates = [];
+    let cur = new Date(startDate + 'T00:00:00');
+    const end = new Date(endDate + 'T00:00:00');
+    while (cur <= end && dates.length < targetCount) {
+      const dayOfWeek = cur.getDay(); // 0 Dom, 6 Sáb
+      const isWorkingDay = isAdministrativo ? (dayOfWeek >= 1 && dayOfWeek <= 5) : (dayOfWeek >= 1 && dayOfWeek <= 6);
+      if (isWorkingDay) {
+        dates.push(cur.toISOString().split('T')[0]);
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+    dates.sort();
+    setOverrides(prev => {
+      const updated = { ...prev, [`${cedula}_${fechasKey}`]: dates };
+      if (altFechasKey) updated[`${cedula}_${altFechasKey}`] = dates;
+      return updated;
+    });
+    overridesRef.current = { ...overridesRef.current, [`${cedula}_${fechasKey}`]: dates };
+    if (altFechasKey) overridesRef.current[`${cedula}_${altFechasKey}`] = dates;
+  };
 
   const [nominaRows, setNominaRows] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState({});
@@ -669,9 +834,6 @@ processedLogs.forEach(day => {
 });
 // --- FIN CÁLCULO DE NOVEDADES ---
 
-      // Sobreescribir días pagados si el usuario lo editó manualmente (overrides) o usar los calculados
-      const diasPagados = resolveValue(overrides, `${cedula}_dias_pagados`, () => Math.min(15, diasPagadosCalculados));
-// --- FIN CORRECCIÓN DÍAS PAGADOS ---
       const horasDebe = resolveValue(overrides, `${cedula}_horas_que_debe`, () => Number(emp.horas_debe || 0));
       
       const salarioBase = resolveValue(overrides, `${cedula}_salario_base`, () => Number(emp.salario_base || emp.salario || 0));
@@ -722,11 +884,6 @@ processedLogs.forEach(day => {
       const interesesCesantias = resolveValue(overrides, `${cedula}_intereses_cesantias`, () => parseLocalNumber(emp.intereses_cesantias));
       const devoluciones = resolveValue(overrides, `${cedula}_devoluciones`, () => parseLocalNumber(emp.devoluciones));
       const motivoDevoluciones = overrides[`${cedula}_motivo_devoluciones`] !== undefined ? overrides[`${cedula}_motivo_devoluciones`] : (emp.motivo_devoluciones || '');
-      const diasIncapacidad = resolveValue(overrides, `${cedula}_dias_incapacidad`, () => {
-          const keyIncap = Object.keys(novedadesResumen).find(k => k === 'INCAPACIDAD GENERAL');
-          const valCalculado = keyIncap ? novedadesResumen[keyIncap]?.length : 0;
-          return valCalculado > 0 ? valCalculado : parseLocalNumber(Number(emp.dias_incapacidad || 0));
-      });
       
       const prestamoTotal = parseLocalNumber(Number(emp.prestamo_total || 0));
       const basePrestamo = Math.min(parseLocalNumber(Number(emp.cuota_prestamo || 0)), prestamoTotal);
@@ -772,37 +929,92 @@ processedLogs.forEach(day => {
           return key ? novedadesResumen[key]?.length : 0;
       };
 
-      const dias_vacaciones = resolveValue(overrides, `${cedula}_dias_vacaciones`, () => {
-          const val = getNoveltyCount(k => k === 'VACACIONES');
-          return val > 0 ? val : parseLocalNumber(Number(emp.dias_vacaciones || 0));
-      });
+      // Paso A (Lectura Reactiva): Lee los días de ausencias obligando al sistema a mirar primero el override manual
+      const getAbsenceDays = (fieldKey, noveltyCondition) => {
+          const overrideVal = overrides[`${cedula}_${fieldKey}`];
+          if (overrideVal !== undefined && overrideVal !== '' && overrideVal !== null) {
+              const num = Number(overrideVal);
+              return isNaN(num) ? 0 : num;
+          }
+          const noveltyCount = getNoveltyCount(noveltyCondition);
+          if (noveltyCount > 0) return noveltyCount;
+          return parseLocalNumber(Number(emp[fieldKey] || 0));
+      };
 
-      const dias_lic_rem = resolveValue(overrides, `${cedula}_dias_lic_rem`, () => {
-          const val = getNoveltyCount(k => k === 'LICENCIA REMUNERADA');
-          return val > 0 ? val : parseLocalNumber(Number(emp.dias_lic_rem || 0));
-      });
+      const dias_vacaciones = getAbsenceDays('dias_vacaciones', k => k === 'VACACIONES');
+      const diasIncapacidad = getAbsenceDays('dias_incapacidad', k => k === 'INCAPACIDAD GENERAL');
+      const dias_lic_rem = getAbsenceDays('dias_lic_rem', k => k === 'LICENCIA REMUNERADA');
+      const dias_lic_norem = getAbsenceDays('dias_lic_norem', k => k === 'LICENCIA NO REMUNERADA');
+      const dias_incap_at = getAbsenceDays('dias_incap_at', k => k === 'INCAPACIDAD AT' || k === 'INCAPACIDAD ACCIDENTE LABORAL');
+      const dias_calamidad = getAbsenceDays('dias_calamidad', k => k === 'CALAMIDAD');
+      const dias_sancion = getAbsenceDays('dias_sancion', k => k === 'SANCION' || k === 'SANCIONADO');
 
-      const dias_lic_norem = resolveValue(overrides, `${cedula}_dias_lic_norem`, () => {
-          const val = getNoveltyCount(k => k === 'LICENCIA NO REMUNERADA');
-          return val > 0 ? val : parseLocalNumber(Number(emp.dias_lic_norem || 0));
-      });
+      // Paso B (Descuento de Días): Suma todas estas ausencias (totalAusencias) y calcula los días pagados reales
+      const totalAusencias = (dias_vacaciones || 0) + 
+                             (dias_lic_rem || 0) + 
+                             (dias_lic_norem || 0) + 
+                             (diasIncapacidad || 0) + 
+                             (dias_incap_at || 0) + 
+                             (dias_calamidad || 0) + 
+                             (dias_sancion || 0);
 
-      const dias_incap_at = resolveValue(overrides, `${cedula}_dias_incap_at`, () => {
-          const val = getNoveltyCount(k => k === 'INCAPACIDAD AT' || k === 'INCAPACIDAD ACCIDENTE LABORAL');
-          return val > 0 ? val : parseLocalNumber(Number(emp.dias_incap_at || 0));
-      });
+      const diasPagadosCalc = Math.max(0, 15 - totalAusencias);
+      const diasPagados = (overrides[`${cedula}_dias_pagados`] !== undefined && overrides[`${cedula}_dias_pagados`] !== "" && overrides[`${cedula}_dias_pagados`] !== null)
+          ? Number(overrides[`${cedula}_dias_pagados`])
+          : diasPagadosCalc;
 
-      const dias_calamidad = resolveValue(overrides, `${cedula}_dias_calamidad`, () => {
-          const val = getNoveltyCount(k => k === 'CALAMIDAD');
-          return val > 0 ? val : parseLocalNumber(Number(emp.dias_calamidad || 0));
-      });
+      // Paso C (Recálculo Proporcional Automático según Ley Laboral Colombiana):
+      // 1. Cálculo del Día Estándar:
+      const valorDiaBase = salarioBase / 30;
 
-      const dias_sancion = resolveValue(overrides, `${cedula}_dias_sancion`, () => {
-          const val = getNoveltyCount(k => k === 'SANCION' || k === 'SANCIONADO');
-          return val > 0 ? val : parseLocalNumber(Number(emp.dias_sancion || 0));
-      });
+      // Sueldo y Auxilio de Transporte basados en diasPagados
+      const sueldoCalc = Math.round(valorDiaBase * diasPagados);
+      const ganaAuxilio = salarioBase <= (globalSmmlv * 2);
+      const transporteCalc = ganaAuxilio ? Math.round((globalAuxTransporte / 30) * diasPagados) : 0;
 
-      const dias_ausentes_total = (dias_vacaciones || 0) + (dias_lic_rem || 0) + (dias_lic_norem || 0) + (typeof diasIncapacidad !== 'undefined' ? diasIncapacidad : 0) + (dias_incap_at || 0) + (dias_calamidad || 0) + (dias_sancion || 0);
+      const sueldo = resolveValue(overrides, `${cedula}_sueldo`, () => 
+          resolveValue(overrides, `${cedula}_sueldo_calculado`, () => sueldoCalc)
+      );
+      const transporte = resolveValue(overrides, `${cedula}_transporte`, () => transporteCalc);
+
+      // 2. Ajuste de Incapacidad General (66.66% con piso legal):
+      const porcentajeIncap = (salarioBase <= globalSmmlv) ? 1 : 0.666667;
+      const valorDiaIncap = Math.max(globalSmmlv / 30, valorDiaBase * porcentajeIncap);
+      const valorIncapCalc = Math.round(valorDiaIncap * diasIncapacidad);
+      const valorIncapacidad = resolveValue(overrides, `${cedula}_val_incapacidad`, () => 
+          resolveValue(overrides, `${cedula}_incapacidad`, () => valorIncapCalc)
+      );
+
+      // 3. Novedades al 100%:
+      const valorVacCalc = Math.round(valorDiaBase * dias_vacaciones);
+      const valorVacaciones = overrides[`${cedula}_vacaciones_pagadas`] === true
+          ? 0
+          : resolveValue(overrides, `${cedula}_val_vacaciones`, () => 
+              resolveValue(overrides, `${cedula}_valor_vacaciones`, () => valorVacCalc)
+            );
+
+      const valorLicRemCalc = Math.round(valorDiaBase * dias_lic_rem);
+      const valorLicRem = resolveValue(overrides, `${cedula}_val_lic_rem`, () => 
+          resolveValue(overrides, `${cedula}_lic_rem`, () => valorLicRemCalc)
+      );
+
+      const valorIncapATCalc = Math.round(valorDiaBase * dias_incap_at);
+      const valorIncapAt = resolveValue(overrides, `${cedula}_val_incap_at`, () => 
+          resolveValue(overrides, `${cedula}_incap_at`, () => valorIncapATCalc)
+      );
+
+      const valorCalamidadCalc = Math.round(valorDiaBase * dias_calamidad);
+      const valorCalamidad = resolveValue(overrides, `${cedula}_val_calamidad`, () => 
+          resolveValue(overrides, `${cedula}_calamidad`, () => valorCalamidadCalc)
+      );
+
+      // 4. Novedades al 0% (Licencias No Remuneradas y Sanciones):
+      const valorLicNoRem = resolveValue(overrides, `${cedula}_val_lic_norem`, () => 
+          resolveValue(overrides, `${cedula}_lic_norem`, () => 0)
+      );
+      const valorSancion = resolveValue(overrides, `${cedula}_val_sancion`, () => 
+          resolveValue(overrides, `${cedula}_sancion`, () => 0)
+      );
 
       // MOTOR MATEMÁTICO EN CASCADA
       let variables = {
@@ -810,20 +1022,31 @@ processedLogs.forEach(day => {
         smlv_base: globalSmmlv,
         aux_transporte_base: globalAuxTransporte,
         valor_diario_base: MINIMO_DIARIO_INCAPACIDAD,
-        dias_pagados: overrides[`${cedula}_dias_pagados`] !== undefined && overrides[`${cedula}_dias_pagados`] !== "" ? Number(overrides[`${cedula}_dias_pagados`]) : (emp.dias_pagados || Math.min(15, diasPagadosCalculados)),
-        dias_ausentes_total: dias_ausentes_total,
+        dias_pagados: diasPagados,
+        dias_ausentes_total: totalAusencias,
         dias_vacaciones: dias_vacaciones,
         dias_lic_rem: dias_lic_rem,
         dias_lic_norem: dias_lic_norem,
         dias_incap_at: dias_incap_at,
         dias_calamidad: dias_calamidad,
         dias_sancion: dias_sancion,
+        dias_incapacidad: diasIncapacidad,
+        sueldo: sueldo,
+        transporte: transporte,
+        val_vacaciones: valorVacaciones,
+        valor_vacaciones: valorVacaciones,
+        incapacidad: valorIncapacidad,
+        val_incapacidad: valorIncapacidad,
+        val_lic_rem: valorLicRem,
+        val_lic_norem: valorLicNoRem,
+        val_incap_at: valorIncapAt,
+        val_calamidad: valorCalamidad,
+        val_sancion: valorSancion,
         horas_diurnas: hrsDiurnasParaCalculo,
         horas_nocturnas: hrsNocturnasParaCalculo,
         extras_diurnas: extDiurnasParaCalculo,
         extras_nocturnas: extNocturnasParaCalculo,
         extras_festivas: extFestivasParaCalculo, // Agrupadas en una bolsa
-        dias_incapacidad: diasIncapacidad,
         comisiones: comisiones,
         rodamiento: rodamiento,
         intereses_cesantias: interesesCesantias,
@@ -860,7 +1083,14 @@ processedLogs.forEach(day => {
           'total_devengados': ['total_devengado', 'total_devengos'],
           'total_deducciones': ['total_deducido', 'total_descuentos'],
           'neto_pagar': ['neto_a_pagar', 'neto'],
-          'total_pagar': ['total_pagar', 'total_a_pagar']
+          'total_pagar': ['total_pagar', 'total_a_pagar'],
+          'val_vacaciones': ['valor_vacaciones', 'vacaciones'],
+          'incapacidad': ['val_incapacidad', 'valor_incapacidad'],
+          'val_lic_rem': ['valor_lic_rem', 'lic_rem'],
+          'val_lic_norem': ['valor_lic_norem', 'lic_norem'],
+          'val_incap_at': ['valor_incap_at', 'incap_at'],
+          'val_calamidad': ['valor_calamidad', 'calamidad'],
+          'val_sancion': ['valor_sancion', 'sancion']
         };
 
         // 1. REVISAR OVERRIDES PRIMERO
@@ -931,7 +1161,7 @@ processedLogs.forEach(day => {
           });
       });
 
-      // Asegurar matemáticamente que total_devengados sume todos los devengos incluyendo los nuevos campos:
+      // Asegurar matemáticamente que total_devengados sume todos los devengos (las vacaciones se liquidan por fuera y no suman al pago quincenal):
       if (overrides[`${cedula}_total_devengados`] === undefined && overrides[`${cedula}_total_devengado`] === undefined) {
          variables['total_devengados'] = safeParseNumber(variables['sueldo']) 
             + safeParseNumber(variables['recargo_nocturno']) 
@@ -942,7 +1172,6 @@ processedLogs.forEach(day => {
             + safeParseNumber(variables['transporte']) 
             + safeParseNumber(variables['rodamiento']) 
             + safeParseNumber(variables['incapacidad']) 
-            + safeParseNumber(variables['val_vacaciones']) 
             + safeParseNumber(variables['val_lic_rem']) 
             + safeParseNumber(variables['val_incap_at']) 
             + safeParseNumber(variables['val_calamidad'])
@@ -1065,7 +1294,7 @@ processedLogs.forEach(day => {
           finalRow.extras_diurnas = 0;
           finalRow.extras_nocturnas = 0;
           finalRow.extras_festivas = 0;
-          finalRow.dias_pagados = emp.dias_pagados !== '' && emp.dias_pagados !== undefined ? Number(emp.dias_pagados) : 15;
+          finalRow.dias_pagados = diasPagados;
       }
 
       return finalRow;
@@ -1105,17 +1334,9 @@ processedLogs.forEach(day => {
         });
       }
 
-      // 2. RUTINA DE SANITIZACIÓN ESTRICTA (PURGA ESTRUCTURAL)
-      // Eliminamos de la base de datos todas las llaves dinámicas que nunca deben tratarse como overrides manuales.
+      // 2. RUTINA DE SANITIZACIÓN: Purgar solo marcas de reloj intermedias si existieran
       Object.keys(frozenOverrides).forEach(key => {
           if (
-              key.includes('_dias_incapacidad') ||
-              key.includes('_dias_calamidad') ||
-              key.includes('_dias_lic_rem') ||
-              key.includes('_dias_vacaciones') ||
-              key.includes('_dias_lic_norem') ||
-              key.includes('_dias_incap_at') ||
-              key.includes('_dias_sancion') ||
               key.includes('_hr_ent_pago') ||
               key.includes('_hr_sal_pago')
           ) {
@@ -1129,12 +1350,11 @@ processedLogs.forEach(day => {
           frozenOverrides['_MASTER_SCHEDULE_JSON'] = weeklySchedules;
       }
 
-      // Sincronizar el estado visual de overrides inmediatamente con el objeto limpio
-      // Removemos el MASTER_SCHEDULE del estado local de overrides para no contaminar la UI
+      // Sincronizar el estado visual de overrides usando el patrón funcional estricto spread (...prev)
       const stateOverrides = { ...frozenOverrides };
       delete stateOverrides['_MASTER_SCHEDULE_JSON'];
-      setOverrides(stateOverrides);
-      overridesRef.current = stateOverrides;
+      setOverrides(prev => ({ ...prev, ...stateOverrides }));
+      overridesRef.current = { ...overridesRef.current, ...stateOverrides };
 
       const payload = {
         id: 'quincena_activa',
@@ -1272,9 +1492,41 @@ processedLogs.forEach(day => {
       const cedula = parts[0];
       const campoEditado = parts.slice(1).join('_');
 
-      const devengadosBase = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento'];
+      const devengadosBase = [
+        'sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 
+        'transporte', 'incapacidad', 'val_incapacidad', 'comisiones', 'rodamiento', 'intereses_cesantias', 'devoluciones',
+        'dias_vacaciones', 'val_vacaciones', 'valor_vacaciones', 
+        'dias_incapacidad', 'dias_lic_rem', 'val_lic_rem', 'dias_lic_norem', 'val_lic_norem', 
+        'dias_incap_at', 'val_incap_at', 'dias_calamidad', 'val_calamidad', 'dias_sancion', 'val_sancion',
+        'fecha_inicio_vacaciones', 'fecha_fin_vacaciones'
+      ];
       const deduccionesBase = ['salud', 'pension', 'solidaridad', 'prestamos', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'comfama', 'poliza_sura', 'optica', 'celular', 'retencion', 'otros_descuentos'];
       const totalesIntermedios = ['total_devengados', 'total_devengado', 'total_deducciones', 'total_deducido'];
+
+      // Cascada para cambios en días de ausencia: permitir que sueldo, transporte y la novedad se recalculen automáticamente
+      if (campoEditado.startsWith('dias_') && campoEditado !== 'dias_pagados') {
+          delete newOverrides[`${cedula}_dias_pagados`];
+          delete newOverrides[`${cedula}_sueldo`];
+          delete newOverrides[`${cedula}_sueldo_calculado`];
+          delete newOverrides[`${cedula}_transporte`];
+          if (campoEditado === 'dias_vacaciones') {
+              delete newOverrides[`${cedula}_val_vacaciones`];
+              delete newOverrides[`${cedula}_valor_vacaciones`];
+          }
+          if (campoEditado === 'dias_incapacidad') {
+              delete newOverrides[`${cedula}_incapacidad`];
+              delete newOverrides[`${cedula}_val_incapacidad`];
+          }
+          if (campoEditado === 'dias_lic_rem') {
+              delete newOverrides[`${cedula}_val_lic_rem`];
+          }
+          if (campoEditado === 'dias_incap_at') {
+              delete newOverrides[`${cedula}_val_incap_at`];
+          }
+          if (campoEditado === 'dias_calamidad') {
+              delete newOverrides[`${cedula}_val_calamidad`];
+          }
+      }
 
       if (devengadosBase.includes(campoEditado) || campoEditado === 'dias_pagados') {
           delete newOverrides[`${cedula}_total_devengados`];
@@ -1766,6 +2018,8 @@ const handleSaveToCloud = async () => {
              globalAuxTransporte={globalAuxTransporte}
              setGlobalAuxTransporte={setGlobalAuxTransporte}
              handleSaveDraft={handleSaveDraft}
+             startDate={startDate}
+             endDate={endDate}
           />
 
           
@@ -1918,7 +2172,118 @@ const handleSaveToCloud = async () => {
         {/* SECCIÓN RESUMEN DE NOVEDADES */}
         {(() => {
             const workerData = filteredPayrollData.find(d => d.masterRow.nombre === detailsWorkerName) || filteredPayrollData[0];
-            if (!workerData || !workerData.novedadesResumen || Object.keys(workerData.novedadesResumen).length === 0) return null;
+            if (!workerData) return null;
+            const cedula = workerData.masterRow?.cedula;
+            const isAdministrativo = workerData.masterRow?.categoria === 'Administrativo' || workerData.masterRow?.area === 'Administrativo' || workerData.categoria === 'Administrativo' || workerData.area === 'Administrativo';
+
+            const cards = [];
+
+            // 1. Novedades del Biométrico / Turnos
+            if (workerData.novedadesResumen) {
+                Object.entries(workerData.novedadesResumen).forEach(([tipo, fechas]) => {
+                    // VALIDACIÓN 1: Ocultar INCOMPLETO si es administrativo
+                    if (isAdministrativo && tipo.toUpperCase().includes('INCOMPLETO')) {
+                        return;
+                    }
+                    cards.push({
+                        id: tipo,
+                        titulo: tipo,
+                        dias: fechas.length,
+                        fechas: fechas,
+                        isManual: false
+                    });
+                });
+            }
+
+            // 2. Novedades Manuales vía overrides de fechas
+            Object.entries(NOVEDADES_MANUALES_MAP).forEach(([fieldKey, conf]) => {
+                const overrideDias = overrides[`${cedula}_${conf.diasKey}`] ?? overrides[`${cedula}_${conf.altDiasKey || ''}`];
+                const diasNum = overrideDias !== undefined && overrideDias !== "" 
+                    ? Number(overrideDias) 
+                    : Number(workerData[fieldKey] || 0);
+
+                const rawFechas = overrides[`${cedula}_${conf.fechasKey}`] ?? overrides[`${cedula}_${conf.altFechasKey || ''}`];
+                let fechasList = [];
+                if (Array.isArray(rawFechas)) {
+                    fechasList = rawFechas;
+                } else if (typeof rawFechas === 'string' && rawFechas.trim()) {
+                    try {
+                        const p = JSON.parse(rawFechas);
+                        if (Array.isArray(p)) fechasList = p;
+                    } catch(e) {
+                        if (rawFechas.includes(',')) fechasList = rawFechas.split(',').map(s => s.trim());
+                        else fechasList = [rawFechas.trim()];
+                    }
+                }
+
+                if (diasNum > 0) {
+                    const fechasCortas = fechasList.length > 0
+                        ? fechasList.map(f => {
+                            const parts = String(f).split('-');
+                            return parts.length >= 3 ? `${parts[1]}-${parts[2]}` : f;
+                        })
+                        : ['Sin asignar'];
+
+                    const existingIdx = cards.findIndex(c => c.titulo.toUpperCase().trim() === conf.titulo.toUpperCase().trim());
+                    if (existingIdx >= 0) {
+                        cards[existingIdx] = {
+                            id: conf.titulo,
+                            titulo: conf.titulo,
+                            dias: diasNum,
+                            fechas: fechasCortas,
+                            isManual: true
+                        };
+                    } else {
+                        cards.push({
+                            id: conf.titulo,
+                            titulo: conf.titulo,
+                            dias: diasNum,
+                            fechas: fechasCortas,
+                            isManual: true
+                        });
+                    }
+                }
+            });
+
+            // 3. Vacaciones manuales (si tiene fechas_vacaciones y dias_vacaciones > 0)
+            const diasVac = Number(overrides[`${cedula}_dias_vacaciones`] ?? workerData.dias_vacaciones ?? 0);
+            const rawFechasVac = overrides[`${cedula}_fechas_vacaciones`];
+            let fechasVacList = [];
+            if (Array.isArray(rawFechasVac)) fechasVacList = rawFechasVac;
+            else if (typeof rawFechasVac === 'string' && rawFechasVac.trim()) {
+                try {
+                    const p = JSON.parse(rawFechasVac);
+                    if (Array.isArray(p)) fechasVacList = p;
+                } catch(e) {}
+            }
+            if (diasVac > 0) {
+                const fechasCortas = fechasVacList.length > 0
+                    ? fechasVacList.map(f => {
+                        const parts = String(f).split('-');
+                        return parts.length >= 3 ? `${parts[1]}-${parts[2]}` : f;
+                    })
+                    : ['Sin asignar'];
+                const existingIdx = cards.findIndex(c => c.titulo.toUpperCase().trim() === 'VACACIONES');
+                if (existingIdx >= 0) {
+                    cards[existingIdx] = {
+                        id: 'VACACIONES',
+                        titulo: 'VACACIONES',
+                        dias: diasVac,
+                        fechas: fechasCortas,
+                        isManual: true
+                    };
+                } else {
+                    cards.push({
+                        id: 'VACACIONES',
+                        titulo: 'VACACIONES',
+                        dias: diasVac,
+                        fechas: fechasCortas,
+                        isManual: true
+                    });
+                }
+            }
+
+            if (cards.length === 0) return null;
 
             return (
                 <div className="bg-slate-900 rounded-2xl p-6 mb-6 shadow-xl border border-slate-800">
@@ -1926,14 +2291,21 @@ const handleSaveToCloud = async () => {
                         <span className="text-amber-400">📋</span> Tipos de Novedad (Descuentan de Ordinarios)
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {Object.entries(workerData.novedadesResumen).map(([tipo, fechas]) => (
-                            <div key={tipo} className="bg-slate-800 rounded-xl p-4 border border-amber-700/30 shadow-inner">
-                                <span className="block text-[10px] font-bold text-amber-400 uppercase tracking-widest mb-1 truncate">{tipo}</span>
+                        {cards.map((c) => (
+                            <div key={c.id} className="bg-slate-800 rounded-xl p-4 border border-amber-700/30 shadow-inner">
+                                <div className="flex items-center justify-between mb-1">
+                                    <span className="block text-[10px] font-bold text-amber-400 uppercase tracking-widest truncate">{c.titulo}</span>
+                                    {c.isManual && (
+                                        <span className="text-[9px] bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 rounded font-bold">
+                                            Manual
+                                        </span>
+                                    )}
+                                </div>
                                 <div className="text-2xl font-black tracking-tight text-slate-200 mb-2">
-                                    {fechas.length} <span className="text-sm font-medium text-slate-500">días</span>
+                                    {c.dias} <span className="text-sm font-medium text-slate-500">{c.dias === 1 ? 'día' : 'días'}</span>
                                 </div>
                                 <div className="text-xs text-slate-400 leading-tight">
-                                    Fechas: {fechas.join(', ')}
+                                    Fechas: {c.fechas.join(', ')}
                                 </div>
                             </div>
                         ))}
@@ -2042,6 +2414,43 @@ const handleSaveToCloud = async () => {
                         isDecimal={col.isDecimal}
                         extraClasses={cellWarningClass}
                      />
+                     {(() => {
+                       const noveltyConfig = NOVEDADES_MANUALES_MAP[col.key];
+                       if (!noveltyConfig || Number(val) <= 0) return null;
+                       const rawF = overrides[`${workerData.masterRow.cedula}_${noveltyConfig.fechasKey}`] ?? overrides[`${workerData.masterRow.cedula}_${noveltyConfig.altFechasKey || ''}`];
+                       let assignedDatesCount = 0;
+                       if (Array.isArray(rawF)) assignedDatesCount = rawF.length;
+                       else if (typeof rawF === 'string' && rawF.trim()) {
+                         try {
+                           const p = JSON.parse(rawF);
+                           if (Array.isArray(p)) assignedDatesCount = p.length;
+                         } catch(e) {
+                           if (rawF.includes(',')) assignedDatesCount = rawF.split(',').length;
+                           else assignedDatesCount = 1;
+                         }
+                       }
+                       return (
+                         <button
+                           type="button"
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             handleOpenNoveltyCalendar(col.key, workerData);
+                           }}
+                           className={`mt-2.5 w-full py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between border cursor-pointer ${
+                             assignedDatesCount > 0
+                               ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 shadow-xs'
+                               : 'bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 border-slate-200'
+                           }`}
+                           title="Asignar o editar fechas en el calendario"
+                         >
+                           <span className="inline-flex items-center gap-1.5">
+                             <span>📅</span>
+                             <span>{assignedDatesCount > 0 ? `${assignedDatesCount} ${assignedDatesCount === 1 ? 'fecha' : 'fechas'}` : 'Asignar fechas'}</span>
+                           </span>
+                           <span className="text-[10px] opacity-60">›</span>
+                         </button>
+                       );
+                     })()}
                   </div>
                 )
              };
@@ -2118,6 +2527,240 @@ const handleSaveToCloud = async () => {
     currentFormula={formulaConfig.currentFormula}
     onSave={handleSaveFormula}
   />
+
+  {/* MODAL DE CALENDARIO PARA NOVEDADES MANUALES */}
+  {typeof document !== 'undefined' && noveltyCalendarModal.isOpen && createPortal(
+    <div 
+      className="fixed inset-0 z-[9999] bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+      onClick={(e) => {
+        e.stopPropagation();
+        setNoveltyCalendarModal(prev => ({ ...prev, isOpen: false }));
+      }}
+    >
+      <div 
+        className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {(() => {
+          const { fieldKey, cedula, workerName, titulo, fechasKey, altFechasKey } = noveltyCalendarModal;
+          const currentWorker = payrollData.find(w => String(w.masterRow?.cedula) === String(cedula));
+          const isWorkerAdmin = (currentWorker?.masterRow?.categoria || currentWorker?.categoria || currentWorker?.masterRow?.area || '').toLowerCase().includes('admin');
+          const targetDays = Number(overrides[`${cedula}_${fieldKey}`] ?? currentWorker?.[fieldKey] ?? 0);
+
+          const rawDates = overrides[`${cedula}_${fechasKey}`] ?? overrides[`${cedula}_${altFechasKey || ''}`];
+          let selectedDates = [];
+          if (Array.isArray(rawDates)) selectedDates = rawDates;
+          else if (typeof rawDates === 'string' && rawDates.trim()) {
+            try {
+              const p = JSON.parse(rawDates);
+              if (Array.isArray(p)) selectedDates = p;
+            } catch (e) {
+              if (rawDates.includes(',')) selectedDates = rawDates.split(',').map(s => s.trim());
+              else selectedDates = [rawDates.trim()];
+            }
+          }
+
+          const calYear = noveltyCalendarMonth.getFullYear();
+          const calMonth = noveltyCalendarMonth.getMonth();
+          const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+          const firstDayIndex = (new Date(calYear, calMonth, 1).getDay() + 6) % 7; // 0 = Lun, 6 = Dom
+
+          const isExactMatch = selectedDates.length === targetDays && targetDays > 0;
+          const isUnderMatch = selectedDates.length < targetDays;
+
+          return (
+            <>
+              {/* Header */}
+              <div className="p-5 border-b border-slate-100 flex items-start justify-between bg-slate-50/60">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-sm">📅</span>
+                    <h3 className="text-base font-black text-slate-800 tracking-tight">
+                      {titulo || 'Asignar Fechas'}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {workerName} <span className="opacity-60">• C.C. {cedula}</span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setNoveltyCalendarModal(prev => ({ ...prev, isOpen: false }));
+                  }}
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-200/60 transition-colors"
+                  title="Cerrar"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Status counter pill */}
+              <div className="px-5 py-3 bg-slate-50/30 border-b border-slate-100 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 font-medium">
+                  <span className="text-slate-500">Días asignados:</span>
+                  <span className={`px-2.5 py-0.5 rounded-full font-bold text-xs ${
+                    isExactMatch 
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                      : isUnderMatch 
+                        ? 'bg-amber-100 text-amber-800 border border-amber-300' 
+                        : 'bg-indigo-100 text-indigo-800 border border-indigo-300'
+                  }`}>
+                    {selectedDates.length} de {targetDays} {targetDays === 1 ? 'día' : 'días'}
+                  </span>
+                </div>
+                {startDate && endDate && (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectSuggestedNoveltyDates(targetDays, isWorkerAdmin)}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer flex items-center gap-1"
+                    title="Sugerir automáticamente días hábiles de la quincena"
+                  >
+                    ⚡ Sugerir quincena
+                  </button>
+                )}
+              </div>
+
+              {/* Month Navigation */}
+              <div className="px-5 pt-4 pb-2 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setNoveltyCalendarMonth(new Date(calYear, calMonth - 1, 1))}
+                  className="p-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 transition-colors"
+                  title="Mes anterior"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <div className="text-sm font-black text-slate-800 capitalize">
+                  {MESES_NOMBRES[calMonth]} {calYear}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNoveltyCalendarMonth(new Date(calYear, calMonth + 1, 1))}
+                  className="p-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 transition-colors"
+                  title="Mes siguiente"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Calendar Grid */}
+              <div className="p-5 pt-2">
+                <div className="grid grid-cols-7 gap-1.5 mb-1.5 text-center">
+                  {DIAS_SEMANA_CORTO.map((dia, idx) => (
+                    <div
+                      key={dia}
+                      className={`text-[11px] font-bold uppercase tracking-wider py-1 ${
+                        idx === 6 ? 'text-rose-500' : idx === 5 ? 'text-amber-600' : 'text-slate-400'
+                      }`}
+                    >
+                      {dia}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7 gap-1.5">
+                  {Array.from({ length: firstDayIndex }).map((_, i) => (
+                    <div key={`blank-${i}`} className="h-9 rounded-lg opacity-0" />
+                  ))}
+
+                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
+                    const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    const isSelected = selectedDates.includes(dateStr);
+                    const isWithinQuincena = startDate && endDate && dateStr >= startDate && dateStr <= endDate;
+                    const dayOfWeek = (firstDayIndex + d - 1) % 7;
+                    const isSunday = dayOfWeek === 6;
+                    const isSaturday = dayOfWeek === 5;
+
+                    return (
+                      <button
+                        key={dateStr}
+                        type="button"
+                        onClick={() => handleToggleNoveltyDate(dateStr)}
+                        className={`h-9 rounded-xl text-xs font-bold transition-all relative flex flex-col items-center justify-center cursor-pointer ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 scale-102 hover:bg-indigo-700'
+                            : isWithinQuincena
+                              ? 'bg-indigo-50/60 hover:bg-indigo-100/80 text-slate-800 border border-indigo-200/70'
+                              : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-100'
+                        }`}
+                        title={
+                          isSelected
+                            ? `Seleccionada (${dateStr}) - clic para quitar`
+                            : `Clic para asignar (${dateStr})`
+                        }
+                      >
+                        <span className={isSelected ? 'text-white' : isSunday ? 'text-rose-500' : isSaturday ? 'text-amber-600' : ''}>
+                          {d}
+                        </span>
+                        {isWithinQuincena && !isSelected && (
+                          <span className="w-1 h-1 bg-indigo-400 rounded-full absolute bottom-1" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Selected dates summary pills */}
+                <div className="mt-4 pt-3 border-t border-slate-100">
+                  <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
+                    <span className="font-semibold text-slate-600">Fechas seleccionadas:</span>
+                    {selectedDates.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleClearNoveltyDates}
+                        className="text-rose-600 hover:text-rose-700 hover:underline cursor-pointer text-[11px] font-bold"
+                      >
+                        Limpiar todo
+                      </button>
+                    )}
+                  </div>
+                  {selectedDates.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic">No hay fechas seleccionadas para este concepto.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto pr-1">
+                      {selectedDates.map((f) => (
+                        <span
+                          key={f}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200"
+                        >
+                          {f}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleNoveltyDate(f)}
+                            className="hover:text-rose-600 font-black ml-0.5"
+                            title="Eliminar esta fecha"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setNoveltyCalendarModal(prev => ({ ...prev, isOpen: false }));
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all cursor-pointer"
+                >
+                  Listo / Guardar
+                </button>
+              </div>
+            </>
+          );
+        })()}
+      </div>
+    </div>,
+    document.body
+  )}
   </>
 );
 }

@@ -23,49 +23,136 @@ export default function TabPanelGeneral({
   setGlobalSmmlv,
   globalAuxTransporte,
   setGlobalAuxTransporte,
-  handleSaveDraft
+  handleSaveDraft,
+  startDate,
+  endDate
 }) {
   const [vinculacionFiltro, setVinculacionFiltro] = useState('Empresa');
   const [isSaitempModalOpen, setIsSaitempModalOpen] = useState(false);
   const [empleadoSaitemp, setEmpleadoSaitemp] = useState(null);
   const [vacacionesModal, setVacacionesModal] = useState({ isOpen: false, empleado: null });
-  const lastProcessedDates = useRef({});
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
 
-  // Auto-conteo de días de vacaciones
+  const MESES = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+  ];
+  const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+  // Sincronizar el mes visible del calendario al abrir el modal
   useEffect(() => {
     if (vacacionesModal.isOpen && vacacionesModal.empleado) {
       const workerData = filteredPayrollData.find(d => d.masterRow?.nombre === vacacionesModal.empleado);
       if (workerData && workerData.masterRow) {
         const cedula = workerData.masterRow.cedula;
-        const inicioKey = `${cedula}_fecha_inicio_vacaciones`;
-        const finKey = `${cedula}_fecha_fin_vacaciones`;
-        
-        const fechaInicio = overrides[inicioKey] || workerData.fecha_inicio_vacaciones;
-        const fechaFin = overrides[finKey] || workerData.fecha_fin_vacaciones;
-        
-        const signature = `${fechaInicio}_${fechaFin}`;
-        
-        if (fechaInicio && fechaFin && lastProcessedDates.current[cedula] !== signature) {
-          const inicio = new Date(fechaInicio);
-          const fin = new Date(fechaFin);
-          
-          if (!isNaN(inicio.getTime()) && !isNaN(fin.getTime()) && fin >= inicio) {
-             const diffTime = Math.abs(fin - inicio);
-             const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
-             
-             handleCellEdit(`${cedula}_dias_vacaciones`, diffDays);
-             lastProcessedDates.current[cedula] = signature;
+        const raw = overrides[`${cedula}_fechas_vacaciones`];
+        let initialDates = [];
+        if (raw) {
+          try {
+            initialDates = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          } catch (e) {
+            if (typeof raw === 'string' && raw.includes(',')) initialDates = raw.split(',').map(s => s.trim());
           }
+        }
+        if (!initialDates || initialDates.length === 0) {
+          const inicio = overrides[`${cedula}_fecha_inicio_vacaciones`] || workerData.fecha_inicio_vacaciones;
+          if (inicio) initialDates = [inicio];
+        }
+        if (initialDates && initialDates.length > 0 && typeof initialDates[0] === 'string') {
+          const [y, m] = initialDates[0].split('-').map(Number);
+          if (y && m) setCalendarMonth(new Date(y, m - 1, 1));
+        } else if (startDate) {
+          const [y, m] = startDate.split('-').map(Number);
+          if (y && m) setCalendarMonth(new Date(y, m - 1, 1));
         }
       }
     }
-  }, [
-    vacacionesModal.isOpen, 
-    vacacionesModal.empleado, 
-    overrides, 
-    filteredPayrollData, 
-    handleCellEdit
-  ]);
+  }, [vacacionesModal.isOpen, vacacionesModal.empleado]);
+
+  // Helper para extraer las fechas seleccionadas
+  const getWorkerSelectedVacationDates = (cedula, workerData) => {
+    const raw = overrides[`${cedula}_fechas_vacaciones`];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string' && raw.trim()) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {
+        if (raw.includes(',')) return raw.split(',').map(s => s.trim()).filter(Boolean);
+        return [raw.trim()];
+      }
+    }
+    const inicio = overrides[`${cedula}_fecha_inicio_vacaciones`] || workerData?.fecha_inicio_vacaciones;
+    const fin = overrides[`${cedula}_fecha_fin_vacaciones`] || workerData?.fecha_fin_vacaciones;
+    if (inicio && fin) {
+      const dates = [];
+      let cur = new Date(inicio + 'T00:00:00');
+      const end = new Date(fin + 'T00:00:00');
+      if (!isNaN(cur.getTime()) && !isNaN(end.getTime()) && cur <= end) {
+        while (cur <= end) {
+          dates.push(cur.toISOString().split('T')[0]);
+          cur.setDate(cur.getDate() + 1);
+        }
+        return dates;
+      }
+    }
+    return [];
+  };
+
+  // Toggle de un día en el calendario interactivo
+  const toggleVacationDate = (cedula, dateStr, workerData) => {
+    const currentDates = getWorkerSelectedVacationDates(cedula, workerData);
+    let newDates;
+    if (currentDates.includes(dateStr)) {
+      newDates = currentDates.filter(d => d !== dateStr);
+    } else {
+      newDates = [...currentDates, dateStr];
+    }
+    newDates.sort();
+
+    handleCellEdit(`${cedula}_fechas_vacaciones`, JSON.stringify(newDates));
+    handleCellEdit(`${cedula}_dias_vacaciones`, newDates.length);
+
+    if (newDates.length > 0) {
+      handleCellEdit(`${cedula}_fecha_inicio_vacaciones`, newDates[0]);
+      handleCellEdit(`${cedula}_fecha_fin_vacaciones`, newDates[newDates.length - 1]);
+    } else {
+      handleCellEdit(`${cedula}_fecha_inicio_vacaciones`, "");
+      handleCellEdit(`${cedula}_fecha_fin_vacaciones`, "");
+    }
+  };
+
+  // Limpiar todas las fechas seleccionadas
+  const clearVacationDates = (cedula) => {
+    handleCellEdit(`${cedula}_fechas_vacaciones`, JSON.stringify([]));
+    handleCellEdit(`${cedula}_dias_vacaciones`, 0);
+    handleCellEdit(`${cedula}_fecha_inicio_vacaciones`, "");
+    handleCellEdit(`${cedula}_fecha_fin_vacaciones`, "");
+  };
+
+  // Seleccionar días hábiles de la quincena actual
+  const selectQuincenaWeekdays = (cedula, workerData) => {
+    if (!startDate || !endDate) return;
+    const isAdministrativo = workerData.masterRow?.categoria === 'Administrativo' || workerData.masterRow?.area === 'Administrativo';
+    const dates = [];
+    let cur = new Date(startDate + 'T00:00:00');
+    const end = new Date(endDate + 'T00:00:00');
+    while (cur <= end) {
+      const dayOfWeek = cur.getDay(); // 0 es Domingo, 6 es Sábado
+      const isWorkingDay = isAdministrativo ? (dayOfWeek >= 1 && dayOfWeek <= 5) : (dayOfWeek >= 1 && dayOfWeek <= 6);
+      if (isWorkingDay) {
+        dates.push(cur.toISOString().split('T')[0]);
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+    dates.sort();
+    handleCellEdit(`${cedula}_fechas_vacaciones`, JSON.stringify(dates));
+    handleCellEdit(`${cedula}_dias_vacaciones`, dates.length);
+    if (dates.length > 0) {
+      handleCellEdit(`${cedula}_fecha_inicio_vacaciones`, dates[0]);
+      handleCellEdit(`${cedula}_fecha_fin_vacaciones`, dates[dates.length - 1]);
+    }
+  };
 
   const COLUMNAS_ESENCIALES = ['salario', 'total_devengados', 'total_deducciones', 'neto_pagar'];
   const COLUMNAS_FIJAS = ['consecutivo', 'cedula', 'nombre', 'cargo'];
@@ -628,7 +715,12 @@ export default function TabPanelGeneral({
                       </div>
                       <div className="flex items-center gap-4">
                           <button 
-                              onClick={() => setVacacionesModal({ isOpen: false, empleado: null })}
+                              onClick={async () => {
+                                  if (typeof handleSaveDraft === 'function') {
+                                      await handleSaveDraft();
+                                  }
+                                  setVacacionesModal({ isOpen: false, empleado: null });
+                              }}
                               className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-all text-sm inline-flex items-center gap-2"
                           >
                               ✅ Listo
@@ -647,87 +739,257 @@ export default function TabPanelGeneral({
                       {(() => {
                           const workerData = filteredPayrollData.find(d => d.masterRow?.nombre === vacacionesModal.empleado);
                           if (!workerData) return null;
+                          const cedula = workerData.masterRow.cedula;
+                          const isAdministrativo = workerData.masterRow?.categoria === 'Administrativo' || workerData.masterRow?.area === 'Administrativo';
+                          const selectedDates = getWorkerSelectedVacationDates(cedula, workerData);
+                          const totalDias = selectedDates.length;
                           
-                          const renderVacacionesCard = (colKey) => {
-                              const col = PLANILLA_COLUMNS.find(c => c.key === colKey);
-                              if (!col) return null;
-                              
-                              const cKey = `${workerData.masterRow.cedula}_${col.key}`;
-                              let val = overrides[cKey] !== undefined ? overrides[cKey] : (workerData[col.key] !== undefined ? workerData[col.key] : "");
-                              
-                              if (col.isCurrency && val !== "") val = Math.round(Number(val));
-                              
-                              const isFormulated = ['val_vacaciones'].includes(col.key);
-                              
-                              return (
-                                  <div key={col.key} className="relative bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
-                                     {isFormulated && (
-                                       <div className="absolute top-2 right-2 text-[10px] text-indigo-500 flex items-center gap-1 mb-1 justify-end font-semibold">
-                                          <span>✨ Formulado</span>
-                                        </div>
-                                     )}
-                                     <span className={`text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-emerald-600 transition-colors ${isFormulated ? 'pr-24' : ''}`} title={col.label}>
-                                       {col.label}
-                                     </span>
-                                     <EditableCell
-                                        value={val}
-                                        onChange={(newVal) => handleCellEdit(cKey, newVal)}
-                                        isOverridden={overrides[cKey] !== undefined}
-                                        isCalculated={col.isCalculated}
-                                        isCurrency={col.isCurrency}
-                                        isDecimal={col.isDecimal}
-                                     />
-                                  </div>
-                              );
-                          };
+                          // Valor calculado de referencia
+                          const salarioBase = Number(workerData.masterRow?.salario_base || workerData.masterRow?.salario || 0);
+                          const valVacaciones = Math.round((salarioBase / 30) * totalDias);
+                          
+                          const year = calendarMonth.getFullYear();
+                          const month = calendarMonth.getMonth();
+                          const daysInMonth = new Date(year, month + 1, 0).getDate();
+                          const firstDayOfWeek = (new Date(year, month, 1).getDay() + 6) % 7; // 0 = Lun, 6 = Dom
 
                           return (
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                                  {renderVacacionesCard('dias_vacaciones')}
-                                  {renderVacacionesCard('val_vacaciones')}
-                                  
-                                  <div className="relative bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
-                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-emerald-600 transition-colors">
-                                       FECHA INICIAL
-                                     </span>
-                                     <input 
-                                       type="date"
-                                       className="w-full bg-slate-50 border-none outline-none focus:ring-0 text-slate-700 font-semibold p-1.5 rounded-lg"
-                                       value={overrides[`${workerData.masterRow.cedula}_fecha_inicio_vacaciones`] || workerData.fecha_inicio_vacaciones || ""}
-                                       onChange={(e) => handleCellEdit(`${workerData.masterRow.cedula}_fecha_inicio_vacaciones`, e.target.value)}
-                                     />
-                                  </div>
-                                  
-                                  <div className="relative bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
-                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-emerald-600 transition-colors">
-                                       FECHA FINAL
-                                     </span>
-                                     <input 
-                                       type="date"
-                                       className="w-full bg-slate-50 border-none outline-none focus:ring-0 text-slate-700 font-semibold p-1.5 rounded-lg"
-                                       value={overrides[`${workerData.masterRow.cedula}_fecha_fin_vacaciones`] || workerData.fecha_fin_vacaciones || ""}
-                                       onChange={(e) => handleCellEdit(`${workerData.masterRow.cedula}_fecha_fin_vacaciones`, e.target.value)}
-                                     />
-                                  </div>
-                                  
-                                  <div className="md:col-span-2 relative bg-amber-50/50 border border-amber-200/60 p-4 rounded-2xl flex items-center justify-between shadow-sm transition-all group">
-                                     <div className="flex flex-col">
-                                        <span className="text-sm font-bold text-amber-900">
-                                          ¿Se pagaron por anticipado?
-                                        </span>
-                                        <span className="text-xs text-amber-700 mt-0.5">
-                                          Al marcar esta opción, el valor de las vacaciones no se sumará al Total Devengado de esta nómina.
+                              <div className="flex flex-col gap-6">
+                                  {/* Banner Informativo de Liquidación Externa */}
+                                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                                     <div className="flex items-start gap-3">
+                                        <span className="text-2xl">🌴</span>
+                                        <div className="flex flex-col">
+                                           <span className="text-xs font-black uppercase tracking-wider text-amber-900">
+                                              Liquidación Externa (Pagadas por fuera)
+                                           </span>
+                                           <span className="text-xs text-amber-800 leading-relaxed mt-0.5">
+                                              Los días marcados descuentan días laborales, sueldo y auxilio de transporte de la quincena, pero <strong>no suman dinero al neto a pagar</strong> de esta nómina porque se pagan por fuera.
+                                           </span>
+                                        </div>
+                                     </div>
+                                     <div className="shrink-0 bg-white/90 border border-amber-200 px-3 py-1.5 rounded-xl text-center">
+                                        <span className="text-[10px] font-bold text-amber-700 block uppercase">Clasificación</span>
+                                        <span className="text-xs font-black text-slate-800">
+                                           {isAdministrativo ? '👔 Administrativo (L-V)' : '🏭 Operativo (Incluye Sábados)'}
                                         </span>
                                      </div>
-                                     <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                                       <input 
-                                         type="checkbox"
-                                         className="sr-only peer"
-                                         checked={overrides[`${workerData.masterRow.cedula}_vacaciones_pagadas`] || false}
-                                         onChange={(e) => handleCellEdit(`${workerData.masterRow.cedula}_vacaciones_pagadas`, e.target.checked)}
-                                       />
-                                       <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
-                                     </label>
+                                  </div>
+
+                                  {/* Tarjetas Superiores: Días y Valor */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                      {/* Días de vacaciones: Bloqueado a edición manual */}
+                                      <div className="relative bg-white border border-slate-200/90 p-5 rounded-2xl shadow-xs flex flex-col justify-between">
+                                         <div className="flex justify-between items-center mb-1">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                               Días de Vacaciones
+                                            </span>
+                                            <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1">
+                                               🔒 Bloqueado a manual (Auto por calendario)
+                                            </span>
+                                         </div>
+                                         <div className="flex items-baseline gap-2 my-1">
+                                            <span className="text-3xl font-black text-slate-900">
+                                               {totalDias}
+                                            </span>
+                                            <span className="text-sm font-semibold text-slate-500">
+                                               {totalDias === 1 ? 'día de disfrute' : 'días de disfrute'}
+                                            </span>
+                                         </div>
+                                         <span className="text-[11px] text-slate-400">
+                                            Resta exactamente {totalDias} {totalDias === 1 ? 'día' : 'días'} al sueldo y auxilio de transporte de la quincena.
+                                         </span>
+                                      </div>
+
+                                      {/* Valor de Vacaciones: Referencia Informativa */}
+                                      <div className="relative bg-white border border-slate-200/90 p-5 rounded-2xl shadow-xs flex flex-col justify-between">
+                                         <div className="flex justify-between items-center mb-1">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                               Valor Vacaciones (Referencia)
+                                            </span>
+                                            <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200/50 px-2 py-0.5 rounded-full font-bold">
+                                               ✨ Liquidación por fuera
+                                            </span>
+                                         </div>
+                                         <div className="flex items-baseline gap-2 my-1">
+                                            <span className="text-3xl font-black text-emerald-700">
+                                               {fmtCOP ? fmtCOP(valVacaciones) : `$ ${valVacaciones.toLocaleString('es-CO')}`}
+                                            </span>
+                                         </div>
+                                         <span className="text-[11px] text-slate-400">
+                                            Base diaria: ${(salarioBase / 30).toLocaleString('es-CO', { maximumFractionDigits: 0 })} × {totalDias} {totalDias === 1 ? 'día' : 'días'}.
+                                         </span>
+                                      </div>
+                                  </div>
+
+                                  {/* Calendario Interactivo */}
+                                  <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+                                     {/* Header del Calendario y Controles */}
+                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                                        <div className="flex items-center gap-3">
+                                           <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                                              <button 
+                                                 type="button"
+                                                 onClick={() => setCalendarMonth(new Date(year, month - 1, 1))}
+                                                 className="w-8 h-8 flex items-center justify-center bg-white rounded-lg shadow-xs hover:bg-slate-50 text-slate-700 font-bold transition-all text-base"
+                                                 title="Mes anterior"
+                                              >
+                                                 ‹
+                                              </button>
+                                              <button 
+                                                 type="button"
+                                                 onClick={() => setCalendarMonth(new Date(year, month + 1, 1))}
+                                                 className="w-8 h-8 flex items-center justify-center bg-white rounded-lg shadow-xs hover:bg-slate-50 text-slate-700 font-bold transition-all text-base"
+                                                 title="Mes siguiente"
+                                              >
+                                                 ›
+                                              </button>
+                                           </div>
+                                           <h4 className="font-black text-lg text-slate-900 tracking-tight capitalize">
+                                              {MESES[month]} {year}
+                                           </h4>
+                                        </div>
+
+                                        {/* Botones de acción rápida */}
+                                        <div className="flex flex-wrap items-center gap-2">
+                                           {startDate && endDate && (
+                                              <button 
+                                                 type="button"
+                                                 onClick={() => selectQuincenaWeekdays(cedula, workerData)}
+                                                 className="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 px-3 py-1.5 rounded-xl font-bold transition-all inline-flex items-center gap-1.5"
+                                                 title="Seleccionar días laborables dentro del rango de la quincena"
+                                              >
+                                                 ⚡ Marcar quincena ({startDate.slice(5)} al {endDate.slice(5)})
+                                              </button>
+                                           )}
+                                           {totalDias > 0 && (
+                                              <button 
+                                                 type="button"
+                                                 onClick={() => clearVacationDates(cedula)}
+                                                 className="text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/60 px-3 py-1.5 rounded-xl font-bold transition-all"
+                                              >
+                                                 Limpiar selección ({totalDias})
+                                              </button>
+                                           )}
+                                        </div>
+                                     </div>
+
+                                     {/* Guía según clasificación laboral */}
+                                     <div className="py-2.5 px-3 bg-slate-50 rounded-xl my-3 text-[11px] text-slate-600 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                        <span>
+                                           {isAdministrativo 
+                                              ? '💡 Haz clic en los días a disfrutar. Por ser personal administrativo, no selecciones sábados, domingos ni festivos.'
+                                              : '💡 Haz clic en los días a disfrutar. Por ser operativo, incluye sábados si corresponden a la jornada habitual.'}
+                                        </span>
+                                        {startDate && endDate && (
+                                           <span className="inline-flex items-center gap-1 text-[10px] text-blue-600 font-semibold shrink-0">
+                                              <span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span>
+                                              Quincena activa
+                                           </span>
+                                        )}
+                                     </div>
+
+                                     {/* Cabecera de días de la semana */}
+                                     <div className="grid grid-cols-7 gap-1.5 text-center mb-2">
+                                        {DIAS_SEMANA.map((dia, idx) => (
+                                           <div 
+                                              key={dia} 
+                                              className={`text-[11px] font-black uppercase tracking-wider py-1.5 ${
+                                                 idx === 5 ? 'text-amber-600' : idx === 6 ? 'text-rose-500' : 'text-slate-400'
+                                              }`}
+                                           >
+                                              {dia}
+                                           </div>
+                                        ))}
+                                     </div>
+
+                                     {/* Grid interactivo de días */}
+                                     <div className="grid grid-cols-7 gap-1.5">
+                                        {Array.from({ length: firstDayOfWeek }).map((_, i) => (
+                                           <div key={`blank-${i}`} className="h-12 rounded-xl bg-slate-50/40 opacity-30"></div>
+                                        ))}
+
+                                        {Array.from({ length: daysInMonth }).map((_, i) => {
+                                           const d = i + 1;
+                                           const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                                           const dayOfWeek = (firstDayOfWeek + i) % 7; // 0=Lun, 5=Sáb, 6=Dom
+                                           const isSaturday = dayOfWeek === 5;
+                                           const isSunday = dayOfWeek === 6;
+                                           const isSelected = selectedDates.includes(dateStr);
+                                           const isInsideQuincena = startDate && endDate && dateStr >= startDate && dateStr <= endDate;
+                                           
+                                           return (
+                                              <button
+                                                 key={dateStr}
+                                                 type="button"
+                                                 onClick={() => toggleVacationDate(cedula, dateStr, workerData)}
+                                                 className={`relative h-12 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer group ${
+                                                    isSelected
+                                                       ? 'bg-emerald-600 text-white font-black shadow-md ring-2 ring-emerald-400 scale-[1.03] z-10'
+                                                       : isInsideQuincena
+                                                          ? 'bg-blue-50/70 border border-blue-200/80 text-slate-800 hover:bg-emerald-100 hover:border-emerald-300 font-bold'
+                                                          : isSunday
+                                                             ? 'bg-rose-50/30 text-rose-700/60 border border-dashed border-rose-200/40 hover:bg-emerald-50'
+                                                             : isSaturday
+                                                                ? 'bg-amber-50/40 text-amber-800/70 border border-dashed border-amber-200/50 hover:bg-emerald-50'
+                                                                : 'bg-white border border-slate-200/70 text-slate-700 hover:bg-emerald-50 hover:border-emerald-300 font-medium'
+                                                 }`}
+                                              >
+                                                 <span className="text-sm">{d}</span>
+                                                 <span className={`text-[9px] leading-none ${
+                                                    isSelected 
+                                                       ? 'text-emerald-100 font-bold' 
+                                                       : isSaturday 
+                                                          ? 'text-amber-600 font-bold' 
+                                                          : isSunday 
+                                                             ? 'text-rose-500 font-bold' 
+                                                             : 'text-slate-400 group-hover:text-emerald-600'
+                                                 }`}>
+                                                    {isSelected ? '✓' : isSaturday ? 'Sáb' : isSunday ? 'Dom' : ''}
+                                                 </span>
+
+                                                 {!isSelected && isInsideQuincena && (
+                                                    <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                                 )}
+                                              </button>
+                                           );
+                                        })}
+                                     </div>
+
+                                     {/* Resumen de días seleccionados (Chips) */}
+                                     {selectedDates.length > 0 && (
+                                        <div className="mt-4 pt-4 border-t border-slate-100">
+                                           <div className="flex items-center justify-between mb-2">
+                                              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                                 Días marcados ({selectedDates.length}):
+                                              </span>
+                                              <span className="text-[11px] font-bold text-slate-700">
+                                                 Del {selectedDates[0]} al {selectedDates[selectedDates.length - 1]}
+                                              </span>
+                                           </div>
+                                           <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar p-1">
+                                              {selectedDates.map(date => {
+                                                 const [y, m, d] = date.split('-');
+                                                 return (
+                                                    <span 
+                                                       key={date}
+                                                       className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-bold"
+                                                    >
+                                                       <span>{d} {MESES[Number(m) - 1]?.slice(0, 3)}</span>
+                                                       <button 
+                                                          type="button"
+                                                          onClick={() => toggleVacationDate(cedula, date, workerData)}
+                                                          className="text-emerald-600 hover:text-emerald-900 font-bold text-sm leading-none"
+                                                          title="Desmarcar día"
+                                                       >
+                                                          ×
+                                                       </button>
+                                                    </span>
+                                                 );
+                                              })}
+                                           </div>
+                                        </div>
+                                     )}
                                   </div>
                               </div>
                           );
