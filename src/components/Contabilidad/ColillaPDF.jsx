@@ -314,7 +314,6 @@ export default function ColillaPDF({ empleados = [], tituloReporte = "SÁBANA CO
                   <Text style={styles.sectionTitle}>Liquidación Final</Text>
                 </View>
                 <DetailRow label="Total a Pagar" value={emp.total_pagar} />
-                <DetailRow label="Verificación (40%)" value={emp.verificacion} />
                 
                 <View style={styles.finalRow}>
                   <Text style={styles.finalConcept}>NETO A PAGAR</Text>
