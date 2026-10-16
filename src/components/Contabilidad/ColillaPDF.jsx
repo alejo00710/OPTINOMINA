@@ -292,7 +292,7 @@ export default function ColillaPDF({ empleados = [], tituloReporte = "SÁBANA CO
                 <DetailRow label="Pensión (4%)" value={emp.pension} />
                 <DetailRow label="Solidaridad (1%)" value={emp.solidaridad} />
                 <DetailRow label="Préstamos" value={emp.prestamos} />
-                <DetailRow label="Póliza Bolívar" value={emp.poliza_bolivar} />
+                {/* Oculto visualmente: Póliza Bolívar se mantiene en la base de datos pero no se imprime en el PDF */}
                 <DetailRow label="Póliza Plenitud" value={emp.poliza_plenitud} />
                 <DetailRow label="Comfama" value={emp.comfama || emp.libranza_comfama} />
                 <DetailRow label="Póliza Sura" value={emp.poliza_sura} />

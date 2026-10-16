@@ -29,7 +29,7 @@ export default function ConsolidadoSaitemp({ empleadosLiquidados }) {
         obsArray.push("Abono a Préstamo");
     }
     
-    if (Number(emp.poliza_bolivar) > 0) obsArray.push("Póliza Bolívar");
+    // if (Number(emp.poliza_bolivar) > 0) obsArray.push("Póliza Bolívar");
     if (Number(emp.poliza_plenitud) > 0) obsArray.push("Póliza Plenitud");
     if (Number(emp.libranza_comfama) > 0) obsArray.push("Libranza Comfama");
     if (Number(emp.poliza_sura) > 0) obsArray.push("Póliza Sura");

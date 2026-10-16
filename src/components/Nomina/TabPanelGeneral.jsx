@@ -290,7 +290,7 @@ export default function TabPanelGeneral({
 
       const obsArray = [];
       if (Number(emp.prestamos) > 0) obsArray.push("Abono a Préstamo");
-      if (Number(emp.poliza_bolivar) > 0) obsArray.push("Póliza Bolívar");
+      // if (Number(emp.poliza_bolivar) > 0) obsArray.push("Póliza Bolívar");
       if (Number(emp.poliza_plenitud) > 0) obsArray.push("Póliza Plenitud");
       if (Number(emp.libranza_comfama) > 0) obsArray.push("Libranza Comfama");
       if (Number(emp.poliza_sura) > 0) obsArray.push("Póliza Sura");
@@ -374,10 +374,11 @@ export default function TabPanelGeneral({
           });
       }
 
-      if (Number(emp.poliza_bolivar) > 0) {
-          obsArray.push("Póliza Bolívar");
-          deducArray.push(formatValue(emp.poliza_bolivar));
-      }
+      // Oculto visualmente en PDF Saitemp: Póliza Bolívar
+      // if (Number(emp.poliza_bolivar) > 0) {
+      //     obsArray.push("Póliza Bolívar");
+      //     deducArray.push(formatValue(emp.poliza_bolivar));
+      // }
       if (Number(emp.poliza_plenitud) > 0) {
           obsArray.push("Póliza Plenitud");
           deducArray.push(formatValue(emp.poliza_plenitud));

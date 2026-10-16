@@ -250,13 +250,7 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
                 <td className="px-2 text-right">{formatCurrency(prestamos)}</td>
               </tr>
             )}
-            {safeNumber(empleado.poliza_bolivar) > 0 && (
-              <tr>
-                <td className="border-r border-[#9ca3af] px-2 text-left">POLIZA DE BOLIVAR</td>
-                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
-                <td className="px-2 text-right">{formatCurrency(safeNumber(empleado.poliza_bolivar))}</td>
-              </tr>
-            )}
+            {/* Oculto visualmente: Póliza Bolívar */}
             {safeNumber(empleado.poliza_plenitud) > 0 && (
               <tr>
                 <td className="border-r border-[#9ca3af] px-2 text-left">CONVENIO PLENITUD</td>
