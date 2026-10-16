@@ -4,7 +4,18 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
   if (!empleado) return null;
 
   const safeNumber = (val) => isNaN(Number(val)) ? 0 : Number(val);
-  const formatHour = (val) => (val !== null && val !== undefined && val !== '') ? Number(val).toFixed(1) : '0.0';
+  const formatHour = (val) => {
+    if (val === null || val === undefined || val === '') return '0.0';
+    let str = String(val).replace(/\$|\s/g, '').trim();
+    if (str === '') return '0.0';
+    if (str.includes(',') && !str.includes('.')) str = str.replace(',', '.');
+    let num = Number(str);
+    if (isNaN(num) || num < 0) return '0.0';
+    if (num > 120 && num % 1 === 0 && (num / 10) <= 100) {
+      num = num / 10;
+    }
+    return num.toFixed(1);
+  };
 
   const formatCurrency = (val) => {
     // The screenshot shows $1.973.754 without spaces
@@ -111,31 +122,38 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
                 <td className="px-2 text-right"></td>
               </tr>
             )}
-            {safeNumber(empleado.recargo_nocturno) > 0 && (
+            {safeNumber(empleado.recargo_nocturno || empleado.val_recargo_nocturno) > 0 && (
               <tr>
-                <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.horas_nocturnas)} Hrs. RECARGO NOCTURNO</td>
-                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.recargo_nocturno))}</td>
+                <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.horas_nocturnas ?? empleado.rn_hrs ?? empleado.recargo_nocturno_hrs ?? empleado.horas_rn)} Hrs. RECARGO NOCTURNO</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.recargo_nocturno || empleado.val_recargo_nocturno))}</td>
                 <td className="px-2 text-right"></td>
               </tr>
             )}
-            {safeNumber(empleado.val_extras_diurnas) > 0 && (
+            {safeNumber(empleado.val_extras_diurnas || empleado.extras_diurnas_val) > 0 && (
               <tr>
-                <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.extras_diurnas)} Hrs. EXTRAS DIURNAS</td>
-                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.val_extras_diurnas))}</td>
+                <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.extras_diurnas ?? empleado.hed_hrs ?? empleado.horas_ext_diu)} Hrs. EXTRAS DIURNAS</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.val_extras_diurnas || empleado.extras_diurnas_val))}</td>
                 <td className="px-2 text-right"></td>
               </tr>
             )}
-            {safeNumber(empleado.val_extras_nocturnas) > 0 && (
+            {safeNumber(empleado.val_extras_nocturnas || empleado.extras_nocturnas_val) > 0 && (
               <tr>
-                <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.extras_nocturnas)} Hrs. EXTRAS NOCTURNAS</td>
-                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.val_extras_nocturnas))}</td>
+                <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.extras_nocturnas ?? empleado.hen_hrs ?? empleado.horas_ext_noc)} Hrs. EXTRAS NOCTURNAS</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.val_extras_nocturnas || empleado.extras_nocturnas_val))}</td>
                 <td className="px-2 text-right"></td>
               </tr>
             )}
-            {safeNumber(empleado.val_extras_festivas) > 0 && (
+            {safeNumber(empleado.val_extras_festivas || empleado.extras_festivas_val) > 0 && (
               <tr>
-                <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.extras_festivas)} Hrs. EXTRAS FESTIVAS</td>
-                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.val_extras_festivas))}</td>
+                <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.extras_festivas ?? empleado.hef_hrs ?? empleado.hefd_hrs ?? empleado.festivas_diurnas ?? empleado.horas_ext_fest)} Hrs. EXTRAS FESTIVAS</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.val_extras_festivas || empleado.extras_festivas_val))}</td>
+                <td className="px-2 text-right"></td>
+              </tr>
+            )}
+            {safeNumber(empleado.extras_festivas_nocturnas_val || empleado.val_extras_festivas_nocturnas) > 0 && (
+              <tr>
+                <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.extras_festivas_nocturnas ?? empleado.hefn_hrs ?? empleado.festivas_nocturnas ?? empleado.horas_ext_fest_noc)} Hrs. EXTRAS FESTIVAS NOCTURNAS</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.extras_festivas_nocturnas_val || empleado.val_extras_festivas_nocturnas))}</td>
                 <td className="px-2 text-right"></td>
               </tr>
             )}

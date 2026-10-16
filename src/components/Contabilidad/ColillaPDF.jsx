@@ -149,14 +149,30 @@ const DetailRow = ({ label, value, isMoney = true, forceShow = false }) => {
   );
 };
 
-const DetailRowCombined = ({ label, qty, qtyLabel, money }) => {
+const parseQty = (val) => {
+  if (val === undefined || val === null || val === '') return 0;
+  let num;
+  if (typeof val === 'number') {
+    num = isNaN(val) ? 0 : val;
+  } else {
+    const s = String(val).replace(/\$|\s/g, '').replace(',', '.');
+    num = parseFloat(s);
+    if (isNaN(num)) num = 0;
+  }
+  if (num > 120 && num % 1 === 0 && (num / 10) <= 100) {
+    num = num / 10;
+  }
+  return Number(num.toFixed(1));
+};
+
+const DetailRowCombined = ({ label, qty, qtyLabel = "hrs", money }) => {
   const numMoney = Number(money) || 0;
   if (numMoney === 0) return null; // Solo imprimir conceptos que realmente tienen dinero
   
-  const numQty = Number(qty) || 0;
+  const numQty = parseQty(qty);
   return (
     <View style={styles.detailRow}>
-      <Text style={styles.detailConcept}>{label} {numQty > 0 ? `(${numQty} ${qtyLabel})` : ''}</Text>
+      <Text style={styles.detailConcept}>{label} {`(${numQty} ${qtyLabel})`}</Text>
       <Text style={styles.detailValue}>{formatMoney(money)}</Text>
     </View>
   );
@@ -237,12 +253,36 @@ export default function ColillaPDF({ empleados = [], tituloReporte = "SÁBANA CO
                 <View style={styles.sectionTitleBox}>
                   <Text style={styles.sectionTitle}>Trabajo Suplementario</Text>
                 </View>
-                <DetailRowCombined label="Horas Diurnas" qty={emp.horas_diurnas} qtyLabel="hrs" money={0} />
-                <DetailRowCombined label="Horas Nocturnas" qty={emp.horas_nocturnas} qtyLabel="hrs" money={0} />
-                <DetailRowCombined label="Ext. Diurnas" qty={emp.extras_diurnas} qtyLabel="hrs" money={emp.val_extras_diurnas} />
-                <DetailRowCombined label="Ext. Nocturnas" qty={emp.extras_nocturnas} qtyLabel="hrs" money={emp.val_extras_nocturnas} />
-                <DetailRowCombined label="Ext. Festivas" qty={emp.extras_festivas} qtyLabel="hrs" money={emp.val_extras_festivas} />
-                <DetailRow label="Recargo Nocturno" value={emp.recargo_nocturno} />
+                <DetailRowCombined 
+                  label="Recargo Nocturno" 
+                  qty={emp.horas_nocturnas ?? emp.rn_hrs ?? emp.recargo_nocturno_hrs ?? emp.horas_rn ?? 0} 
+                  qtyLabel="hrs" 
+                  money={emp.recargo_nocturno || emp.val_recargo_nocturno} 
+                />
+                <DetailRowCombined 
+                  label="Ext. Diurnas" 
+                  qty={emp.extras_diurnas ?? emp.hed_hrs ?? emp.horas_ext_diu ?? 0} 
+                  qtyLabel="hrs" 
+                  money={emp.val_extras_diurnas || emp.extras_diurnas_val} 
+                />
+                <DetailRowCombined 
+                  label="Ext. Nocturnas" 
+                  qty={emp.extras_nocturnas ?? emp.hen_hrs ?? emp.horas_ext_noc ?? 0} 
+                  qtyLabel="hrs" 
+                  money={emp.val_extras_nocturnas || emp.extras_nocturnas_val} 
+                />
+                <DetailRowCombined 
+                  label="Ext. Festivas" 
+                  qty={emp.extras_festivas ?? emp.hef_hrs ?? emp.hefd_hrs ?? emp.festivas_diurnas ?? emp.horas_ext_fest ?? 0} 
+                  qtyLabel="hrs" 
+                  money={emp.val_extras_festivas || emp.extras_festivas_val} 
+                />
+                <DetailRowCombined 
+                  label="Ext. Festivas Nocturnas" 
+                  qty={emp.extras_festivas_nocturnas ?? emp.hefn_hrs ?? emp.festivas_nocturnas ?? emp.horas_ext_fest_noc ?? 0} 
+                  qtyLabel="hrs" 
+                  money={emp.extras_festivas_nocturnas_val || emp.val_extras_festivas_nocturnas} 
+                />
 
                 {/* Deducciones y Retenciones */}
                 <View style={styles.sectionTitleBox}>
