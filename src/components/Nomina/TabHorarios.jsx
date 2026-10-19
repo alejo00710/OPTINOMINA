@@ -14,7 +14,8 @@ const CeldaTurno = ({ valor, onChange, getTurnColor }) => {
     '7:30AM A 5PM', '7:30AM A 4PM', 'DESCANSO', 'VACACIONES', 
     'LICENCIA REMUNERADA', 'LICENCIA NO REMUNERADA', 
     'INCAPACIDAD GENERAL', 'INCAPACIDAD ACCIDENTE LABORAL', 
-    'CALAMIDAD', 'SANCIONADO'
+    'CALAMIDAD', 'SANCIONADO',
+    'FESTIVO', 'LNR EMPRESA', 'TERMINACION DE CONTRATO'
   ];
 
   const handleFocus = () => {
@@ -273,13 +274,17 @@ export default function TabHorarios({ empleados }) {
     if (t.includes('LICENCIA REMUNERADA')) return 'bg-cyan-100 text-cyan-800 font-bold';
     if (t.includes('CALAMIDAD')) return 'bg-fuchsia-100 text-fuchsia-800 font-bold';
     if (t.includes('SANCIONADO')) return 'bg-orange-100 text-orange-800 font-bold';
+    if (t.includes('FESTIVO')) return 'bg-indigo-100 text-indigo-800 font-bold';
+    if (t.includes('LNR EMPRESA')) return 'bg-purple-100 text-purple-800 font-bold';
+    if (t.includes('TERMINACION DE CONTRATO') || t.includes('TERMINACIÓN DE CONTRATO') || t.includes('TERMINACION')) return 'bg-rose-200 text-rose-900 font-bold';
 
     const oficiales = [
       '6AM A 2PM', '2PM A 10PM', '10PM A 6AM', '6AM A 6PM', '6PM A 6AM', 
       '7:30AM A 5PM', '7:30AM A 4PM', 'DESCANSO', 'VACACIONES', 
       'LICENCIA REMUNERADA', 'LICENCIA NO REMUNERADA', 
       'INCAPACIDAD GENERAL', 'INCAPACIDAD ACCIDENTE LABORAL', 
-      'CALAMIDAD', 'SANCIONADO'
+      'CALAMIDAD', 'SANCIONADO',
+      'FESTIVO', 'LNR EMPRESA', 'TERMINACION DE CONTRATO'
     ];
     if (t !== '' && !oficiales.includes(t) && t !== '7:30 A 5PM') {
       return 'bg-yellow-100 text-black font-semibold';

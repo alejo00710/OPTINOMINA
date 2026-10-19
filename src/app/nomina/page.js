@@ -76,6 +76,21 @@ const NOVEDADES_MANUALES_MAP = {
     fechasKey: 'fechas_sancion',
     titulo: 'SANCIÓN',
     diasKey: 'dias_sancion'
+  },
+  dias_festivo: {
+    fechasKey: 'fechas_festivo',
+    titulo: 'FESTIVO',
+    diasKey: 'dias_festivo'
+  },
+  dias_lnr_empresa: {
+    fechasKey: 'fechas_lnr_empresa',
+    titulo: 'LNR EMPRESA',
+    diasKey: 'dias_lnr_empresa'
+  },
+  dias_terminacion: {
+    fechasKey: 'fechas_terminacion',
+    titulo: 'TERMINACION DE CONTRATO',
+    diasKey: 'dias_terminacion'
   }
 };
 
@@ -948,6 +963,9 @@ processedLogs.forEach(day => {
       const dias_incap_at = getAbsenceDays('dias_incap_at', k => k === 'INCAPACIDAD AT' || k === 'INCAPACIDAD ACCIDENTE LABORAL');
       const dias_calamidad = getAbsenceDays('dias_calamidad', k => k === 'CALAMIDAD');
       const dias_sancion = getAbsenceDays('dias_sancion', k => k === 'SANCION' || k === 'SANCIONADO');
+      const dias_festivo = getAbsenceDays('dias_festivo', k => k === 'FESTIVO');
+      const dias_lnr_empresa = getAbsenceDays('dias_lnr_empresa', k => k === 'LNR EMPRESA');
+      const dias_terminacion = getAbsenceDays('dias_terminacion', k => k === 'TERMINACION DE CONTRATO' || k === 'TERMINACION' || k === 'TERMINACIÓN DE CONTRATO');
 
       // Paso B (Descuento de Días): Suma todas estas ausencias (totalAusencias) y calcula los días pagados reales
       const totalAusencias = (dias_vacaciones || 0) + 
@@ -1031,6 +1049,9 @@ processedLogs.forEach(day => {
         dias_calamidad: dias_calamidad,
         dias_sancion: dias_sancion,
         dias_incapacidad: diasIncapacidad,
+        dias_festivo: dias_festivo,
+        dias_lnr_empresa: dias_lnr_empresa,
+        dias_terminacion: dias_terminacion,
         sueldo: sueldo,
         transporte: transporte,
         val_vacaciones: valorVacaciones,
@@ -1243,6 +1264,9 @@ processedLogs.forEach(day => {
         dias_incap_at: variables['dias_incap_at'] || 0,
         dias_calamidad: variables['dias_calamidad'] || 0,
         dias_sancion: variables['dias_sancion'] || 0,
+        dias_festivo: variables['dias_festivo'] || 0,
+        dias_lnr_empresa: variables['dias_lnr_empresa'] || 0,
+        dias_terminacion: variables['dias_terminacion'] || 0,
         incapacidad: variables['incapacidad'] || 0,
         val_vacaciones: variables['val_vacaciones'] || 0,
         val_lic_rem: variables['val_lic_rem'] || 0,
@@ -2288,7 +2312,7 @@ const handleSaveToCloud = async () => {
             return (
                 <div className="bg-slate-900 rounded-2xl p-6 mb-6 shadow-xl border border-slate-800">
                     <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
-                        <span className="text-amber-400">📋</span> Tipos de Novedad (Descuentan de Ordinarios)
+                        <span className="text-amber-400">📋</span> Tipos de Novedad Reportadas
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         {cards.map((c) => (
@@ -2456,7 +2480,7 @@ const handleSaveToCloud = async () => {
              };
 
              const devengosBasicos = ['salario', 'dias_pagados', 'sueldo', 'transporte', 'rodamiento', 'comisiones', 'intereses_cesantias', 'devoluciones', 'bonificacion_no_salarial', 'bonificacion', 'total_devengados'];
-             const novedadesFinancieras = ['dias_lic_rem', 'val_lic_rem', 'dias_lic_norem', 'val_lic_norem', 'dias_incapacidad', 'incapacidad', 'dias_incap_at', 'val_incap_at', 'dias_calamidad', 'val_calamidad', 'dias_sancion', 'val_sancion'];
+             const novedadesFinancieras = ['dias_lic_rem', 'val_lic_rem', 'dias_lic_norem', 'val_lic_norem', 'dias_incapacidad', 'incapacidad', 'dias_incap_at', 'val_incap_at', 'dias_calamidad', 'val_calamidad', 'dias_sancion', 'val_sancion', 'dias_festivo', 'dias_lnr_empresa', 'dias_terminacion'];
              const suplementario = ['horas_diurnas', 'horas_nocturnas', 'extras_diurnas', 'extras_nocturnas', 'extras_festivas', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas'];
              const deducciones = ['salud', 'pension', 'solidaridad', 'prestamos', 'saldo_prestamo', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'poliza_sura', 'optica', 'celular', 'retencion', 'otros_descuentos', 'total_deducciones'];
              const resultados = ['total_pagar', 'neto_pagar', 'verificacion'];

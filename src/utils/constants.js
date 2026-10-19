@@ -150,6 +150,9 @@ export const PLANILLA_COLUMNS = [
   { key: "val_calamidad", label: "VALOR CALAMIDAD (V)", letter: "V", type: "number", isCurrency: true, editable: true, isCalculated: true },
   { key: "dias_sancion", label: "DÍAS SANCION (U)", letter: "U", type: "number", center: true, editable: true, isCalculated: true },
   { key: "val_sancion", label: "VALOR SANCION (V)", letter: "V", type: "number", isCurrency: true, editable: true, isCalculated: true },
+  { key: "dias_festivo", label: "DÍAS FESTIVO (U)", letter: "U", type: "number", center: true, editable: true },
+  { key: "dias_lnr_empresa", label: "DÍAS LNR EMPRESA (U)", letter: "U", type: "number", center: true, editable: true },
+  { key: "dias_terminacion", label: "DÍAS TERMINACIÓN (U)", letter: "U", type: "number", center: true, editable: true },
   { key: "total_devengados", label: "Total Devengado (W)", letter: "W", type: "number", isCurrency: true, bg: "bg-emerald-500/5 font-extrabold text-emerald-800", editable: true },
   
   { key: "salud", label: "Salud 4% (X)", letter: "X", type: "number", isCurrency: true, textClass: "text-rose-600", editable: true },
