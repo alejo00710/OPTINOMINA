@@ -2,13 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Save, Calendar as CalendarIcon } from 'lucide-react';
 import { supabase } from '@/utils/supabase';
 
-import { createPortal } from 'react-dom';
-
 const CeldaTurno = ({ valor, onChange, getTurnColor }) => {
-  const [showMenu, setShowMenu] = useState(false);
-  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
-  const inputRef = React.useRef(null);
-
   const oficiales = [
     '6AM A 2PM', '2PM A 10PM', '10PM A 6AM', '6AM A 6PM', '6PM A 6AM', 
     '7:30AM A 5PM', '7:30AM A 4PM', 'DESCANSO', 'VACACIONES', 
@@ -18,45 +12,26 @@ const CeldaTurno = ({ valor, onChange, getTurnColor }) => {
     'FESTIVO', 'LNR EMPRESA', 'TERMINACION DE CONTRATO'
   ];
 
-  const handleFocus = () => {
-    if (inputRef.current) {
-       const rect = inputRef.current.getBoundingClientRect();
-       setCoords({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX, width: rect.width });
-    }
-    setShowMenu(true);
-  };
+  const colorClass = getTurnColor ? getTurnColor(valor) : 'bg-white';
+  const isCustom = valor && !oficiales.includes(valor);
 
   return (
-    <div className="relative w-full h-full">
-      <input
-        ref={inputRef}
-        type="text"
-        value={valor}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={handleFocus}
-        onBlur={() => setTimeout(() => setShowMenu(false), 200)}
-        placeholder="Turno..."
-        className={`w-full h-full p-2 text-xs text-center border-none focus:ring-inset focus:ring-2 focus:ring-indigo-500 outline-none placeholder-slate-300 uppercase transition-colors ${getTurnColor(valor)}`}
-      />
-      {showMenu && typeof document !== 'undefined' && createPortal(
-        <div style={{ top: coords.top, left: coords.left, minWidth: coords.width > 150 ? coords.width : 160 }} className="absolute mt-1 bg-white border border-slate-200 shadow-2xl z-[9999] rounded-xl overflow-hidden py-1 max-h-60 overflow-y-auto custom-scrollbar">
-          {oficiales.map(opc => (
-            <div 
-              key={opc} 
-              className="px-3 py-2 text-[10px] hover:bg-slate-100 cursor-pointer text-slate-700 font-bold uppercase transition-colors"
-              onMouseDown={(e) => {
-                e.preventDefault(); // Prevents blur
-                onChange(opc);
-                setShowMenu(false);
-              }}
-            >
-              {opc}
-            </div>
-          ))}
-        </div>,
-        document.body
+    <select
+      value={valor || ''}
+      onChange={(e) => onChange(e.target.value)}
+      className={`w-full h-full min-h-[38px] px-2 py-1.5 text-xs font-bold text-center border-none outline-none cursor-pointer uppercase transition-colors appearance-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 ${colorClass}`}
+      title={valor || "Seleccionar turno"}
+    >
+      <option value="" className="bg-white text-slate-400 font-normal">-- Turno --</option>
+      {isCustom && (
+        <option value={valor} className="bg-white text-slate-900 font-bold">{valor}</option>
       )}
-    </div>
+      {oficiales.map(opc => (
+        <option key={opc} value={opc} className="bg-white text-slate-900 font-bold">
+          {opc}
+        </option>
+      ))}
+    </select>
   );
 };
 
@@ -498,16 +473,16 @@ export default function TabHorarios({ empleados }) {
         </div>
       </section>
 
-      <section className="bg-white rounded-3xl border border-slate-200/60 shadow-md overflow-visible">
-        <div className="overflow-x-auto overflow-y-visible custom-scrollbar">
+      <section className="bg-white rounded-3xl border border-slate-200/60 shadow-md overflow-hidden">
+        <div className="overflow-auto max-h-[75vh] custom-scrollbar relative">
           <table className="w-full text-left border-collapse min-w-max border-gray-800">
-            <thead>
+            <thead className="sticky top-0 z-40 bg-blue-900 shadow-sm">
               <tr className="bg-blue-900 text-white font-bold text-xs uppercase">
-                <th className="p-3 border border-gray-800 text-center w-12 bg-blue-900 sticky left-0 z-20">N°</th>
-                <th className="p-3 border border-gray-800 sticky left-12 z-20 bg-blue-900 min-w-[200px]">PERSONAL</th>
-                <th className="p-3 border border-gray-800 min-w-[150px]">PUESTO</th>
+                <th className="p-3 border border-gray-800 text-center w-12 bg-blue-900 sticky top-0 left-0 z-50">N°</th>
+                <th className="p-3 border border-gray-800 sticky top-0 left-12 z-50 bg-blue-900 min-w-[200px]">PERSONAL</th>
+                <th className="p-3 border border-gray-800 min-w-[150px] sticky top-0 z-50 bg-blue-900">PUESTO</th>
                 {dias.map((dia, idx) => (
-                  <th key={dia} className="p-3 border border-gray-800 text-center min-w-[120px]">
+                  <th key={dia} className="p-3 border border-gray-800 text-center min-w-[120px] sticky top-0 z-40 bg-blue-900">
                     <div className="flex flex-col items-center gap-1">
                       <span>{dia} {diasNumeros[idx] ? `(${diasNumeros[idx]})` : ''}</span>
                       <button 
