@@ -520,7 +520,7 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   // Col N: Hr. Pag = L3 - M3
   const hrPag = hrLab > 0 ? hrLab - des : 0;
   
-  let targetOrd = 7.6;
+  let targetOrd = 7.5;
   if (turnoProgramadoDelDia) {
       const uShift = String(turnoProgramadoDelDia).replace(/\s/g, '').toUpperCase();
       if (uShift.includes("7:30") && (uShift.includes("5PM") || uShift.includes("5:00PM") || uShift.includes("17:00"))) {

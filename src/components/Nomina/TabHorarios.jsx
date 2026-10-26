@@ -13,25 +13,24 @@ const CeldaTurno = ({ valor, onChange, getTurnColor }) => {
   ];
 
   const colorClass = getTurnColor ? getTurnColor(valor) : 'bg-white';
-  const isCustom = valor && !oficiales.includes(valor);
 
   return (
-    <select
-      value={valor || ''}
-      onChange={(e) => onChange(e.target.value)}
-      className={`w-full h-full min-h-[38px] px-2 py-1.5 text-xs font-bold text-center border-none outline-none cursor-pointer uppercase transition-colors appearance-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 ${colorClass}`}
-      title={valor || "Seleccionar turno"}
-    >
-      <option value="" className="bg-white text-slate-400 font-normal">-- Turno --</option>
-      {isCustom && (
-        <option value={valor} className="bg-white text-slate-900 font-bold">{valor}</option>
-      )}
-      {oficiales.map(opc => (
-        <option key={opc} value={opc} className="bg-white text-slate-900 font-bold">
-          {opc}
-        </option>
-      ))}
-    </select>
+    <div className={`w-full h-full min-h-[38px] flex items-center justify-center transition-colors ${colorClass}`}>
+      <input
+        type="text"
+        list="opciones-turnos"
+        value={valor || ''}
+        onChange={(e) => onChange(e.target.value.toUpperCase())}
+        placeholder="Turno..."
+        className={`w-full h-full min-h-[38px] px-2 py-1.5 text-xs font-bold text-center outline-none bg-transparent uppercase cursor-text focus:ring-2 focus:ring-inset focus:ring-indigo-500 placeholder-slate-300 ${colorClass}`}
+        title={valor || "Escribir o seleccionar turno"}
+      />
+      <datalist id="opciones-turnos">
+        {oficiales.map(opc => (
+          <option key={opc} value={opc} />
+        ))}
+      </datalist>
+    </div>
   );
 };
 
