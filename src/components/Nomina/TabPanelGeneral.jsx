@@ -39,6 +39,57 @@ export default function TabPanelGeneral({
   ];
   const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
+  // Estados de periodo para reporte Saitemp
+  const [quincenaTipo, setQuincenaTipo] = useState(() => {
+    if (startDate) {
+      const day = parseInt(startDate.split('-')[2], 10);
+      return day > 15 ? "16 al 30/31" : "1 al 15";
+    }
+    return "1 al 15";
+  });
+  const [quincenaMes, setQuincenaMes] = useState(() => {
+    const mesesArr = [
+      "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    ];
+    if (startDate) {
+      const mIdx = parseInt(startDate.split('-')[1], 10) - 1;
+      return mesesArr[mIdx] || mesesArr[new Date().getMonth()];
+    }
+    return mesesArr[new Date().getMonth()];
+  });
+  const [quincenaAño, setQuincenaAño] = useState(() => {
+    if (startDate) {
+      return startDate.split('-')[0] || String(new Date().getFullYear());
+    }
+    return String(new Date().getFullYear());
+  });
+
+  const loadLogoImage = () => {
+    return new Promise((resolve) => {
+      if (typeof window === 'undefined') return resolve(null);
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      let done = false;
+      const finish = (result) => {
+        if (!done) {
+          done = true;
+          resolve(result);
+        }
+      };
+      img.onload = () => finish(img);
+      img.onerror = () => {
+        const fallback = new Image();
+        fallback.crossOrigin = 'Anonymous';
+        fallback.onload = () => finish(fallback);
+        fallback.onerror = () => finish(null);
+        fallback.src = '/logo-optimoldes.png';
+      };
+      setTimeout(() => finish(null), 1500);
+      img.src = '/logo.png';
+    });
+  };
+
   // Sincronizar el mes visible del calendario al abrir el modal
   useEffect(() => {
     if (vacacionesModal.isOpen && vacacionesModal.empleado) {
@@ -322,7 +373,7 @@ export default function TabPanelGeneral({
     saveAs(blob, 'Reporte_SAITEMP.xlsx');
   };
 
-  const handleDownloadSaitempPDF = () => {
+  const handleDownloadSaitempPDF = async (qTipo = quincenaTipo, qMes = quincenaMes, qAño = quincenaAño) => {
     const empleadosMision = filteredPayrollData.filter(row => {
       const tipo = (row.masterRow && row.masterRow.tipo_vinculacion) || 'Empresa';
       return tipo === 'Temporal';
@@ -457,8 +508,50 @@ export default function TabPanelGeneral({
     });
 
     const doc = new jsPDF('landscape');
-    
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const centerX = pageWidth / 2;
+
+    // 1. Logo corporativo
+    try {
+      const logoImg = await loadLogoImage();
+      if (logoImg) {
+        doc.addImage(logoImg, 'PNG', 12, 10, 36, 16);
+      }
+    } catch (e) {
+      console.warn("No se pudo cargar el logo corporativo:", e);
+    }
+
+    // 2. Razón Social: "OPTIMOLDES S.A.S"
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(30, 41, 59);
+    doc.text("OPTIMOLDES S.A.S", centerX, 16, { align: 'center' });
+
+    // 3. NIT: "900.069.620-9"
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(71, 85, 105);
+    doc.text("NIT: 900.069.620-9", centerX, 23, { align: 'center' });
+
+    // 4. Periodo: "Quincena: [quincenaTipo] de [quincenaMes] del [quincenaAño]"
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`Quincena: ${qTipo} de ${qMes} del ${qAño}`, centerX, 30, { align: 'center' });
+
+    // Subtítulo descriptivo
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text("REPORTE CONSOLIDADO DE NOVEDADES - PERSONAL EN MISIÓN (SAITEMP)", centerX, 36, { align: 'center' });
+
+    // Línea divisoria decorativa
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.5);
+    doc.line(10, 41, pageWidth - 10, 41);
+
     autoTable(doc, {
+      startY: 48,
       head: [[
         "No.", "ÁREA", "CÉDULA", "EMPLEADO", "NOVEDAD", 
         "INICIO", "FIN", "DÍAS", "R.N", 
@@ -511,19 +604,56 @@ export default function TabPanelGeneral({
            </div>
          </div>
 
-         {/* Hijo 3 (Derecha): Botones de exportación */}
+         {/* Hijo 3 (Derecha): Controles de Periodo y Botones de Exportación Saitemp */}
          {vinculacionFiltro === 'Temporal' ? (
-         <div className="flex-1 flex justify-end min-w-[250px]">
+         <div className="flex-1 flex flex-wrap justify-end items-center gap-2.5 min-w-[280px]">
+           <div className="flex items-center gap-1.5 bg-slate-100/90 backdrop-blur-sm p-1 rounded-xl border border-slate-200 shadow-sm text-xs">
+             <span className="text-[10px] font-black uppercase text-slate-400 pl-1.5">Periodo:</span>
+             <select
+               value={quincenaTipo}
+               onChange={(e) => setQuincenaTipo(e.target.value)}
+               className="bg-white px-2 py-1 rounded-lg border border-slate-200 outline-none text-slate-800 font-bold text-xs cursor-pointer shadow-sm hover:border-slate-300 focus:ring-1 focus:ring-amber-500"
+               title="Quincena"
+             >
+               <option value="1 al 15">1 al 15</option>
+               <option value="16 al 30/31">16 al 30/31</option>
+             </select>
+
+             <select
+               value={quincenaMes}
+               onChange={(e) => setQuincenaMes(e.target.value)}
+               className="bg-white px-2 py-1 rounded-lg border border-slate-200 outline-none text-slate-800 font-bold text-xs cursor-pointer shadow-sm hover:border-slate-300 focus:ring-1 focus:ring-amber-500"
+               title="Mes"
+             >
+               {MESES.map(m => (
+                 <option key={m} value={m}>{m}</option>
+               ))}
+             </select>
+
+             <select
+               value={quincenaAño}
+               onChange={(e) => setQuincenaAño(e.target.value)}
+               className="bg-white px-2 py-1 rounded-lg border border-slate-200 outline-none text-slate-800 font-bold text-xs cursor-pointer shadow-sm hover:border-slate-300 focus:ring-1 focus:ring-amber-500"
+               title="Año"
+             >
+               {[2024, 2025, 2026, 2027, 2028].map(y => (
+                 <option key={y} value={String(y)}>{y}</option>
+               ))}
+             </select>
+           </div>
+
            <div className="flex rounded-xl overflow-hidden shadow-md">
              <button
                onClick={handleDownloadSaitempExcel}
-               className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs transition-all flex items-center gap-2 border-r border-emerald-600/30"
+               className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs transition-all flex items-center gap-1.5 border-r border-emerald-600/30 shadow-sm active:scale-95"
+               title="Exportar a Excel"
              >
                📊 Excel
              </button>
              <button
-               onClick={handleDownloadSaitempPDF}
-               className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs transition-all flex items-center gap-2"
+               onClick={() => handleDownloadSaitempPDF(quincenaTipo, quincenaMes, quincenaAño)}
+               className="px-3.5 py-2 bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+               title="Exportar a PDF con cabecera corporativa"
              >
                📕 PDF
              </button>

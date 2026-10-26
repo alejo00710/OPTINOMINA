@@ -740,22 +740,143 @@ export default function NominaPage() {
 
     return nominaRows.map(emp => {
       const cedula = emp.cedula;
-      const logs = attendanceLogs[cedula] || [];
+      const rawLogs = attendanceLogs[cedula] || [];
+      const logsByDate = new Map();
+
+      // 1. Cargar registros base ordenados cronológicamente
+      const sortedRawLogs = [...rawLogs].sort((a, b) => String(a?.dia || "").localeCompare(String(b?.dia || "")));
+
+      sortedRawLogs.forEach(l => {
+         if (l && l.dia) logsByDate.set(l.dia, { ...l });
+      });
+
+      const addDaysUTC = (dateStr, days) => {
+         const [y, m, d] = dateStr.split('-').map(Number);
+         const dt = new Date(Date.UTC(y, m - 1, d + days));
+         return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+      };
+
+      // 2. Regla Unificada Turno Nocturno: Ambos turnos (6PM y 10PM) saltan al DÍA DE LA SALIDA (+1 día)
+      sortedRawLogs.forEach(l => {
+         if (!l || !l.dia) return;
+         const isTimeVal = (t) => t && t !== "-" && t !== "--:--" && String(t).trim() !== "";
+         
+         let isNocturno = false;
+         let entH = null;
+         let salH = null;
+         if (isTimeVal(l.hr_ent) && isTimeVal(l.hr_sal)) {
+             entH = parseInt(String(l.hr_ent).split(':')[0], 10);
+             salH = parseInt(String(l.hr_sal).split(':')[0], 10);
+             if (entH >= 16 && salH <= 12) {
+                 isNocturno = true;
+             }
+         }
+         if (l.dia_asignado === 'salida' || l.es_turno_nocturno) {
+             isNocturno = true;
+         }
+
+         if (isNocturno) {
+             let outDate = l.fecha_salida;
+             let inDate = l.fecha_entrada;
+
+             if (!outDate) {
+                 if (l.dia_asignado === 'salida') {
+                     outDate = l.dia;
+                 } else {
+                     outDate = addDaysUTC(l.dia, 1);
+                 }
+             }
+
+             if (!inDate) {
+                 if (l.dia_asignado === 'salida' && l.dia === outDate) {
+                     inDate = addDaysUTC(outDate, -1);
+                 } else {
+                     inDate = l.dia;
+                 }
+             }
+
+             if (outDate === inDate) {
+                 outDate = addDaysUTC(inDate, 1);
+             }
+
+             // Registro asignado ESTRICTAMENTE a la fecha de salida
+             const movedLog = {
+                 ...l,
+                 dia: outDate,
+                 fecha_entrada: inDate,
+                 fecha_salida: outDate,
+                 dia_asignado: 'salida',
+                 es_turno_nocturno: true
+             };
+             logsByDate.set(outDate, movedLog);
+
+             // Dejar limpia/vacía la fila del día de entrada
+             if (inDate && inDate !== outDate) {
+                 const currentIn = logsByDate.get(inDate) || {};
+                 const isInDateValidSalida = currentIn.dia_asignado === 'salida' && currentIn.fecha_salida === inDate;
+                 if (!isInDateValidSalida) {
+                     logsByDate.set(inDate, {
+                         ...currentIn,
+                         dia: inDate,
+                         hr_ent: "-",
+                         hr_sal: "-",
+                         hr_ent_desc1: "-",
+                         hr_sal_desc1: "-",
+                         hr_ent_desc2: "-",
+                         hr_sal_desc2: "-"
+                     });
+                 }
+             }
+         }
+      });
+      const logs = Array.from(logsByDate.values());
       const allDates = getDatesInRange(startDate, endDate);
       
       const processedLogs = allDates.map(date => {
          const existingLog = logs.find(l => l.dia === date);
          const dayLog = existingLog ? { ...existingLog } : { dia: date, hr_ent: "-", hr_sal: "-", hr_ent_desc1: "-", hr_sal_desc1: "-", hr_ent_desc2: "-", hr_sal_desc2: "-" };
-         const scheduledShift = getScheduledShift(emp, date, weeklySchedules);
-         const turnoStr = String(scheduledShift || "").toUpperCase().trim();
+         
+         // Desplazamiento del Horario Semanal: Herencia visual de turnos nocturnos
+         const [curY, curM, curD] = date.split('-').map(Number);
+         const prevDt = new Date(Date.UTC(curY, curM - 1, curD - 1));
+         const prevDateStr = `${prevDt.getUTCFullYear()}-${String(prevDt.getUTCMonth() + 1).padStart(2, '0')}-${String(prevDt.getUTCDate()).padStart(2, '0')}`;
+
+         const turnoDiaActual = getScheduledShift(emp, date, weeklySchedules);
+         const turnoDiaAnterior = getScheduledShift(emp, prevDateStr, weeklySchedules);
+
+         const turnoAyer = typeof turnoDiaAnterior === 'object' ? (turnoDiaAnterior?.novedad || turnoDiaAnterior?.tipo || turnoDiaAnterior?.nombre || "") : (turnoDiaAnterior || "");
+         const turnoHoy = typeof turnoDiaActual === 'object' ? (turnoDiaActual?.novedad || turnoDiaActual?.tipo || turnoDiaActual?.nombre || "") : (turnoDiaActual || "");
+
+         const uPrev = String(turnoAyer).replace(/\s/g, '').toUpperCase();
+         const uCurr = String(turnoHoy).replace(/\s/g, '').toUpperCase();
+
+         const esNocturnoAyer = uPrev.includes("10PMA6AM") || uPrev.includes("6PMA6AM");
+         const esNocturnoHoy = uCurr.includes("10PMA6AM") || uCurr.includes("6PMA6AM");
+
+         let turnoProgramadoDelDia = turnoDiaActual;
+         if (esNocturnoAyer) {
+             turnoProgramadoDelDia = turnoDiaAnterior;
+         } else if (esNocturnoHoy) {
+             turnoProgramadoDelDia = "";
+         } else {
+             turnoProgramadoDelDia = turnoDiaActual;
+         }
+         const turnoStr = String(turnoProgramadoDelDia || "").toUpperCase().trim();
 
          // --- INYECCIÓN DE CONTEXTO PARA EL LIQUIDADOR ---
          dayLog.cedula = cedula;
-         dayLog.turno = scheduledShift;
+         dayLog.turno = turnoProgramadoDelDia;
          
          // CONEXIÓN MAESTRA: Si el horario semanal dicta novedad o descanso, el día nace con esa información
          // Regla de Estado: Si turnoStr NO está vacío y NO contiene números... asigne DIRECTAMENTE ese string
-         if (turnoStr && !/\d/.test(turnoStr) && !["NORMAL", "DIURNO", "NOCTURNO", "TURNO", ""].includes(turnoStr)) {
+         const esNovedadHorario = turnoStr.includes("FESTIVO") || 
+                                  turnoStr.includes("LNR EMPRESA") || 
+                                  turnoStr.includes("TERMINACION DE CONTRATO") || 
+                                  turnoStr.includes("TERMINACIÓN DE CONTRATO") || 
+                                  turnoStr.includes("TERMINACION") ||
+                                  turnoStr.includes("DEBE") ||
+                                  (!/\d/.test(turnoStr) && !["NORMAL", "DIURNO", "NOCTURNO", "TURNO", ""].includes(turnoStr));
+         if (turnoStr && esNovedadHorario) {
              dayLog.estado = turnoStr;
              dayLog.novedad = turnoStr;
              dayLog.ignorarBiometria = true;
@@ -764,7 +885,7 @@ export default function NominaPage() {
          // --- FIN INYECCIÓN ---
 
          const prefix = `${cedula}_${date}`;
-         return calculateDailyRecord(dayLog, overrides, prefix, HORA_INICIO_DIURNA, HORA_FIN_DIURNA, scheduledShift);
+         return calculateDailyRecord(dayLog, overrides, prefix, HORA_INICIO_DIURNA, HORA_FIN_DIURNA, turnoProgramadoDelDia);
       });
       
       // 1. Sumatorias del Biométrico (Equivalente a Fila 24 de hojas individuales)
@@ -793,7 +914,14 @@ processedLogs.forEach(day => {
     let estadoRaw;
     if (manualOverride) {
         estadoRaw = String(manualOverride).toUpperCase().trim();
-    } else if (turnoValor && !tieneNumeros && !["NORMAL", "DIURNO", "NOCTURNO", "TURNO", ""].includes(turnoValor)) {
+    } else if (
+        turnoValor.includes("FESTIVO") || 
+        turnoValor.includes("LNR EMPRESA") || 
+        turnoValor.includes("TERMINACION DE CONTRATO") || 
+        turnoValor.includes("TERMINACIÓN DE CONTRATO") || 
+        turnoValor.includes("TERMINACION") ||
+        (turnoValor && !tieneNumeros && !["NORMAL", "DIURNO", "NOCTURNO", "TURNO", ""].includes(turnoValor))
+    ) {
         // 2. Prioridad Secundaria: La novedad programada en el horario semanal (direct pass-through)
         estadoRaw = turnoValor;
     } else {
@@ -939,13 +1067,30 @@ processedLogs.forEach(day => {
       const extFestivasParaCalculo = getValExactoInput('extras_festivas', finalExtFesDiu + finalExtFesNoc);
 
       // Mapeo Estricto de Novedades (Auditoría de Liquidación)
+      // Conteo directo de novedades desde el horario / turnos de los días procesados
+      let autoDiasFestivo = 0;
+      let autoDiasLnrEmpresa = 0;
+      let autoDiasTerminacion = 0;
+
+      processedLogs.forEach(day => {
+          const t = String(day.turno || day.estado || "").toUpperCase().trim();
+          if (t.includes("FESTIVO")) autoDiasFestivo++;
+          if (t.includes("LNR EMPRESA")) autoDiasLnrEmpresa++;
+          if (t.includes("TERMINACION DE CONTRATO") || t.includes("TERMINACIÓN DE CONTRATO") || t.includes("TERMINACION")) autoDiasTerminacion++;
+      });
+
       const getNoveltyCount = (conditionFn) => {
-          const key = Object.keys(novedadesResumen).find(conditionFn);
-          return key ? novedadesResumen[key]?.length : 0;
+          let count = 0;
+          Object.keys(novedadesResumen).forEach(key => {
+              if (conditionFn(key)) {
+                  count += (novedadesResumen[key]?.length || 0);
+              }
+          });
+          return count;
       };
 
       // Paso A (Lectura Reactiva): Lee los días de ausencias obligando al sistema a mirar primero el override manual
-      const getAbsenceDays = (fieldKey, noveltyCondition) => {
+      const getAbsenceDays = (fieldKey, noveltyCondition, directCount = 0) => {
           const overrideVal = overrides[`${cedula}_${fieldKey}`];
           if (overrideVal !== undefined && overrideVal !== '' && overrideVal !== null) {
               const num = Number(overrideVal);
@@ -953,6 +1098,7 @@ processedLogs.forEach(day => {
           }
           const noveltyCount = getNoveltyCount(noveltyCondition);
           if (noveltyCount > 0) return noveltyCount;
+          if (directCount > 0) return directCount;
           return parseLocalNumber(Number(emp[fieldKey] || 0));
       };
 
@@ -963,9 +1109,9 @@ processedLogs.forEach(day => {
       const dias_incap_at = getAbsenceDays('dias_incap_at', k => k === 'INCAPACIDAD AT' || k === 'INCAPACIDAD ACCIDENTE LABORAL');
       const dias_calamidad = getAbsenceDays('dias_calamidad', k => k === 'CALAMIDAD');
       const dias_sancion = getAbsenceDays('dias_sancion', k => k === 'SANCION' || k === 'SANCIONADO');
-      const dias_festivo = getAbsenceDays('dias_festivo', k => k === 'FESTIVO');
-      const dias_lnr_empresa = getAbsenceDays('dias_lnr_empresa', k => k === 'LNR EMPRESA');
-      const dias_terminacion = getAbsenceDays('dias_terminacion', k => k === 'TERMINACION DE CONTRATO' || k === 'TERMINACION' || k === 'TERMINACIÓN DE CONTRATO');
+      const dias_festivo = getAbsenceDays('dias_festivo', k => k.includes('FESTIVO'), autoDiasFestivo);
+      const dias_lnr_empresa = getAbsenceDays('dias_lnr_empresa', k => k.includes('LNR EMPRESA'), autoDiasLnrEmpresa);
+      const dias_terminacion = getAbsenceDays('dias_terminacion', k => k.includes('TERMINACION DE CONTRATO') || k.includes('TERMINACIÓN DE CONTRATO') || k.includes('TERMINACION'), autoDiasTerminacion);
 
       // Paso B (Descuento de Días): Suma todas estas ausencias (totalAusencias) y calcula los días pagados reales
       const totalAusencias = (dias_vacaciones || 0) + 
@@ -1522,6 +1668,7 @@ processedLogs.forEach(day => {
         'dias_vacaciones', 'val_vacaciones', 'valor_vacaciones', 
         'dias_incapacidad', 'dias_lic_rem', 'val_lic_rem', 'dias_lic_norem', 'val_lic_norem', 
         'dias_incap_at', 'val_incap_at', 'dias_calamidad', 'val_calamidad', 'dias_sancion', 'val_sancion',
+        'dias_festivo', 'dias_lnr_empresa', 'dias_terminacion',
         'fecha_inicio_vacaciones', 'fecha_fin_vacaciones'
       ];
       const deduccionesBase = ['salud', 'pension', 'solidaridad', 'prestamos', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'comfama', 'poliza_sura', 'optica', 'celular', 'retencion', 'otros_descuentos'];

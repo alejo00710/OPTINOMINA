@@ -518,11 +518,12 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   }
   
   // Col N: Hr. Pag = L3 - M3
-  const hrPag = hrLab > 0 ? hrLab - des : 0;
+  let hrPag = hrLab > 0 ? hrLab - des : 0;
   
   let targetOrd = 7.5;
-  if (turnoProgramadoDelDia) {
-      const uShift = String(turnoProgramadoDelDia).replace(/\s/g, '').toUpperCase();
+  const rawShiftForTarget = turnoProgramadoDelDia || day.turno || day.horario || "";
+  if (rawShiftForTarget) {
+      const uShift = String(rawShiftForTarget).replace(/\s/g, '').toUpperCase();
       if (uShift.includes("7:30") && (uShift.includes("5PM") || uShift.includes("5:00PM") || uShift.includes("17:00"))) {
           targetOrd = 8.5;
       } else if (uShift.includes("7:30") && (uShift.includes("4PM") || uShift.includes("4:00PM") || uShift.includes("16:00"))) {
@@ -606,6 +607,52 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   }
   let finalExtDiu = overrides[`${prefix}_ext_diu`] !== undefined ? Number(overrides[`${prefix}_ext_diu`]) : ext_diurna;
 
+  // Interceptor específico turno 12 horas nocturno (6PM A 6AM) para priorizar recargo nocturno
+  const uShift = String(turnoProgramadoDelDia || day.turno || day.horario || "").replace(/\s/g, '').toUpperCase();
+  if (uShift.includes("6PMA6AM")) {
+      // Si el total de extras es 3.5 (11 horas pagadas - 7.5 ordinarias)
+      if ((ext_diurna + ext_nocturna) === 3.5 || (finalExtDiu + finalExtNoc) === 3.5) {
+          ext_diurna = 0.5;
+          ext_nocturna = 3.0;
+          if (overrides[`${prefix}_ext_diu`] === undefined) {
+              finalExtDiu = 0.5;
+          }
+          if (overrides[`${prefix}_ext_noc`] === undefined) {
+              finalExtNoc = 3.0;
+          }
+      }
+  }
+
+  // Interceptor Novedad DEBE: Inyectar horas ordinarias negativas basadas en el turno programado
+  const overrideStatus = overrides && prefix ? overrides[`${prefix}_novedad_status`] : undefined;
+  const estadoDia = String(overrideStatus || day.estado || day.novedad || "").toUpperCase().trim();
+  if (estadoDia === "DEBE") {
+      day.estado = "DEBE";
+      day.novedad = "DEBE";
+      hrPag = 0;
+      ext_diurna = 0;
+      ext_nocturna = 0;
+      finalExtDiu = 0;
+      finalExtNoc = 0;
+      fesDiu = 0;
+      fesNoc = 0;
+      extFesDiu = 0;
+      extFesNoc = 0;
+      netDiu = 0;
+      netNoc = 0;
+      llegadaTarde = 0;
+      llegadaTardeMin = 0;
+      if (uShift.includes("10PM") && uShift.includes("6AM")) {
+          ord_diurna = 0;
+          ord_nocturna = -targetOrd;
+      } else {
+          ord_diurna = -targetOrd;
+          ord_nocturna = 0;
+      }
+      finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : ord_diurna;
+      finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : ord_nocturna;
+  }
+
   const calcLlegadaTardeMin = smartShift.lateMinutes || 0;
   const calcLlegadaTarde = calcLlegadaTardeMin > 0 ? 1 : 0;
   
@@ -615,7 +662,7 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   // CORTACIRCUITOS (KILL SWITCH) PARA CÁLCULOS MATEMÁTICOS
   const faltaTurnoOficial = !hrEntPago || hrEntPago === "-" || !hrSalPago || hrSalPago === "-";
   
-  if (faltaTurnoOficial) {
+  if (faltaTurnoOficial && estadoDia !== "DEBE") {
       finalDiurnas = 0;
       finalNocturnas = 0;
       fesDiu = 0;
@@ -665,6 +712,25 @@ const fechaDia = day.fecha || day.date || day.dia || "Sin Fecha";
 console.log(`🔎 EMPLEADO: ${idEmpleado} | FECHA: ${fechaDia} | TURNO BRUTO:`, day.turno || day.horario || day.horario_id || "Ninguno", "| DATA COMPLETA:", day);
 // --- FIN NUEVO CHISMOSO ---
 // --- FIN INTERCEPTOR DEFINITIVO ---
+
+  if (estadoDia === "DEBE") {
+      hrPag = 0;
+      finalExtDiu = 0;
+      finalExtNoc = 0;
+      fesDiu = 0;
+      fesNoc = 0;
+      extFesDiu = 0;
+      extFesNoc = 0;
+      llegadaTarde = 0;
+      llegadaTardeMin = 0;
+      if (uShift.includes("10PM") && uShift.includes("6AM")) {
+          finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : 0;
+          finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : -targetOrd;
+      } else {
+          finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : -targetOrd;
+          finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : 0;
+      }
+  }
 
   return {
     ...day,

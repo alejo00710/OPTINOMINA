@@ -305,7 +305,14 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
 
       // Regla de Agrupamiento por Sesiones:
       // Si la diferencia entre la marca actual y la anterior es MAYOR a 7 horas, es un turno nuevo.
-      if (diffHours > 7) {
+      // Regla Estricta Turno Nocturno:
+      // Si la entrada fue en la tarde/noche (>= 16:00) y la marca actual es en la mañana (<= 12:00) del día siguiente
+      // (duración total <= 16 horas), pertenecen al mismo turno nocturno.
+      const firstH = parseInt(String(first.hora || "00:00").split(':')[0], 10);
+      const curH = parseInt(String(p.hora || "00:00").split(':')[0], 10);
+      const isNightShiftContinuation = (firstH >= 16 && curH <= 12 && totalHours <= 16 && totalHours > 0);
+
+      if ((diffHours > 7 && !isNightShiftContinuation) || totalHours > 16) {
         shifts.push([...currentShift]);
         currentShift = [p];
       } else {
@@ -323,7 +330,26 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
     if (shift.length === 0) return;
     
     // El "Día Lógico" del turno corresponde a su fecha de salida (última marca)
-    const shiftLogicalDate = shift[shift.length - 1].fecha; 
+    const firstPunch = shift[0];
+    const lastPunch = shift[shift.length - 1];
+    const firstHour = parseInt(String(firstPunch?.hora || "00:00").split(':')[0], 10);
+    const lastHour = parseInt(String(lastPunch?.hora || "00:00").split(':')[0], 10);
+
+    // REGLA UNIFICADA CORE BIOMÉTRICO:
+    // Ambos turnos (6PM A 6AM y 10PM A 6AM) con entrada en la tarde/noche (>= 16:00) y salida en la mañana (<= 12:00)
+    // SE ASIGNAN DIRECTAMENTE AL DÍA DE LA SALIDA (lastPunch.fecha / +1 día).
+    const esTurnoNocturnoCruzaDia = shift.length >= 2 && firstHour >= 16 && lastHour <= 12;
+    
+    let shiftLogicalDate;
+    let diaAsignado = 'entrada';
+    if (esTurnoNocturnoCruzaDia) {
+      shiftLogicalDate = lastPunch.fecha; // DÍA DE LA SALIDA
+      diaAsignado = 'salida';
+    } else {
+      shiftLogicalDate = firstPunch.fecha || lastPunch.fecha;
+      diaAsignado = 'entrada';
+    }
+ 
     
     if (!attendanceRows[shiftLogicalDate]) return;
 
@@ -459,12 +485,17 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
 
     attendanceRows[shiftLogicalDate] = {
       ...attendanceRows[shiftLogicalDate],
+      dia: shiftLogicalDate,
       hr_ent,
       hr_sal_desc1,
       hr_ent_desc1,
       hr_sal_desc2,
       hr_ent_desc2,
       hr_sal,
+      fecha_entrada: firstPunch?.fecha,
+      fecha_salida: lastPunch?.fecha,
+      dia_asignado: diaAsignado,
+      es_turno_nocturno: esTurnoNocturnoCruzaDia,
       estado: estadoFinal,
       novedad: novedadFinal
     };

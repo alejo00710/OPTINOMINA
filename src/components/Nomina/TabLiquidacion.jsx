@@ -8,15 +8,16 @@ const fmtCOP = (num) => {
 };
 
 const STATUS_OPTIONS = [
-  'Normal', 'LICENCIA NO REMUNERADA', 'LICENCIA REMUNERADA', 
+  'Normal', 'DEBE', 'LICENCIA NO REMUNERADA', 'LICENCIA REMUNERADA', 
   'SANCIONADO', 'CALAMIDAD', 'VACACIONES', 'INCAPACIDAD GENERAL', 
-  'INCAPACIDAD ACCIDENTE LABORAL', 'Votacion', 'Descanso', 
+  'INCAPACIDAD ACCIDENTE LABORAL', 'FESTIVO', 'LNR EMPRESA', 'TERMINACION DE CONTRATO', 'Votacion', 'Descanso', 
   'No marcacion', 'Novedad'
 ];
 
 const getStatusColor = (status) => {
   switch (status) {
     case "Normal": return "bg-green-100 text-green-800";
+    case "DEBE": return "bg-orange-100 text-orange-900 border-orange-300 font-bold";
     case "LICENCIA NO REMUNERADA": return "bg-gray-100 text-gray-800";
     case "LICENCIA REMUNERADA": return "bg-gray-100 text-gray-800";
     case "SANCIONADO": return "bg-red-100 text-red-800";
@@ -24,6 +25,9 @@ const getStatusColor = (status) => {
     case "VACACIONES": return "bg-yellow-100 text-yellow-800";
     case "INCAPACIDAD GENERAL": return "bg-purple-100 text-purple-800";
     case "INCAPACIDAD ACCIDENTE LABORAL": return "bg-rose-100 text-rose-800";
+    case "FESTIVO": return "bg-indigo-100 text-indigo-800";
+    case "LNR EMPRESA": return "bg-purple-100 text-purple-800";
+    case "TERMINACION DE CONTRATO": return "bg-rose-100 text-rose-800";
     case "Votacion": return "bg-cyan-100 text-cyan-800";
     case "Descanso": return "bg-blue-100 text-blue-800";
     case "No marcacion": return "bg-slate-200 text-slate-800";
@@ -35,6 +39,7 @@ const getStatusColor = (status) => {
 const getRowColor = (status) => {
   switch (status) {
     case "Normal": return "hover:bg-slate-50 transition-colors";
+    case "DEBE": return "bg-orange-50/70 hover:bg-orange-100/70 transition-colors";
     case "LICENCIA NO REMUNERADA": return "bg-gray-100 hover:bg-gray-200 transition-colors";
     case "LICENCIA REMUNERADA": return "bg-gray-100 hover:bg-gray-200 transition-colors";
     case "SANCIONADO": return "bg-red-100 hover:bg-red-200 transition-colors";
@@ -42,6 +47,9 @@ const getRowColor = (status) => {
     case "VACACIONES": return "bg-yellow-100 hover:bg-yellow-200 transition-colors";
     case "INCAPACIDAD GENERAL": return "bg-purple-100 hover:bg-purple-200 transition-colors";
     case "INCAPACIDAD ACCIDENTE LABORAL": return "bg-rose-100 hover:bg-rose-200 transition-colors";
+    case "FESTIVO": return "bg-indigo-50/50 hover:bg-indigo-100/50 transition-colors";
+    case "LNR EMPRESA": return "bg-purple-50/50 hover:bg-purple-100/50 transition-colors";
+    case "TERMINACION DE CONTRATO": return "bg-rose-50/50 hover:bg-rose-100/50 transition-colors";
     case "Votacion": return "bg-cyan-100 hover:bg-cyan-200 transition-colors";
     case "Descanso": return "bg-blue-100 hover:bg-blue-200 transition-colors";
     case "No marcacion": return "bg-slate-200 hover:bg-slate-300 transition-colors";
@@ -358,6 +366,10 @@ export default function TabLiquidacion({
   if (statusVal === 'Incapacidad Accidente laboral') statusVal = 'INCAPACIDAD ACCIDENTE LABORAL';
   if (statusVal === 'Licencia remunerada') statusVal = 'LICENCIA REMUNERADA';
   if (statusVal === 'Licencia no remunerada') statusVal = 'LICENCIA NO REMUNERADA';
+  if (statusVal === 'Festivo') statusVal = 'FESTIVO';
+  if (statusVal === 'Lnr Empresa') statusVal = 'LNR EMPRESA';
+  if (statusVal === 'Terminacion De Contrato' || statusVal === 'TERMINACIÓN DE CONTRATO' || statusVal === 'TERMINACION') statusVal = 'TERMINACION DE CONTRATO';
+  if (statusVal === 'Debe') statusVal = 'DEBE';
 
   const entValue = overrides[`${prefix}_hr_ent`] !== undefined ? overrides[`${prefix}_hr_ent`] : (day.hr_ent || "");
   const salValue = overrides[`${prefix}_hr_sal`] !== undefined ? overrides[`${prefix}_hr_sal`] : (day.hr_sal || "");
