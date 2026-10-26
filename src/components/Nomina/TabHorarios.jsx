@@ -26,7 +26,7 @@ const CeldaTurno = ({ valor, onChange, getTurnColor }) => {
         title={valor || "Escribir o seleccionar turno"}
       />
       <datalist id="opciones-turnos">
-        {oficiales.map(opc => (
+        {((valor && !oficiales.includes(valor)) ? [valor, ...oficiales] : oficiales).map(opc => (
           <option key={opc} value={opc} />
         ))}
       </datalist>

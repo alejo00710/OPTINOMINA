@@ -17,7 +17,7 @@ import FormulaEditorModal from "@/components/Nomina/FormulaEditorModal";
 import { NOMINA_DATE_RANGE_KEY, loadPersistedDateRange, savePersistedDateRange, PLANILLA_COLUMNS, DAILY_COLUMNS, LIQUIDATION_CONCEPTS, DEFAULT_FORMULAS, SMLV, AUX_TRANSPORTE, MINIMO_DIARIO_INCAPACIDAD, evaluateFormula, DIVISOR_RECARGOS_NOCTURNOS, DIVISOR_HORAS_EXTRAS, FACTOR_RECARGO_NOCTURNO, FACTOR_EXTRA_DIURNA, FACTOR_EXTRA_NOCTURNA, FACTOR_EXTRA_FESTIVA, FACTOR_EXTRA_FESTIVA_NOCTURNA, HORA_INICIO_DIURNA, HORA_FIN_DIURNA } from "@/utils/constants";
 import { timeStrToDecimal, decimalToTimeStr, diffTimeStr, getDecimalHours, getHourDist, fmtCOP, fmtDec, parseLocalNumber, calculateDailyRecord } from "@/utils/mathNomina";
 import { supabase, savePayrollToCloud, loadPayrollFromCloud, loadEmployeesFromCloud, uploadEmployeesBulk, loadWeeklySchedulesFromCloud } from "@/utils/supabase";
-import { detectShiftTemplate, emptyAttendanceDay, cleanWorkerPunches, parseBiometricCSV, findEmployeeMatch } from "@/utils/biometricCore";
+import { detectShiftTemplate, emptyAttendanceDay, cleanWorkerPunches, parseBiometricCSV, findEmployeeMatch, normalizeZkShift } from "@/utils/biometricCore";
 
 const safeParseNumber = (val) => {
   if (val === undefined || val === null || val === '') return 0;
@@ -257,9 +257,31 @@ export default function NominaPage() {
   const [activeFormulas, setActiveFormulas] = useState(DEFAULT_FORMULAS);
 
   useEffect(() => {
-    const savedFormulas = localStorage.getItem('optinomina_global_formulas_v5');
-    if (savedFormulas) {
-      setActiveFormulas({ ...DEFAULT_FORMULAS, ...JSON.parse(savedFormulas) });
+    try {
+      const savedFormulas = localStorage.getItem('optinomina_global_formulas_v5');
+      if (savedFormulas) {
+        const parsed = JSON.parse(savedFormulas);
+        let updated = { ...DEFAULT_FORMULAS, ...parsed };
+        let modified = false;
+
+        // Inyección segura: si tiene guardado un "0" estricto en estas fórmulas,
+        // actualiza el estado en la configuración sin alterar attendanceLogs ni base de datos
+        if (String(parsed.val_lic_norem || '').trim() === '0') {
+          updated.val_lic_norem = DEFAULT_FORMULAS.val_lic_norem;
+          modified = true;
+        }
+        if (String(parsed.val_sancion || '').trim() === '0') {
+          updated.val_sancion = DEFAULT_FORMULAS.val_sancion;
+          modified = true;
+        }
+
+        setActiveFormulas(updated);
+        if (modified) {
+          localStorage.setItem('optinomina_global_formulas_v5', JSON.stringify(updated));
+        }
+      }
+    } catch (e) {
+      console.warn("Error leyendo fórmulas guardadas:", e);
     }
   }, []);
 
@@ -853,14 +875,20 @@ export default function NominaPage() {
          const esNocturnoAyer = uPrev.includes("10PMA6AM") || uPrev.includes("6PMA6AM");
          const esNocturnoHoy = uCurr.includes("10PMA6AM") || uCurr.includes("6PMA6AM");
 
-         let turnoProgramadoDelDia = turnoDiaActual;
+         let rawTurnoProgramado = turnoDiaActual;
          if (esNocturnoAyer) {
-             turnoProgramadoDelDia = turnoDiaAnterior;
+             rawTurnoProgramado = turnoDiaAnterior;
          } else if (esNocturnoHoy) {
-             turnoProgramadoDelDia = "";
+             rawTurnoProgramado = "";
          } else {
-             turnoProgramadoDelDia = turnoDiaActual;
+             rawTurnoProgramado = turnoDiaActual;
          }
+         let rawTurnoStr = typeof rawTurnoProgramado === 'object' ? (rawTurnoProgramado?.novedad || rawTurnoProgramado?.tipo || rawTurnoProgramado?.nombre || "") : (rawTurnoProgramado || existingLog?.turno || "");
+         const manualStatusOverride = overrides[`${cedula}_${date}_novedad_status`];
+         if (manualStatusOverride && (manualStatusOverride.includes(" A ") || /\d/.test(manualStatusOverride))) {
+             rawTurnoStr = manualStatusOverride;
+         }
+         const turnoProgramadoDelDia = normalizeZkShift(rawTurnoStr);
          const turnoStr = String(turnoProgramadoDelDia || "").toUpperCase().trim();
 
          // --- INYECCIÓN DE CONTEXTO PARA EL LIQUIDADOR ---
@@ -1172,12 +1200,14 @@ processedLogs.forEach(day => {
           resolveValue(overrides, `${cedula}_calamidad`, () => valorCalamidadCalc)
       );
 
-      // 4. Novedades al 0% (Licencias No Remuneradas y Sanciones):
+      // 4. Novedades (Licencias No Remuneradas y Sanciones):
+      const valorLicNoRemCalc = Math.round(valorDiaBase * (dias_lnr_empresa || dias_lic_norem || 0));
       const valorLicNoRem = resolveValue(overrides, `${cedula}_val_lic_norem`, () => 
-          resolveValue(overrides, `${cedula}_lic_norem`, () => 0)
+          resolveValue(overrides, `${cedula}_lic_norem`, () => valorLicNoRemCalc)
       );
+      const valorSancionCalc = Math.round(valorDiaBase * (dias_sancion || 0));
       const valorSancion = resolveValue(overrides, `${cedula}_val_sancion`, () => 
-          resolveValue(overrides, `${cedula}_sancion`, () => 0)
+          resolveValue(overrides, `${cedula}_sancion`, () => valorSancionCalc)
       );
 
       // MOTOR MATEMÁTICO EN CASCADA

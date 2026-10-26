@@ -2,19 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/utils/supabase';
 import { Info, Printer } from 'lucide-react';
 import { isFestivoColombia } from '@/utils/festivosColombia';
+import { normalizeZkShift } from '@/utils/biometricCore';
 
 const fmtCOP = (num) => {
   return new Intl.NumberFormat('es-CO').format(num || 0);
 };
 
+export const OFFICIAL_SHIFTS = [
+  '6AM A 2PM', '2PM A 10PM', '10PM A 6AM', '6AM A 6PM', '6PM A 6AM', 
+  '7:30AM A 5PM', '7:30AM A 4PM', '7AM A 4PM'
+];
+
 const STATUS_OPTIONS = [
-  'Normal', 'DEBE', 'LICENCIA NO REMUNERADA', 'LICENCIA REMUNERADA', 
+  'Normal', 
+  ...OFFICIAL_SHIFTS,
+  'DEBE', 'LICENCIA NO REMUNERADA', 'LICENCIA REMUNERADA', 
   'SANCIONADO', 'CALAMIDAD', 'VACACIONES', 'INCAPACIDAD GENERAL', 
   'INCAPACIDAD ACCIDENTE LABORAL', 'FESTIVO', 'LNR EMPRESA', 'TERMINACION DE CONTRATO', 'Votacion', 'Descanso', 
   'No marcacion', 'Novedad'
 ];
 
 const getStatusColor = (status) => {
+  if (OFFICIAL_SHIFTS.includes(status)) {
+    return "bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold";
+  }
   switch (status) {
     case "Normal": return "bg-green-100 text-green-800";
     case "DEBE": return "bg-orange-100 text-orange-900 border-orange-300 font-bold";
@@ -32,7 +43,7 @@ const getStatusColor = (status) => {
     case "Descanso": return "bg-blue-100 text-blue-800";
     case "No marcacion": return "bg-slate-200 text-slate-800";
     case "Novedad": return "bg-orange-100 text-orange-800";
-    default: return "bg-gray-50 text-gray-600";
+    default: return "bg-amber-100 text-amber-900 border border-amber-300 font-bold";
   }
 };
 
@@ -375,23 +386,32 @@ export default function TabLiquidacion({
   const salValue = overrides[`${prefix}_hr_sal`] !== undefined ? overrides[`${prefix}_hr_sal`] : (day.hr_sal || "");
   
   // REGLA ESTRICTA (IGNORAR BD): J y K solo muestran el cálculo dinámico del motor.
-  const pagoEntValue = day.hr_ent_pago || "";
-  const pagoSalValue = day.hr_sal_pago || "";
+  const overridePagoEnt = overrides[`${prefix}_hr_ent_pago`];
+  const overridePagoSal = overrides[`${prefix}_hr_sal_pago`];
+  const pagoEntValue = (overridePagoEnt !== undefined && overridePagoEnt !== "") ? overridePagoEnt : (day.hr_ent_pago || "");
+  const pagoSalValue = (overridePagoSal !== undefined && overridePagoSal !== "") ? overridePagoSal : (day.hr_sal_pago || "");
 
   return (
                             <tr key={displayDate} className={`${getRowColor(statusVal)} ${isDiaDescanso ? 'bg-red-50/60 border-l-4 border-red-300' : ''}`}>
                                <td className="px-2 py-2 whitespace-nowrap flex items-center gap-1">
                                   <span className="text-slate-400">{dayName}</span> 
                                   {displayDate}
-                                  <select 
-                                     value={statusVal} 
-                                     onChange={(e) => handleCellEdit(`${prefix}_novedad_status`, e.target.value)} 
-                                     className={`ml-1 appearance-none rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider outline-none cursor-pointer text-center ${getStatusColor(statusVal)} hover:opacity-80`}
-                                  >
-                                     {STATUS_OPTIONS.map(opt => (
-                                       <option key={opt} value={opt}>{opt}</option>
-                                     ))}
-                                  </select>
+                                  {(() => {
+                                     const currentSelectOptions = (statusVal && !STATUS_OPTIONS.includes(statusVal))
+                                       ? [statusVal, ...STATUS_OPTIONS]
+                                       : STATUS_OPTIONS;
+                                     return (
+                                        <select 
+                                           value={statusVal} 
+                                           onChange={(e) => handleCellEdit(`${prefix}_novedad_status`, e.target.value)} 
+                                           className={`ml-1 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider outline-none cursor-pointer text-center ${getStatusColor(statusVal)} hover:opacity-80`}
+                                        >
+                                           {currentSelectOptions.map(opt => (
+                                             <option key={opt} value={opt}>{opt}</option>
+                                           ))}
+                                        </select>
+                                     );
+                                  })()}
                                </td>
                                <td className="px-1 py-1 relative group min-w-[70px]">
                                   {day.estado !== 'DESCANSO' && (!entValue || entValue === '--:--' || entValue === '-') && day.officialIn && day.officialIn !== '-' ? (
@@ -439,64 +459,72 @@ export default function TabLiquidacion({
                                <td className="px-2 py-2 text-center text-slate-400 font-mono">{day.total_desc2 && day.total_desc2 !== "NaN" ? day.total_desc2 : "00:00"}</td>
                                
                                 {/* Pago Entrada/Salida */}
-                               <td className="px-1 py-1 relative group min-w-[70px]">
-                                  {(() => {
-                                     const turnoPuro = day.turnoPuroDelJSON || "";
-                                     if (turnoPuro && !/\d/.test(turnoPuro)) {
-                                         return <input type="text" value={turnoPuro} readOnly className="relative w-full bg-transparent text-center font-bold text-[9px] outline-none text-purple-600 px-1" />;
-                                     }
-                                     if (turnoPuro && turnoPuro.includes(" A ")) {
-                                         const partJ = turnoPuro.split(" A ")[0];
-                                         return <input type="text" value={partJ} readOnly className="relative w-full bg-transparent text-center font-bold text-[10px] outline-none text-purple-600" />;
-                                     }
-                                     return (
-                                        <>
-                                            {day.estado !== 'DESCANSO' && (!pagoEntValue || pagoEntValue === '--:--' || pagoEntValue === '-') && day.officialIn && day.officialIn !== '-' ? (
-                                                <>
-                                                    <div className="absolute inset-0 flex items-center justify-center text-slate-300 font-mono text-xs pointer-events-none pr-4">
-                                                        {day.officialIn}
-                                                    </div>
-                                                    <button 
-                                                        className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-emerald-500 opacity-0 group-hover:opacity-100 transition-all z-20"
-                                                        onClick={() => handleCellEdit(`${prefix}_hr_ent_pago`, day.officialIn)}
-                                                        title="Autocompletar oficial"
-                                                    >✨</button>
-                                                </>
-                                            ) : null}
-                                            <input type="time" value={pagoEntValue === '-' ? '' : pagoEntValue} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_pago`, e.target.value)} className={`relative w-full bg-transparent text-center font-mono outline-none focus:ring-1 focus:bg-slate-50 rounded pr-4 z-10 ${(!pagoEntValue || pagoEntValue === '--:--' || pagoEntValue === '-') ? 'text-transparent focus:text-purple-600' : 'text-purple-600'}`} />
-                                        </>
-                                     );
-                                  })()}
-                               </td>
-                               <td className="px-1 py-1 relative group min-w-[70px]">
-                                  {(() => {
-                                     const turnoPuro = day.turnoPuroDelJSON || "";
-                                     if (turnoPuro && !/\d/.test(turnoPuro)) {
-                                         return <input type="text" value="-" readOnly className="relative w-full bg-transparent text-center font-bold text-slate-400 outline-none" />;
-                                     }
-                                     if (turnoPuro && turnoPuro.includes(" A ")) {
-                                         const partK = turnoPuro.split(" A ")[1];
-                                         return <input type="text" value={partK} readOnly className="relative w-full bg-transparent text-center font-bold text-[10px] outline-none text-purple-600" />;
-                                     }
-                                     return (
-                                        <>
-                                            {day.estado !== 'DESCANSO' && (!pagoSalValue || pagoSalValue === '--:--' || pagoSalValue === '-') && day.officialOut && day.officialOut !== '-' ? (
-                                                <>
-                                                    <div className="absolute inset-0 flex items-center justify-center text-slate-300 font-mono text-xs pointer-events-none pr-4">
-                                                        {day.officialOut}
-                                                    </div>
-                                                    <button 
-                                                        className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-emerald-500 opacity-0 group-hover:opacity-100 transition-all z-20"
-                                                        onClick={() => handleCellEdit(`${prefix}_hr_sal_pago`, day.officialOut)}
-                                                        title="Autocompletar oficial"
-                                                    >✨</button>
-                                                </>
-                                            ) : null}
-                                            <input type="time" value={pagoSalValue === '-' ? '' : pagoSalValue} onChange={(e) => handleCellEdit(`${prefix}_hr_sal_pago`, e.target.value)} className={`relative w-full bg-transparent text-center font-mono outline-none focus:ring-1 focus:bg-slate-50 rounded pr-4 z-10 ${(!pagoSalValue || pagoSalValue === '--:--' || pagoSalValue === '-') ? 'text-transparent focus:text-purple-600' : 'text-purple-600'}`} />
-                                        </>
-                                     );
-                                  })()}
-                               </td>
+                                <td className="px-1 py-1 relative group min-w-[70px]">
+                                   {(() => {
+                                      const turnoPuro = normalizeZkShift(day.turnoPuroDelJSON || day.turno || "");
+                                      const hasOverride = overridePagoEnt !== undefined && overridePagoEnt !== "";
+                                      if (!hasOverride && turnoPuro && !/\d/.test(turnoPuro)) {
+                                          return <input type="text" value={turnoPuro} onChange={(e) => handleCellEdit(`${prefix}_hr_ent_pago`, e.target.value)} className="relative w-full bg-transparent text-center font-bold text-[9px] outline-none focus:ring-1 focus:bg-slate-50 rounded text-purple-600 px-1" />;
+                                      }
+                                      const partJ = (turnoPuro && turnoPuro.includes(" A ")) ? turnoPuro.split(" A ")[0] : "";
+                                      const displayVal = hasOverride ? overridePagoEnt : (pagoEntValue || partJ || "");
+                                      return (
+                                         <>
+                                             {day.estado !== 'DESCANSO' && (!displayVal || displayVal === '--:--' || displayVal === '-') && day.officialIn && day.officialIn !== '-' ? (
+                                                 <>
+                                                     <div className="absolute inset-0 flex items-center justify-center text-slate-300 font-mono text-xs pointer-events-none pr-4">
+                                                         {day.officialIn}
+                                                     </div>
+                                                     <button 
+                                                         className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-emerald-500 opacity-0 group-hover:opacity-100 transition-all z-20"
+                                                         onClick={() => handleCellEdit(`${prefix}_hr_ent_pago`, day.officialIn)}
+                                                         title="Autocompletar oficial"
+                                                     >✨</button>
+                                                 </>
+                                             ) : null}
+                                             <input 
+                                                type="text" 
+                                                value={displayVal === '-' ? '' : displayVal} 
+                                                onChange={(e) => handleCellEdit(`${prefix}_hr_ent_pago`, e.target.value)} 
+                                                className="relative w-full bg-transparent text-center font-mono outline-none focus:ring-1 focus:bg-slate-50 rounded pr-4 z-10 font-bold text-[10px] text-purple-600" 
+                                             />
+                                         </>
+                                      );
+                                   })()}
+                                </td>
+                                <td className="px-1 py-1 relative group min-w-[70px]">
+                                   {(() => {
+                                      const turnoPuro = normalizeZkShift(day.turnoPuroDelJSON || day.turno || "");
+                                      const hasOverride = overridePagoSal !== undefined && overridePagoSal !== "";
+                                      if (!hasOverride && turnoPuro && !/\d/.test(turnoPuro)) {
+                                          return <input type="text" value="-" onChange={(e) => handleCellEdit(`${prefix}_hr_sal_pago`, e.target.value)} className="relative w-full bg-transparent text-center font-bold text-slate-400 outline-none focus:ring-1 focus:bg-slate-50 rounded" />;
+                                      }
+                                      const partK = (turnoPuro && turnoPuro.includes(" A ")) ? turnoPuro.split(" A ")[1] : "";
+                                      const displayVal = hasOverride ? overridePagoSal : (pagoSalValue || partK || "");
+                                      return (
+                                         <>
+                                             {day.estado !== 'DESCANSO' && (!displayVal || displayVal === '--:--' || displayVal === '-') && day.officialOut && day.officialOut !== '-' ? (
+                                                 <>
+                                                     <div className="absolute inset-0 flex items-center justify-center text-slate-300 font-mono text-xs pointer-events-none pr-4">
+                                                         {day.officialOut}
+                                                     </div>
+                                                     <button 
+                                                         className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-emerald-500 opacity-0 group-hover:opacity-100 transition-all z-20"
+                                                         onClick={() => handleCellEdit(`${prefix}_hr_sal_pago`, day.officialOut)}
+                                                         title="Autocompletar oficial"
+                                                     >✨</button>
+                                                 </>
+                                             ) : null}
+                                             <input 
+                                                type="text" 
+                                                value={displayVal === '-' ? '' : displayVal} 
+                                                onChange={(e) => handleCellEdit(`${prefix}_hr_sal_pago`, e.target.value)} 
+                                                className="relative w-full bg-transparent text-center font-mono outline-none focus:ring-1 focus:bg-slate-50 rounded pr-4 z-10 font-bold text-[10px] text-purple-600" 
+                                             />
+                                         </>
+                                      );
+                                   })()}
+                                </td>
 
                                <td className="px-1 py-1">
                                   <GridInput globalValue={overrides[`${prefix}_hr_lab`]} fallback={day.hr_lab || 0} onSave={(val) => handleCellEdit(`${prefix}_hr_lab`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-50 rounded text-slate-500" />

@@ -2,6 +2,47 @@ import Papa from "papaparse";
 import { timeStrToDecimal, decimalToTimeStr } from "./mathNomina";
 import { getTemplatesForCategory } from "./constants";
 
+export const normalizeZkShift = (rawShift) => {
+  if (!rawShift || typeof rawShift !== "string") return rawShift || "";
+  let s = String(rawShift).trim();
+  if (!s) return "";
+  if (!/\d/.test(s)) return s.toUpperCase().trim();
+  let lower = s.toLowerCase();
+  lower = lower.replace(/a\s*\.?\s*m\s*\.?/g, "am");
+  lower = lower.replace(/p\s*\.?\s*m\s*\.?/g, "pm");
+  lower = lower.replace(/\s+(a|al|-|\/)\s+/g, " A ");
+  const cleanSingleTime = (tStr) => {
+    let t = tStr.trim();
+    const m = t.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+    if (!m) return t.toUpperCase();
+    let hours = parseInt(m[1], 10);
+    let mins = m[2] ? m[2] : "00";
+    let meridiem = m[3] ? m[3].toUpperCase() : "";
+    if (!meridiem) {
+      if (hours >= 12) {
+        meridiem = "PM";
+        if (hours > 12) hours -= 12;
+      } else {
+        meridiem = "AM";
+        if (hours === 0) hours = 12;
+      }
+    } else {
+      if (hours === 0 && meridiem === "AM") hours = 12;
+    }
+    let timeFormatted = mins === "00" ? String(hours) : `${hours}:${mins}`;
+    return `${timeFormatted}${meridiem}`;
+  };
+  if (lower.includes(" A ")) {
+    const parts = lower.split(" A ");
+    return `${cleanSingleTime(parts[0])} A ${cleanSingleTime(parts[1])}`.toUpperCase();
+  }
+  const doubleMatch = lower.match(/^(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:-|a|\/)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)$/i);
+  if (doubleMatch) {
+    return `${cleanSingleTime(doubleMatch[1])} A ${cleanSingleTime(doubleMatch[2])}`.toUpperCase();
+  }
+  return cleanSingleTime(lower).toUpperCase();
+};
+
 export const detectShiftTemplate = (hrEnt, hrSal, durationHrs, category = "OTROS") => {
   const ent = timeStrToDecimal(hrEnt);
   let sal = timeStrToDecimal(hrSal);
@@ -163,6 +204,8 @@ export async function parseBiometricCSV(file, startDate, endDate, nominaRows = [
             let nombre = getVal(["Nombres", "nombre", "name"]);
             let fecha = getVal(["Fecha", "date"]);
             let hora = getVal(["Hora", "time"]);
+            let rawTurno = getVal(["Horario", "Turno", "Timetable", "Shift", "Schedule", "Tiempo"]);
+            let turno = rawTurno ? normalizeZkShift(rawTurno) : "";
 
             if (!cedula || !nombre || !fecha || !hora) return;
 
@@ -222,6 +265,7 @@ export async function parseBiometricCSV(file, startDate, endDate, nominaRows = [
                 nombre,
                 fecha: parsedFecha,
                 hora: parsedHora,
+                turno,
                 timestamp
               });
             }
@@ -236,6 +280,7 @@ export async function parseBiometricCSV(file, startDate, endDate, nominaRows = [
                     nombre: n,
                     fecha: null,
                     hora: null,
+                    turno: "",
                     timestamp: null
                  });
              }
@@ -497,7 +542,8 @@ export const cleanWorkerPunches = (employeePunches, startDate, endDate) => {
       dia_asignado: diaAsignado,
       es_turno_nocturno: esTurnoNocturnoCruzaDia,
       estado: estadoFinal,
-      novedad: novedadFinal
+      novedad: novedadFinal,
+      turno: normalizeZkShift(shift[0]?.turno || lastPunch?.turno || attendanceRows[shiftLogicalDate]?.turno || "")
     };
   });
 

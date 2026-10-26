@@ -14,6 +14,18 @@ export const timeStrToDecimal = (t) => {
   const m = parseInt(parts[1], 10) || 0;
   return h + m / 60;
 };
+export const parseTimeToHHMM = (val) => {
+  if (!val || val === '-' || val === '--:--') return val || "";
+  const s = String(val).trim();
+  const m = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+  if (!m) return s;
+  let h = parseInt(m[1], 10);
+  const min = m[2] ? m[2] : "00";
+  const mer = m[3] ? m[3].toUpperCase() : "";
+  if (mer === "PM" && h < 12) h += 12;
+  if (mer === "AM" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${min}`;
+};
 export const decimalToTimeStr = (dec) => {
   if (dec === null || dec === undefined || isNaN(dec)) return "00:00";
   let val = parseFloat(dec);
@@ -486,8 +498,13 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   const baseHrSal = smartShift.officialOut;
 
   // REGLA ESTRICTA (IGNORAR BD): J y K solo deben venir del motor dinámico, nunca de la BD.
-  const hrEntPago = baseHrEnt;
-  const hrSalPago = baseHrSal;
+  const overrideHrEntPago = overrides[`${prefix}_hr_ent_pago`];
+  const overrideHrSalPago = overrides[`${prefix}_hr_sal_pago`];
+  const rawHrEntPago = (overrideHrEntPago !== undefined && overrideHrEntPago !== "") ? overrideHrEntPago : baseHrEnt;
+  const rawHrSalPago = (overrideHrSalPago !== undefined && overrideHrSalPago !== "") ? overrideHrSalPago : baseHrSal;
+  const hrEntPago = parseTimeToHHMM(rawHrEntPago);
+  const hrSalPago = parseTimeToHHMM(rawHrSalPago);
+
   // Col L: Hr. Lab = Diferencia entre J y K
   let hrLab = 0;
   if (isTime(hrEntPago) && isTime(hrSalPago)) {
