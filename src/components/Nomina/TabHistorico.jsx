@@ -69,11 +69,13 @@ export default function TabHistorico() {
         { header: 'Pensión', key: 'pension', width: 15 },
         { header: 'Solidaridad', key: 'solidaridad', width: 15 },
         { header: 'Préstamos', key: 'prestamos', width: 15 },
+        { header: 'Saldo Préstamo', key: 'saldo_prestamo', width: 15 },
         { header: 'Póliza Bolívar', key: 'poliza_bolivar', width: 15 },
         { header: 'Póliza Plenitud', key: 'poliza_plenitud', width: 15 },
         { header: 'Comfama', key: 'comfama', width: 15 },
         { header: 'Póliza Sura', key: 'poliza_sura', width: 15 },
         { header: 'Óptica', key: 'optica', width: 15 },
+        { header: 'Saldo Óptica', key: 'saldo_optica', width: 15 },
         { header: 'Celular', key: 'celular', width: 15 },
         { header: 'Retención', key: 'retencion', width: 15 },
         { header: 'Otros Descuentos', key: 'otros_descuentos', width: 18 },
@@ -92,11 +94,13 @@ export default function TabHistorico() {
           pension: emp.pension || 0,
           solidaridad: emp.solidaridad || 0,
           prestamos: emp.prestamos || 0,
+          saldo_prestamo: emp.saldo_prestamo || 0,
           poliza_bolivar: emp.poliza_bolivar || 0,
           poliza_plenitud: emp.poliza_plenitud || 0,
           comfama: emp.comfama || emp.libranza_comfama || 0,
           poliza_sura: emp.poliza_sura || 0,
           optica: emp.optica || 0,
+          saldo_optica: emp.saldo_optica || 0,
           celular: emp.celular || 0,
           retencion: emp.retencion || 0,
           otros_descuentos: emp.otros_descuentos || 0,
@@ -139,6 +143,8 @@ export default function TabHistorico() {
           ['Extras Diurnas', safeNumber(emp.extras_diurnas)],
           ['Extras Nocturnas', safeNumber(emp.extras_nocturnas)],
           ['Extras Festivas', safeNumber(emp.extras_festivas)],
+          ['Extras Festivas Nocturnas', safeNumber(emp.extras_festivas_nocturnas ?? emp.ext_fes_noc ?? emp.horas_ext_fest_noc)],
+          ['Horas que Debe (Banco de Horas)', safeNumber(emp.horas_debe_acumuladas ?? (emp.horas_debe ? -emp.horas_debe : 0))],
           ['Días Incapacidad', safeNumber(emp.dias_incapacidad)],
           ['', ''],
           ['--- DEVENGADOS ---', ''],
@@ -148,6 +154,7 @@ export default function TabHistorico() {
           ['Valor Extras Diurnas', safeNumber(emp.val_extras_diurnas)],
           ['Valor Extras Nocturnas', safeNumber(emp.val_extras_nocturnas)],
           ['Valor Extras Festivas', safeNumber(emp.val_extras_festivas)],
+          ['Valor Extras Festivas Nocturnas', safeNumber(emp.val_extras_festivas_nocturnas ?? emp.val_ext_fes_noc ?? emp.extras_festivas_nocturnas_val)],
           ['Comisiones', safeNumber(emp.comisiones)],
           ['Incapacidades (Valor)', safeNumber(emp.incapacidad)],
           ['', ''],
@@ -156,11 +163,13 @@ export default function TabHistorico() {
           ['Pensión', safeNumber(emp.pension)],
           ['Solidaridad', safeNumber(emp.solidaridad)],
           ['Préstamos', safeNumber(emp.prestamos)],
+          ['Saldo Préstamo', safeNumber(emp.saldo_prestamo)],
           ['Póliza Bolívar', safeNumber(emp.poliza_bolivar)],
           ['Póliza Plenitud', safeNumber(emp.poliza_plenitud)],
           ['Comfama', safeNumber(emp.comfama || emp.libranza_comfama)],
           ['Póliza Sura', safeNumber(emp.poliza_sura)],
           ['Óptica', safeNumber(emp.optica)],
+          ['Saldo Óptica', safeNumber(emp.saldo_optica)],
           ['Celular', safeNumber(emp.celular)],
           ['Retención', safeNumber(emp.retencion)],
           ['Otros Descuentos', safeNumber(emp.otros_descuentos)],
@@ -212,6 +221,9 @@ export default function TabHistorico() {
                 <th className="py-4 px-6">Fecha de Cierre</th>
                 <th className="py-4 px-6">Identificador</th>
                 <th className="py-4 px-6">Rango de Quincena</th>
+                <th className="py-4 px-6 text-center">Banco de Horas</th>
+                <th className="py-4 px-6 text-center">Saldo Préstamos</th>
+                <th className="py-4 px-6 text-center">Saldo Óptica</th>
                 <th className="py-4 px-6 text-center">Acciones</th>
               </tr>
             </thead>
@@ -221,6 +233,50 @@ export default function TabHistorico() {
                   <td className="py-3 px-6 text-sm text-slate-600 font-medium">{formatDate(item.created_at)}</td>
                   <td className="py-3 px-6 text-sm text-slate-900 font-bold">{item.identificador || 'Nómina General'}</td>
                   <td className="py-3 px-6 text-sm text-slate-600">{item.rango_fechas || '-'}</td>
+                    <td className="py-3 px-6 text-center">
+                      {(() => {
+                        const emps = item.payload_json?.nomina_calculada || [];
+                        const empsConDeuda = emps.filter(e => Number(e.horas_debe_acumuladas ?? (e.balance_extras_st < 0 ? e.balance_extras_st : 0) ?? 0) < 0);
+                        const tieneDeuda = empsConDeuda.length > 0;
+                        const totalDeudaHoras = empsConDeuda.reduce((acc, e) => acc + Math.abs(Number(e.horas_debe_acumuladas ?? e.balance_extras_st ?? 0)), 0);
+
+                        return tieneDeuda ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-700 border border-rose-200">
+                            ⚠️ DEBE ({totalDeudaHoras.toFixed(1)}h / {empsConDeuda.length} trab.)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            ✓ Al día
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td className="py-3 px-6 text-center">
+                      {(() => {
+                        const emps = item.payload_json?.nomina_calculada || [];
+                        const totalPrestamo = emps.reduce((acc, e) => acc + Number(e.saldo_prestamo || 0), 0);
+                        return totalPrestamo > 0 ? (
+                          <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded-full font-bold">
+                            ${new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(totalPrestamo)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400 font-medium">$0</span>
+                        );
+                      })()}
+                    </td>
+                    <td className="py-3 px-6 text-center">
+                      {(() => {
+                        const emps = item.payload_json?.nomina_calculada || [];
+                        const totalOptica = emps.reduce((acc, e) => acc + Number(e.saldo_optica || 0), 0);
+                        return totalOptica > 0 ? (
+                          <span className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-full font-bold">
+                            ${new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(totalOptica)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400 font-medium">$0</span>
+                        );
+                      })()}
+                    </td>
                   <td className="py-3 px-6 text-center">
                     <button
                       onClick={() => exportarNominaAExcel(item)}

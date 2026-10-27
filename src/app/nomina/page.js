@@ -310,6 +310,7 @@ export default function NominaPage() {
   // Toast notification state
   const [toast, setToast] = useState(null);
   const [saveStatus, setSaveStatus] = useState('idle');
+  const [isGeneratingHistory, setIsGeneratingHistory] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
 
   // File upload state
@@ -364,10 +365,8 @@ export default function NominaPage() {
   }, [isDetailsModalOpen, detailsWorkerName]);
 
 
-  const handleCerrarQuincena = async () => {
-    if (!window.confirm("🚨 ALERTA: Estás a punto de CERRAR esta quincena. Se guardará una fotografía estática e inmutable de todos los cálculos. ¿Estás absolutamente seguro de continuar?")) return;
-    
-    setIsClosing(true);
+  const handleGenerarHistorico = async () => {
+    setIsGeneratingHistory(true);
     try {
       const rawRows = typeof filteredPayrollData !== 'undefined' ? filteredPayrollData : nominaRows;
       
@@ -386,8 +385,23 @@ export default function NominaPage() {
         const devoluciones = Number(emp.devoluciones || emp.masterRow?.devoluciones || 0);
         const motivo_devoluciones = emp.motivo_devoluciones || emp.masterRow?.motivo_devoluciones || '';
 
+        // Sistema dinámico de Arrastre de Deuda / Banco de Horas
+        // Regla: Suma total de tiempo = (extras_diurnas + extras_nocturnas) + horas_debe_acumuladas (deuda en negativo)
+        const extDiu = Number(emp.extras_diurnas || 0);
+        const extNoc = Number(emp.extras_nocturnas || 0);
+        const balanceExtrasST = extDiu + extNoc;
+        
+        const prevDeuda = Number(emp.horas_debe_acumuladas ?? emp.masterRow?.horas_debe_acumuladas ?? 0);
+        const prevDeudaNeg = prevDeuda < 0 ? prevDeuda : 0;
+        const sumaTotalTiempo = balanceExtrasST + prevDeudaNeg;
+        
+        // Si Total de tiempo < 0: conserva el saldo negativo para la próxima quincena.
+        // Si Total de tiempo >= 0: la deuda acumulada para la próxima quincena pasa a ser 0.
+        const nuevaDeudaAcumulada = sumaTotalTiempo < 0 ? parseFloat(sumaTotalTiempo.toFixed(2)) : 0;
+
         return {
           ...emp,
+          horas_debe_acumuladas: nuevaDeudaAcumulada,
           intereses_cesantias,
           devoluciones,
           motivo_devoluciones,
@@ -449,33 +463,84 @@ export default function NominaPage() {
         console.warn("Aviso: No se pudo guardar copia en historial legado:", errLegado);
       }
 
-      // 3.2 Amortización de deudas a largo plazo (Préstamos y Óptica)
+      setToast({
+        message: "¡Histórico guardado correctamente! Fotografía de la quincena archivada.",
+        type: "success"
+      });
+      setTimeout(() => setToast(null), 4000);
+      
+    } catch (error) {
+      console.error("Error al guardar histórico:", error);
+      setToast({
+        message: "Error crítico al guardar el histórico.",
+        type: "error"
+      });
+      setTimeout(() => setToast(null), 4000);
+    } finally {
+      setIsGeneratingHistory(false);
+    }
+  };
+
+  const handleLimpiarYActualizarSaldos = async () => {
+    if (!window.confirm("🚨 ALERTA: Estás a punto de CERRAR Y LIMPIAR la quincena actual.\n\nEsta acción ejecutará:\n1. Amortización de cuotas de Préstamos y Óptica en la ficha de cada empleado.\n2. Actualización de horas que debe acumuladas en el directorio.\n3. Limpieza de marcas del biométrico, overrides y fechas en pantalla.\n\n¿Estás absolutamente seguro de continuar?")) return;
+    
+    setIsClosing(true);
+    try {
+      const rawRows = typeof filteredPayrollData !== 'undefined' ? filteredPayrollData : nominaRows;
+      
+      const nominaParaGuardar = rawRows.map(emp => {
+        const optica = Number(emp.optica || emp.masterRow?.optica || emp.cuota_optica || emp.masterRow?.cuota_optica || 0);
+        const extDiu = Number(emp.extras_diurnas || 0);
+        const extNoc = Number(emp.extras_nocturnas || 0);
+        const balanceExtrasST = extDiu + extNoc;
+        
+        const prevDeuda = Number(emp.horas_debe_acumuladas ?? emp.masterRow?.horas_debe_acumuladas ?? 0);
+        const prevDeudaNeg = prevDeuda < 0 ? prevDeuda : 0;
+        const sumaTotalTiempo = balanceExtrasST + prevDeudaNeg;
+        
+        const nuevaDeudaAcumulada = sumaTotalTiempo < 0 ? parseFloat(sumaTotalTiempo.toFixed(2)) : 0;
+
+        return {
+          ...emp,
+          horas_debe_acumuladas: nuevaDeudaAcumulada,
+          optica
+        };
+      });
+
+      // 1. Amortización de deudas a largo plazo (Préstamos y Óptica) y actualización de horas_debe_acumuladas
       const debtPromises = nominaParaGuardar.map(async (empRow) => {
           const deduccionPrestamo = Number(empRow.prestamos) || 0;
           const deduccionOptica = Number(empRow.optica) || 0;
           
-          if (deduccionPrestamo > 0 || deduccionOptica > 0) {
+          const updateFields = {};
+          if (deduccionPrestamo > 0) {
               const currentPrestamoTotal = Number(empRow.masterRow?.prestamo_total || empRow.prestamo_total || 0);
+              updateFields.prestamo_total = Math.max(0, currentPrestamoTotal - deduccionPrestamo);
+          }
+          if (deduccionOptica > 0) {
               const currentOpticaTotal = Number(empRow.masterRow?.optica_total || empRow.optica_total || 0);
-              
-              const newPrestamoTotal = Math.max(0, currentPrestamoTotal - deduccionPrestamo);
-              const newOpticaTotal = Math.max(0, currentOpticaTotal - deduccionOptica);
-              
-              return supabase
-                  .from('optimoldes_employees')
-                  .update({ 
-                      prestamo_total: newPrestamoTotal,
-                      optica_total: newOpticaTotal
-                  })
-                  .eq('cedula', empRow.cedula);
+              updateFields.optica_total = Math.max(0, currentOpticaTotal - deduccionOptica);
+          }
+          if (empRow.horas_debe_acumuladas !== undefined) {
+              updateFields.horas_debe_acumuladas = empRow.horas_debe_acumuladas;
+          }
+          
+          if (Object.keys(updateFields).length > 0) {
+              try {
+                  return await supabase
+                      .from('optimoldes_employees')
+                      .update(updateFields)
+                      .eq('cedula', empRow.cedula);
+              } catch (e) {
+                  console.warn("Aviso actualizando deuda de horas o préstamos:", empRow.cedula, e);
+              }
           }
           return Promise.resolve();
       });
 
       await Promise.all(debtPromises);
 
-
-      // 4. Limpiar estado activo si el proceso fue exitoso
+      // 2. Limpiar estado activo si el proceso fue exitoso
       const todayReset = new Date().toISOString().split('T')[0];
       await supabase
         .from('optimoldes_payroll')
@@ -494,16 +559,22 @@ export default function NominaPage() {
       setOverrides({});
       setAttendanceLogs({});
 
+      try {
+        await reloadEmployees();
+      } catch (errReload) {
+        console.warn("No se pudo recargar empleados:", errReload);
+      }
+
       setToast({
-        message: "¡Nómina cerrada exitosamente! Fotografía guardada.",
+        message: "¡Quincena cerrada, saldos actualizados y pantalla limpiada exitosamente!",
         type: "success"
       });
       setTimeout(() => setToast(null), 4000);
       
     } catch (error) {
-      console.error("Error al cerrar quincena en V2:", error);
+      console.error("Error al limpiar y actualizar saldos:", error);
       setToast({
-        message: "Error crítico al guardar el histórico.",
+        message: "Error crítico al actualizar saldos o limpiar quincena.",
         type: "error"
       });
       setTimeout(() => setToast(null), 4000);
@@ -531,7 +602,8 @@ export default function NominaPage() {
           banco: emp.banco || "",
           tipo_vinculacion: emp.tipo_vinculacion || "",
           salario: Number(emp.salario_base || emp.salario || 0),
-          rodamiento: Number(emp.rodamiento || 0),
+          horas_debe_acumuladas: Number(emp.horas_debe_acumuladas || 0),
+          rodamiento: Number(emp.rodamiento || emp.valor_rodamiento || emp.aux_rodamiento || 0),
           comisiones: 0,
           poliza_bolivar: Number(emp.poliza_bolivar || 0),
           poliza_sura: Number(emp.poliza_sura || 0),
@@ -1047,11 +1119,48 @@ processedLogs.forEach(day => {
       }
 
 
-      const extraDiurnaNeto = finalExtDiu - horasDebe > 0 ? finalExtDiu - horasDebe : 0;
-      const horasPendientes = extraDiurnaNeto + finalExtNoc + finalExtFesDiu + finalExtFesNoc;
+      // CRUCE DE CUENTAS (BALANZA DE EXTRAS VS DEUDA)
+      // Recuperar deuda previa del colaborador
+      const deudaAcumuladaEmp = Number(emp.horas_debe_acumuladas ?? emp.masterRow?.horas_debe_acumuladas ?? 0);
+      const deudaPreviaNeg = deudaAcumuladaEmp < 0 ? deudaAcumuladaEmp : (horasDebe > 0 ? -horasDebe : 0);
+
+      // Suma total de tiempo = (extras_diurnas + extras_nocturnas) + horas_debe_acumuladas (la deuda viene en negativo)
+      const balanceExtrasST = finalExtDiu + finalExtNoc;
+      const sumaTotalTiempoExtras = balanceExtrasST + deudaPreviaNeg;
+
+      let extDiuLiquidar = 0;
+      let extNocLiquidar = 0;
+      let nuevaDeudaAcumulada = 0;
+
+      if (sumaTotalTiempoExtras <= 0) {
+          // Si Total de tiempo <= 0 (ganan las negativas):
+          // El valor a pagar en pesos por extras debe ser forzosamente $0.
+          // El saldo negativo de horas se conserva para guardarlo en la base de datos al cerrar la quincena.
+          extDiuLiquidar = 0;
+          extNocLiquidar = 0;
+          nuevaDeudaAcumulada = parseFloat(sumaTotalTiempoExtras.toFixed(2));
+      } else {
+          // Si Total de tiempo > 0 (ganan las positivas):
+          // El empleado pagó su deuda con tiempo extra y le sobró tiempo a favor.
+          // Se debe liquidar en dinero solo ese tiempo restante a favor, y la deuda acumulada para la próxima quincena pasa a ser 0.
+          const absDeuda = Math.abs(deudaPreviaNeg);
+          if (absDeuda > 0) {
+              const compDiu = Math.min(Math.max(0, finalExtDiu), absDeuda);
+              extDiuLiquidar = Math.max(0, finalExtDiu - compDiu);
+              const deudaRestante = absDeuda - compDiu;
+              const compNoc = Math.min(Math.max(0, finalExtNoc), deudaRestante);
+              extNocLiquidar = Math.max(0, finalExtNoc - compNoc);
+          } else {
+              extDiuLiquidar = Math.max(0, finalExtDiu);
+              extNocLiquidar = Math.max(0, finalExtNoc);
+          }
+          nuevaDeudaAcumulada = 0;
+      }
+
+      const extraDiurnaNeto = extDiuLiquidar;
+      const horasPendientes = finalExtDiu + finalExtNoc + finalExtFesDiu + finalExtFesNoc;
       
       const comisiones = resolveValue(overrides, `${cedula}_comisiones`, () => 0);
-      const rodamiento = resolveValue(overrides, `${cedula}_rodamiento`, () => parseLocalNumber(Number(emp.rodamiento || 0)));
       const interesesCesantias = resolveValue(overrides, `${cedula}_intereses_cesantias`, () => parseLocalNumber(emp.intereses_cesantias));
       const devoluciones = resolveValue(overrides, `${cedula}_devoluciones`, () => parseLocalNumber(emp.devoluciones));
       const motivoDevoluciones = overrides[`${cedula}_motivo_devoluciones`] !== undefined ? overrides[`${cedula}_motivo_devoluciones`] : (emp.motivo_devoluciones || '');
@@ -1092,7 +1201,8 @@ processedLogs.forEach(day => {
       const hrsNocturnasParaCalculo = getValExactoInput('horas_nocturnas', finalNocturnas);
       const extDiurnasParaCalculo = getValExactoInput('extras_diurnas', extraDiurnaNeto);
       const extNocturnasParaCalculo = getValExactoInput('extras_nocturnas', finalExtNoc);
-      const extFestivasParaCalculo = getValExactoInput('extras_festivas', finalExtFesDiu + finalExtFesNoc);
+      const extFestivasParaCalculo = getValExactoInput('extras_festivas', finalExtFesDiu);
+      const extFestivasNocturnasParaCalculo = getValExactoInput('extras_festivas_nocturnas', finalExtFesNoc);
 
       // Mapeo Estricto de Novedades (Auditoría de Liquidación)
       // Conteo directo de novedades desde el horario / turnos de los días procesados
@@ -1169,6 +1279,11 @@ processedLogs.forEach(day => {
       );
       const transporte = resolveValue(overrides, `${cedula}_transporte`, () => transporteCalc);
 
+      // Auxilio de Rodamiento Proporcional a días trabajados/pagados (Extra-legal)
+      const baseRodamientoQuincenal = Number(emp.rodamiento || emp.valor_rodamiento || emp.aux_rodamiento || emp.masterRow?.rodamiento || 0);
+      const valorRodamientoFinal = Math.round((baseRodamientoQuincenal / 15) * diasPagados);
+      const rodamiento = resolveValue(overrides, `${cedula}_rodamiento`, () => valorRodamientoFinal);
+
       // 2. Ajuste de Incapacidad General (66.66% con piso legal):
       const porcentajeIncap = (salarioBase <= globalSmmlv) ? 1 : 0.666667;
       const valorDiaIncap = Math.max(globalSmmlv / 30, valorDiaBase * porcentajeIncap);
@@ -1209,6 +1324,20 @@ processedLogs.forEach(day => {
       const valorSancion = resolveValue(overrides, `${cedula}_val_sancion`, () => 
           resolveValue(overrides, `${cedula}_sancion`, () => valorSancionCalc)
       );
+      // Valores monetarios de extras con cruce de cuentas estricto
+      const valorExtDiuCalc = Math.round((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_DIURNA * extDiuLiquidar);
+      const valorExtDiu = resolveValue(overrides, `${cedula}_val_extras_diurnas`, () => 
+          resolveValue(overrides, `${cedula}_valor_extras_diurnas`, () => valorExtDiuCalc)
+      );
+      const valorExtNocCalc = Math.round((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_NOCTURNA * extNocLiquidar);
+      const valorExtNoc = resolveValue(overrides, `${cedula}_val_extras_nocturnas`, () => 
+          resolveValue(overrides, `${cedula}_valor_extras_nocturnas`, () => valorExtNocCalc)
+      );
+      const valorExtFesNocCalc = Math.round((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_FESTIVA_NOCTURNA * extFestivasNocturnasParaCalculo);
+      const valorExtFesNoc = resolveValue(overrides, `${cedula}_val_extras_festivas_nocturnas`, () => 
+          resolveValue(overrides, `${cedula}_valor_extras_festivas_nocturnas`, () => 
+          resolveValue(overrides, `${cedula}_val_ext_fes_noc`, () => valorExtFesNocCalc))
+      );
 
       // MOTOR MATEMÁTICO EN CASCADA
       let variables = {
@@ -1241,9 +1370,18 @@ processedLogs.forEach(day => {
         val_sancion: valorSancion,
         horas_diurnas: hrsDiurnasParaCalculo,
         horas_nocturnas: hrsNocturnasParaCalculo,
-        extras_diurnas: extDiurnasParaCalculo,
-        extras_nocturnas: extNocturnasParaCalculo,
-        extras_festivas: extFestivasParaCalculo, // Agrupadas en una bolsa
+        extras_diurnas: extDiuLiquidar,
+        extras_nocturnas: extNocLiquidar,
+        val_extras_diurnas: valorExtDiu,
+        val_extras_nocturnas: valorExtNoc,
+        extras_festivas: extFestivasParaCalculo,
+        extras_festivas_nocturnas: extFestivasNocturnasParaCalculo,
+        ext_fes_noc: extFestivasNocturnasParaCalculo,
+        horas_ext_fest_noc: extFestivasNocturnasParaCalculo,
+        val_extras_festivas_nocturnas: valorExtFesNoc,
+        extras_festivas_nocturnas_val: valorExtFesNoc,
+        val_ext_fes_noc: valorExtFesNoc,
+        valor_ext_fes_noc: valorExtFesNoc,
         comisiones: comisiones,
         rodamiento: rodamiento,
         intereses_cesantias: interesesCesantias,
@@ -1287,7 +1425,9 @@ processedLogs.forEach(day => {
           'val_lic_norem': ['valor_lic_norem', 'lic_norem'],
           'val_incap_at': ['valor_incap_at', 'incap_at'],
           'val_calamidad': ['valor_calamidad', 'calamidad'],
-          'val_sancion': ['valor_sancion', 'sancion']
+          'val_sancion': ['valor_sancion', 'sancion'],
+          'val_extras_festivas_nocturnas': ['extras_festivas_nocturnas_val', 'val_ext_fes_noc', 'valor_ext_fes_noc'],
+          'extras_festivas_nocturnas': ['ext_fes_noc', 'horas_ext_fest_noc']
         };
 
         // 1. REVISAR OVERRIDES PRIMERO
@@ -1341,7 +1481,7 @@ processedLogs.forEach(day => {
       };
 
       // FASE 1: Devengados Base
-      const fase1 = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento', 'intereses_cesantias', 'devoluciones', 'val_vacaciones', 'val_lic_rem', 'val_lic_norem', 'val_incap_at', 'val_calamidad', 'val_sancion'];
+      const fase1 = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'val_extras_festivas_nocturnas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento', 'intereses_cesantias', 'devoluciones', 'val_vacaciones', 'val_lic_rem', 'val_lic_norem', 'val_incap_at', 'val_calamidad', 'val_sancion'];
       // FASE 2: Suma de Devengados (SOLO LLAVES OFICIALES)
       const fase2 = ['total_devengados', 'ibc_seguridad_social', 'ibc_fsp'];
       // FASE 3: Deducciones Base
@@ -1365,6 +1505,7 @@ processedLogs.forEach(day => {
             + safeParseNumber(variables['val_extras_diurnas']) 
             + safeParseNumber(variables['val_extras_nocturnas']) 
             + safeParseNumber(variables['val_extras_festivas']) 
+            + safeParseNumber(variables['val_extras_festivas_nocturnas'])
             + safeParseNumber(variables['comisiones']) 
             + safeParseNumber(variables['transporte']) 
             + safeParseNumber(variables['rodamiento']) 
@@ -1413,6 +1554,7 @@ processedLogs.forEach(day => {
         ...emp,
         dias_pagados: diasPagados,
         horas_debe: horasDebe,
+        horas_debe_acumuladas: nuevaDeudaAcumulada,
         horas_pendientes: horasPendientes,
         horas_diurnas: finalDiurnas,
         horas_nocturnas: finalNocturnas,
@@ -1420,16 +1562,34 @@ processedLogs.forEach(day => {
         festivas_nocturnas: finalFesNoc,
         extras_diurnas: finalExtDiu,
         extras_nocturnas: finalExtNoc,
+        extras_diurnas_liquidadas: extDiuLiquidar,
+        extras_nocturnas_liquidadas: extNocLiquidar,
+        balance_extras_st: balanceExtrasST,
+        suma_total_tiempo_extras: sumaTotalTiempoExtras,
         extras_festivas: finalExtFesDiu,
-        extras_festivas_nocturnas: resolveValue(overrides, `${cedula}_val_extras_festivas_nocturnas`, () => 0),
+        extras_festivas_nocturnas: finalExtFesNoc,
+        ext_fes_noc: finalExtFesNoc,
+        horas_ext_fest_noc: finalExtFesNoc,
+        raw_sum_diurnas: sumDiurnas,
+        raw_sum_nocturnas: sumNocturnas,
+        raw_sum_ext_diu: sumExtDiu,
+        raw_sum_ext_noc: sumExtNoc,
+        raw_sum_ext_fes: sumExtFesDiu,
+        raw_sum_ext_fes_noc: sumExtFesNoc,
         sueldo: variables['sueldo'] || 0,
         recargo_nocturno: variables['recargo_nocturno'] || 0,
-        val_extras_diurnas: variables['val_extras_diurnas'] || 0,
-        val_extras_nocturnas: variables['val_extras_nocturnas'] || 0,
+        val_extras_diurnas: variables['val_extras_diurnas'] !== undefined ? variables['val_extras_diurnas'] : valorExtDiu,
+        val_extras_nocturnas: variables['val_extras_nocturnas'] !== undefined ? variables['val_extras_nocturnas'] : valorExtNoc,
         val_extras_festivas: variables['val_extras_festivas'] || 0,
+        val_extras_festivas_nocturnas: variables['val_extras_festivas_nocturnas'] || valorExtFesNoc || 0,
+        extras_festivas_nocturnas_val: variables['val_extras_festivas_nocturnas'] || valorExtFesNoc || 0,
+        val_ext_fes_noc: variables['val_extras_festivas_nocturnas'] || valorExtFesNoc || 0,
+        valor_ext_fes_noc: variables['val_extras_festivas_nocturnas'] || valorExtFesNoc || 0,
         comisiones: variables['comisiones'] || 0,
         transporte: variables['transporte'] || 0,
         rodamiento: variables['rodamiento'] || 0,
+        val_rodamiento: variables['rodamiento'] || 0,
+        rodamiento_pagado: variables['rodamiento'] || 0,
         intereses_cesantias: variables['intereses_cesantias'] || 0,
         devoluciones: variables['devoluciones'] || 0,
         motivo_devoluciones: variables['motivo_devoluciones'] || '',
@@ -1483,7 +1643,7 @@ processedLogs.forEach(day => {
         totalComidasMin: sumComidasMin,
         novedadesResumen: novedadesResumen,
         liquidation: {
-            total_extra_val: (variables['recargo_nocturno']||0) + (variables['val_extras_diurnas']||0) + (variables['val_extras_nocturnas']||0) + (variables['val_extras_festivas']||0) + resolveValue(overrides, `${cedula}_val_extras_festivas_nocturnas`, () => 0)
+            total_extra_val: (variables['recargo_nocturno']||0) + (variables['val_extras_diurnas']||0) + (variables['val_extras_nocturnas']||0) + (variables['val_extras_festivas']||0) + (variables['val_extras_festivas_nocturnas']||0)
         }
       };
 
@@ -1494,6 +1654,13 @@ processedLogs.forEach(day => {
           finalRow.extras_diurnas = 0;
           finalRow.extras_nocturnas = 0;
           finalRow.extras_festivas = 0;
+          finalRow.extras_festivas_nocturnas = 0;
+          finalRow.ext_fes_noc = 0;
+          finalRow.horas_ext_fest_noc = 0;
+          finalRow.val_extras_festivas_nocturnas = 0;
+          finalRow.extras_festivas_nocturnas_val = 0;
+          finalRow.val_ext_fes_noc = 0;
+          finalRow.valor_ext_fes_noc = 0;
           finalRow.dias_pagados = diasPagados;
       }
 
@@ -1651,6 +1818,31 @@ processedLogs.forEach(day => {
 
     return t;
   }, [filteredPayrollData]);
+
+  // Resumen de Dispersión por Banco
+  const bankSummary = useMemo(() => {
+    const summary = {};
+    let grandTotal = 0;
+    let totalEmployees = 0;
+
+    payrollData.forEach(row => {
+      const rawBank = row.banco || row.entidad_bancaria || row.masterRow?.banco || "";
+      const bankClean = String(rawBank).trim().toUpperCase();
+      const bankName = (bankClean && bankClean !== "-" && bankClean !== "N/A") 
+        ? bankClean 
+        : "SIN BANCO ASIGNADO";
+      const netPay = Number(row.neto_pagar || row.total_neto || 0);
+      
+      if (!summary[bankName]) summary[bankName] = { count: 0, total: 0 };
+      summary[bankName].count += 1;
+      summary[bankName].total += netPay;
+      
+      grandTotal += netPay;
+      totalEmployees += 1;
+    });
+    
+    return { summary, grandTotal, totalEmployees };
+  }, [payrollData]);
 
   // Bank Summaries, guarded against NaN values
   const bankTotals = useMemo(() => {
@@ -2070,14 +2262,27 @@ const handleSaveToCloud = async () => {
           </button>
 
           <button
-            onClick={handleCerrarQuincena}
+            onClick={handleGenerarHistorico}
+            disabled={isGeneratingHistory || !filteredPayrollData || filteredPayrollData.length === 0}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-2
+              ${isGeneratingHistory 
+                ? "bg-slate-400 text-slate-200 cursor-not-allowed border border-slate-500" 
+                : "bg-blue-600 text-white hover:bg-blue-700 hover:shadow-blue-500/30 hover:shadow-lg active:scale-95 border border-blue-800"}`}
+            title="Guarda una fotografía inmutable en el historial sin borrar los datos actuales"
+          >
+            {isGeneratingHistory ? "⏳ Guardando..." : "💾 Generar Histórico"}
+          </button>
+
+          <button
+            onClick={handleLimpiarYActualizarSaldos}
             disabled={isClosing || !filteredPayrollData || filteredPayrollData.length === 0}
-            className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-2
+            className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-2
               ${isClosing 
                 ? "bg-slate-400 text-slate-200 cursor-not-allowed border border-slate-500" 
                 : "bg-red-600 text-white hover:bg-red-700 hover:shadow-red-500/30 hover:shadow-lg active:scale-95 border border-red-800"}`}
+            title="Aplica amortización de préstamos/óptica, actualiza deuda de horas y limpia la pantalla actual"
           >
-            {isClosing ? "⏳ Congelando..." : "🔒 Cerrar Quincena (Ultimátum)"}
+            {isClosing ? "⏳ Cerrando..." : "🔒 Cerrar y Limpiar Quincena"}
           </button>
           
           <button
@@ -2222,6 +2427,104 @@ const handleSaveToCloud = async () => {
              startDate={startDate}
              endDate={endDate}
           />
+
+          {/* --- RESUMEN DE DISPERSIÓN POR BANCO --- */}
+          <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200/80 shadow-sm mt-8 animate-stitch">
+             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 mb-6">
+                <div className="flex items-center gap-3">
+                   <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-black text-lg shadow-inner">
+                      🏦
+                   </div>
+                   <div>
+                      <h3 className="text-sm font-black text-slate-800 tracking-wider uppercase">
+                         RESUMEN DE DISPERSIÓN POR BANCO
+                      </h3>
+                      <p className="text-xs text-slate-400 font-semibold">
+                         Consolidado de dispersión quincenal por entidad bancaria
+                      </p>
+                   </div>
+                </div>
+                <div className="flex items-center gap-2">
+                   <span className="text-xs font-bold text-slate-500 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl">
+                      {Object.keys(bankSummary.summary).length} {Object.keys(bankSummary.summary).length === 1 ? 'Entidad' : 'Entidades'}
+                   </span>
+                </div>
+             </div>
+
+             <div className="overflow-x-auto custom-scrollbar">
+                <table className="w-full text-left border-collapse">
+                   <thead>
+                      <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/60">
+                         <th className="py-3 px-4">BANCO</th>
+                         <th className="py-3 px-4 text-center">N° EMPLEADOS</th>
+                         <th className="py-3 px-4 text-right">TOTAL A PAGAR</th>
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y divide-slate-100 text-sm font-semibold">
+                      {Object.entries(bankSummary.summary)
+                         .sort(([bankA, dataA], [bankB, dataB]) => {
+                            if (bankA === "SIN BANCO ASIGNADO") return 1;
+                            if (bankB === "SIN BANCO ASIGNADO") return -1;
+                            return dataB.total - dataA.total;
+                         })
+                         .map(([bankName, data]) => {
+                            const isUnassigned = bankName === "SIN BANCO ASIGNADO";
+                            return (
+                               <tr 
+                                  key={bankName}
+                                  className={`transition-colors ${
+                                     isUnassigned 
+                                        ? 'bg-rose-50/70 hover:bg-rose-100/70 text-rose-700' 
+                                        : 'hover:bg-slate-50/80 text-slate-700'
+                                  }`}
+                               >
+                                  <td className="py-3.5 px-4 flex items-center gap-2">
+                                     {isUnassigned ? (
+                                        <span className="text-rose-500 font-bold" title="Requiere asignar banco en el perfil">⚠️</span>
+                                     ) : (
+                                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                     )}
+                                     <span className={`font-black ${isUnassigned ? 'text-rose-700 font-bold' : 'text-slate-800'}`}>
+                                        {bankName}
+                                     </span>
+                                     {isUnassigned && (
+                                        <span className="text-[10px] bg-rose-100 text-rose-700 border border-rose-300 px-2 py-0.5 rounded-full font-bold ml-1">
+                                           Atención requerida
+                                        </span>
+                                     )}
+                                  </td>
+                                  <td className="py-3.5 px-4 text-center">
+                                     <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-black ${
+                                        isUnassigned ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
+                                     }`}>
+                                        {data.count}
+                                     </span>
+                                  </td>
+                                  <td className={`py-3.5 px-4 text-right font-black ${isUnassigned ? 'text-rose-700' : 'text-slate-900'}`}>
+                                     ${fmtCOP(data.total)}
+                                  </td>
+                               </tr>
+                            );
+                         })}
+                   </tbody>
+                   <tfoot className="border-t-2 border-slate-300 bg-slate-50/80">
+                      <tr>
+                         <td className="py-4 px-4 text-xs font-black uppercase tracking-widest text-slate-700">
+                            TOTAL GENERAL
+                         </td>
+                         <td className="py-4 px-4 text-center">
+                            <span className="inline-block px-3 py-1 rounded-xl bg-slate-200 text-slate-800 text-xs font-black">
+                               {bankSummary.totalEmployees}
+                            </span>
+                         </td>
+                         <td className="py-4 px-4 text-right text-base font-black text-emerald-600">
+                            ${fmtCOP(bankSummary.grandTotal)}
+                         </td>
+                      </tr>
+                   </tfoot>
+                </table>
+             </div>
+          </div>
 
           
 
@@ -2568,12 +2871,71 @@ const handleSaveToCloud = async () => {
                  }
              }
 
+             const getRawMotorSum = (colKey) => {
+                if (colKey === 'horas_diurnas') {
+                   if (workerData.raw_sum_diurnas !== undefined) return Number(workerData.raw_sum_diurnas) || 0;
+                   return (workerData.workerDays || []).reduce((acc, d) => acc + (Number(d.diurnas) || 0), 0);
+                }
+                if (colKey === 'horas_nocturnas') {
+                   if (workerData.raw_sum_nocturnas !== undefined) return Number(workerData.raw_sum_nocturnas) || 0;
+                   return (workerData.workerDays || []).reduce((acc, d) => acc + (Number(d.nocturnas) || 0), 0);
+                }
+                if (colKey === 'extras_diurnas') {
+                   if (workerData.raw_sum_ext_diu !== undefined) return Number(workerData.raw_sum_ext_diu) || 0;
+                   return (workerData.workerDays || []).reduce((acc, d) => acc + (Number(d.ext_diu) || 0), 0);
+                }
+                if (colKey === 'extras_nocturnas') {
+                   if (workerData.raw_sum_ext_noc !== undefined) return Number(workerData.raw_sum_ext_noc) || 0;
+                   return (workerData.workerDays || []).reduce((acc, d) => acc + (Number(d.ext_noc) || 0), 0);
+                }
+                if (colKey === 'extras_festivas') {
+                   if (workerData.raw_sum_ext_fes !== undefined) return Number(workerData.raw_sum_ext_fes) || 0;
+                   return (workerData.workerDays || []).reduce((acc, d) => acc + (Number(d.ext_fes_diu) || 0), 0);
+                }
+                return null;
+             };
+
+             const renderCardRevisor = (colKey, currentVal) => {
+                const rawVal = getRawMotorSum(colKey);
+                if (rawVal === null) return null;
+
+                const numCurrent = parseFloat(currentVal) || 0;
+                const isSynced = Math.abs(numCurrent - rawVal) < 0.05;
+
+                if (isSynced) {
+                   return (
+                      <span 
+                         className="text-emerald-500 font-bold ml-2 shrink-0 cursor-default select-none text-xs" 
+                         title="Sincronizado con el reloj"
+                      >
+                         ✓
+                      </span>
+                   );
+                }
+                return (
+                   <span 
+                      className="text-red-500 font-bold ml-2 shrink-0 cursor-default select-none text-xs" 
+                      title={`Valor editado manualmente (Difiere del reloj: ${rawVal.toFixed(1)}h)`}
+                   >
+                      ❌
+                   </span>
+                );
+             };
+
              const renderCard = (col) => {
                 const cKey = `${workerData.masterRow.cedula}_${col.key}`;
                 let val = overrides[cKey] !== undefined ? overrides[cKey] : (workerData[col.key] !== undefined ? workerData[col.key] : "");
                 
                 if (col.key === 'extras_diurnas') val = finalExtraDiurna;
                 if (col.key === 'extras_nocturnas') val = finalExtraNocturna;
+
+                // Candado estricto: Las tarjetas de VR. PAGAR de extras reflejan $0 si el balance general de extras es negativo
+                if ((col.key === 'val_extras_diurnas' || col.key === 'val_extras_nocturnas') && overrides[cKey] === undefined) {
+                    const totalTiempoST = Number(workerData.suma_total_tiempo_extras ?? (Number(workerData.extras_diurnas || 0) + Number(workerData.extras_nocturnas || 0) + (Number(workerData.horas_debe_acumuladas || 0) < 0 ? Number(workerData.horas_debe_acumuladas) : 0)));
+                    if (totalTiempoST <= 0) {
+                        val = 0;
+                    }
+                }
 
                 if (col.isCurrency && val !== "") val = Math.round(Number(val));
                 
@@ -2603,8 +2965,9 @@ const handleSaveToCloud = async () => {
                           <button onClick={() => handleOpenFormulaEditor(col.key)} className="hover:text-indigo-700 transition-colors p-1 rounded hover:bg-indigo-50" title="Editar Fórmula">⚙️</button>
                         </div>
                      )}
-                     <span className={`text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-emerald-600 transition-colors ${hasBadge ? 'pr-24' : ''} ${isWarningField ? 'text-red-500' : ''}`} title={col.label}>
-                       {col.label}
+                     <span className={`text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-emerald-600 transition-colors flex items-center ${hasBadge ? 'pr-24' : ''} ${isWarningField ? 'text-red-500' : ''}`} title={col.label}>
+                       <span className="truncate">{col.label}</span>
+                       {renderCardRevisor(col.key, val)}
                      </span>
                      <EditableCell
                         value={val}

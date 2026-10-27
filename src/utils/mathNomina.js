@@ -537,14 +537,16 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   // Col N: Hr. Pag = L3 - M3
   let hrPag = hrLab > 0 ? hrLab - des : 0;
   
-  let targetOrd = 7.5;
-  const rawShiftForTarget = turnoProgramadoDelDia || day.turno || day.horario || "";
-  if (rawShiftForTarget) {
-      const uShift = String(rawShiftForTarget).replace(/\s/g, '').toUpperCase();
-      if (uShift.includes("7:30") && (uShift.includes("5PM") || uShift.includes("5:00PM") || uShift.includes("17:00"))) {
-          targetOrd = 8.5;
-      } else if (uShift.includes("7:30") && (uShift.includes("4PM") || uShift.includes("4:00PM") || uShift.includes("16:00"))) {
+  let targetOrd = 7.5; // BASE POR DEFECTO PARA TODO EL PERSONAL
+  const uShift = String(turnoProgramadoDelDia || day.turnoPuroDelJSON || "").replace(/\s/g, '').toUpperCase();
+
+  if (uShift.includes("7:30")) {
+      const dateObj = new Date(day.dia + "T12:00:00");
+      const isFriday = dateObj.getDay() === 5;
+      if (isFriday || uShift.includes("4PM") || uShift.includes("16:00")) {
           targetOrd = 7.5;
+      } else {
+          targetOrd = 8.5; // Solo Lunes a Jueves si el turno empieza 7:30
       }
   }
 
@@ -590,22 +592,40 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   let extFesDiu = overrides[`${prefix}_ext_fes_diu`] !== undefined ? Number(overrides[`${prefix}_ext_fes_diu`]) : Number(day.ext_fes_diu || 0);
   let extFesNoc = overrides[`${prefix}_ext_fes_noc`] !== undefined ? Number(overrides[`${prefix}_ext_fes_noc`]) : Number(day.ext_fes_noc || 0);
 
-  // LOGICA ESTRICTA DE DISTRIBUCION (As requested by Management)
-  let real_diurnas = netDiu;
-  let real_nocturnas = netNoc;
-  let ord_nocturna = 0;
+  // Estado del Día / Override de Novedad
+  const overrideStatus = overrides && prefix ? overrides[`${prefix}_novedad_status`] : undefined;
+  const estadoDia = String(overrideStatus || day.estado || day.novedad || "").toUpperCase().trim();
+
+  // CORRECCIÓN DE LA DISTRIBUCIÓN DE HORAS (Cero Extras Negativas)
+  const hrPagDiurna = netDiu;
+  const hrPagNocturna = netNoc;
   let ord_diurna = 0;
-  
-  if (hrPag > 0 && !smartShift.isRestDay) {
-      if (real_diurnas === 0) {
-          ord_nocturna = targetOrd;
-          ord_diurna = 0;
-      } else if (real_nocturnas === 0) {
-          ord_diurna = targetOrd;
-          ord_nocturna = 0;
-      } else {
-          ord_nocturna = Math.min(targetOrd, real_nocturnas);
-          ord_diurna = targetOrd - ord_nocturna;
+  let ord_nocturna = 0;
+  let ext_diurna = 0;
+  let ext_nocturna = 0;
+
+  if (estadoDia !== "DEBE") {
+      if (hrPag > 0 && !smartShift.isRestDay) {
+          const isNightPriority = uShift.includes("6PMA6AM") || uShift.includes("10PMA6AM") || uShift.includes("NOCTURN");
+
+          if (isNightPriority) {
+              // PRIORIDAD NOCTURNA: Llenar el tope ordinario con horas nocturnas primero
+              ord_nocturna = Math.min(hrPagNocturna, targetOrd);
+              ext_nocturna = Math.max(0, hrPagNocturna - targetOrd);
+
+              // Lo que sobre de base (si no alcanzó con las nocturnas) se llena con diurnas
+              const ord_restante = Math.max(0, targetOrd - ord_nocturna);
+              ord_diurna = Math.min(hrPagDiurna, ord_restante);
+              ext_diurna = Math.max(0, hrPagDiurna - ord_diurna);
+          } else {
+              // PRIORIDAD DIURNA: Llenar el tope ordinario con horas diurnas primero (Ej. 2PM A 10PM)
+              ord_diurna = Math.min(hrPagDiurna, targetOrd);
+              ext_diurna = Math.max(0, hrPagDiurna - targetOrd);
+
+              const ord_restante = Math.max(0, targetOrd - ord_diurna);
+              ord_nocturna = Math.min(hrPagNocturna, ord_restante);
+              ext_nocturna = Math.max(0, hrPagNocturna - ord_nocturna);
+          }
       }
   }
 
@@ -613,19 +633,11 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   let finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : ord_nocturna;
   let finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : ord_diurna;
 
-  // 4. Calcula EXT.N (T) restando lo ordinario de lo real (SIN Math.max)
-  let ext_nocturna = (hrPag > 0 || overrides[`${prefix}_nocturnas`] !== undefined) ? (real_nocturnas - finalNocturnas) : 0;
+  // 4. Aplica overrides manuales a extras si existen
   finalExtNoc = overrides[`${prefix}_ext_noc`] !== undefined ? Number(overrides[`${prefix}_ext_noc`]) : ext_nocturna;
-
-  // 5. TRUCO DE ORO: EXT.D (S) como bolsa de balanceador absoluto
-  let ext_diurna = 0;
-  if (hrPag > 0 || overrides[`${prefix}_diurnas`] !== undefined) {
-      ext_diurna = hrPag - (finalDiurnas + finalNocturnas + fesDiu + fesNoc + finalExtNoc + extFesDiu + extFesNoc);
-  }
   let finalExtDiu = overrides[`${prefix}_ext_diu`] !== undefined ? Number(overrides[`${prefix}_ext_diu`]) : ext_diurna;
 
   // Interceptor específico turno 12 horas nocturno (6PM A 6AM) para priorizar recargo nocturno
-  const uShift = String(turnoProgramadoDelDia || day.turno || day.horario || "").replace(/\s/g, '').toUpperCase();
   if (uShift.includes("6PMA6AM")) {
       // Si el total de extras es 3.5 (11 horas pagadas - 7.5 ordinarias)
       if ((ext_diurna + ext_nocturna) === 3.5 || (finalExtDiu + finalExtNoc) === 3.5) {
@@ -641,8 +653,6 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
   }
 
   // Interceptor Novedad DEBE: Inyectar horas ordinarias negativas basadas en el turno programado
-  const overrideStatus = overrides && prefix ? overrides[`${prefix}_novedad_status`] : undefined;
-  const estadoDia = String(overrideStatus || day.estado || day.novedad || "").toUpperCase().trim();
   if (estadoDia === "DEBE") {
       day.estado = "DEBE";
       day.novedad = "DEBE";
@@ -657,8 +667,6 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
       extFesNoc = 0;
       netDiu = 0;
       netNoc = 0;
-      llegadaTarde = 0;
-      llegadaTardeMin = 0;
       if (uShift.includes("10PM") && uShift.includes("6AM")) {
           ord_diurna = 0;
           ord_nocturna = -targetOrd;

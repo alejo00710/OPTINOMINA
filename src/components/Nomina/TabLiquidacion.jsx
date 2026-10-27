@@ -141,42 +141,58 @@ export default function TabLiquidacion({
         return;
       }
       try {
-        const { data, error } = await supabase
+        // 1. Prioridad: Revisar si el trabajador ya tiene horas_debe_acumuladas en el estado actual
+        const currentDebt = Number(selectedWorkerData.horas_debe_acumuladas ?? selectedWorkerData.masterRow?.horas_debe_acumuladas ?? 0);
+        if (currentDebt < 0) {
+            setDeudaAnterior(currentDebt);
+            return;
+        }
+
+        // 2. Consultar historico_nominas_v2 (más reciente)
+        const { data: v2Data } = await supabase
+          .from('historico_nominas_v2')
+          .select('empleados_jsonb')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (v2Data && v2Data.empleados_jsonb) {
+            const pastWorker = v2Data.empleados_jsonb.find(w => String(w.cedula) === String(selectedWorkerData.cedula));
+            if (pastWorker) {
+                const pastDeuda = Number(pastWorker.horas_debe_acumuladas ?? pastWorker.balance_extras_st ?? (pastWorker.horas_pendientes < 0 ? pastWorker.horas_pendientes : 0) ?? 0);
+                if (pastDeuda < 0) {
+                    setDeudaAnterior(pastDeuda);
+                    return;
+                }
+            }
+        }
+
+        // 3. Fallback: historial_nominas (legado)
+        const { data } = await supabase
           .from('historial_nominas')
           .select('payload_json')
           .order('created_at', { ascending: false })
           .limit(1)
           .single();
-        
-        if (error) {
-            if (error.code !== 'PGRST116') console.error("Error fetching past nomina:", error);
-            return;
-        }
 
         if (data && data.payload_json && data.payload_json.nomina_calculada) {
             const pastWorker = data.payload_json.nomina_calculada.find(w => String(w.cedula) === String(selectedWorkerData.cedula));
-            if (pastWorker && pastWorker.horas_pendientes !== undefined) {
-                if (Number(pastWorker.horas_pendientes) < 0) {
-                    setDeudaAnterior(Number(pastWorker.horas_pendientes));
-                    // Auto-fill logic (if empty in overrides)
-                    if (overrides[`${selectedWorkerData.cedula}_horas_que_debe`] === undefined && (selectedWorkerData.horas_debe === undefined || selectedWorkerData.horas_debe === 0)) {
-                        handleCellEdit(`${selectedWorkerData.cedula}_horas_que_debe`, Math.abs(Number(pastWorker.horas_pendientes)));
-                    }
-                } else {
-                    setDeudaAnterior(0);
+            if (pastWorker) {
+                const pastDeuda = Number(pastWorker.horas_debe_acumuladas ?? pastWorker.balance_extras_st ?? (pastWorker.horas_pendientes < 0 ? pastWorker.horas_pendientes : 0) ?? 0);
+                if (pastDeuda < 0) {
+                    setDeudaAnterior(pastDeuda);
+                    return;
                 }
-            } else {
-                setDeudaAnterior(0);
             }
-        } else {
-            setDeudaAnterior(0);
         }
+        setDeudaAnterior(0);
       } catch (err) {
         console.error("Error in fetchDeudaAnterior:", err);
+        setDeudaAnterior(0);
       }
     }
     fetchDeudaAnterior();
-  }, [selectedWorkerData?.cedula]);
+  }, [selectedWorkerData?.cedula, selectedWorkerData?.horas_debe_acumuladas]);
 
   if (!selectedWorkerData) {
     const getTotal = (field) => {
@@ -280,6 +296,11 @@ export default function TabLiquidacion({
                    <span className="flex items-center gap-1 text-slate-400">&bull; {selectedWorkerData.cargo.toLowerCase()}</span>
                 </div>
              </div>
+                 {deudaAnterior < 0 && (
+                    <div className="mt-2.5 px-3.5 py-1.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-black w-fit flex items-center gap-1.5 shadow-sm">
+                       <span>⚠️ ADVERTENCIA: EL EMPLEADO DEBE {Math.abs(deudaAnterior).toFixed(1)} HORAS DE LA QUINCENA ANTERIOR</span>
+                    </div>
+                 )}
           </div>
        </div>
 
@@ -621,8 +642,8 @@ export default function TabLiquidacion({
                          const salarioBase = Number(overrides[`${selectedWorkerData.cedula}_salario_base`] !== undefined ? overrides[`${selectedWorkerData.cedula}_salario_base`] : (selectedWorkerData.masterRow?.salario_base || selectedWorkerData.salario_base || selectedWorkerData.salario || 0));
                          
                          const calcValor = (horas, porcentaje) => {
-                             const hrs = parseFloat(horas) || 0;
-                             if (hrs === 0) return 0;
+                              const hrs = parseFloat(horas) || 0;
+                              if (hrs <= 0) return 0;
                              return Math.round((salarioBase / 240) * (porcentaje / 100) * hrs);
                          };
                          
@@ -637,58 +658,120 @@ export default function TabLiquidacion({
                          const tFesDiu = safeHrs(getTotHr('fes_diu', selectedWorkerData.festivas_diurnas));
                          const tFesNoc = safeHrs(getTotHr('fes_noc', selectedWorkerData.festivas_nocturnas));
                          
-                         const baseExtraDiurna = safeHrs(selectedWorkerData.extras_diurnas);
-                         const horasExtraDiurnaReal = safeHrs(getTotHr('ext_diu', Math.max(0, baseExtraDiurna - horasDebe)));
-                         
-                         const totalExtraNoc = safeHrs(getTotHr('ext_noc', selectedWorkerData.extras_nocturnas));
+                         const baseExtraDiurna = Number(selectedWorkerData.extras_diurnas || 0);
+                          const totalExtraDiu = getTotHr('ext_diu', baseExtraDiurna);
+                          const totalExtraNoc = getTotHr('ext_noc', Number(selectedWorkerData.extras_nocturnas || 0));
+                          const horasExtraDiurnaReal = totalExtraDiu;
+                          const totalExtrasST = totalExtraDiu + totalExtraNoc;
                          const totalExtFesDiu = safeHrs(getTotHr('ext_fes_diu', selectedWorkerData.extras_festivas));
                          const totalExtFesNoc = safeHrs(getTotHr('ext_fes_noc', selectedWorkerData.extras_festivas_nocturnas));
                          
                          const horasPendientes = horasExtraDiurnaReal + totalExtraNoc + totalExtFesDiu + totalExtFesNoc;
                          
                          const getVr = (field, defaultVal, hrs) => {
-                             if (hrs === 0) return 0;
+                              if (hrs <= 0) return 0;
                              return overrides[`${selectedWorkerData.cedula}_vr_${field}`] !== undefined && overrides[`${selectedWorkerData.cedula}_vr_${field}`] !== "" ? Number(overrides[`${selectedWorkerData.cedula}_vr_${field}`]) : defaultVal;
                          };
                          
                          const calcVNocturnas = calcValor(tNocturnas, 35);
                          const vNocturnas = tNocturnas === 0 ? 0 : (overrides[`${selectedWorkerData.cedula}_recargo_nocturno`] !== undefined && overrides[`${selectedWorkerData.cedula}_recargo_nocturno`] !== "" ? Number(overrides[`${selectedWorkerData.cedula}_recargo_nocturno`]) : calcVNocturnas);
                          
-                         const vFesDiu = getVr('fes_diu', calcValor(tFesDiu, 75), tFesDiu);
-                         const vFesNoc = getVr('fes_noc', calcValor(tFesNoc, 210), tFesNoc);
-                         const vExtDiu = getVr('ext_diu', calcValor(horasExtraDiurnaReal, 150), horasExtraDiurnaReal);
-                         const vExtNoc = getVr('ext_noc', calcValor(totalExtraNoc, 150), totalExtraNoc);
+                                                   const vFesDiu = getVr('fes_diu', calcValor(tFesDiu, 75), tFesDiu);
+                          const vFesNoc = getVr('fes_noc', calcValor(tFesNoc, 210), tFesNoc);
+
+                          // CRUCE DE CUENTAS: Suma total de tiempo = (extras_diurnas + extras_nocturnas) + deudaAnterior
+                          const deudaNegativa = Number(deudaAnterior < 0 ? deudaAnterior : 0);
+                          const sumaTotalTiempoST = totalExtrasST + deudaNegativa;
+
+                          let extDiuLiquidar = 0;
+                          let extNocLiquidar = 0;
+
+                          if (sumaTotalTiempoST > 0) {
+                              const absDeuda = Math.abs(deudaNegativa);
+                              if (absDeuda > 0) {
+                                  const compDiu = Math.min(Math.max(0, horasExtraDiurnaReal), absDeuda);
+                                  extDiuLiquidar = Math.max(0, horasExtraDiurnaReal - compDiu);
+                                  const deudaRestante = absDeuda - compDiu;
+                                  const compNoc = Math.min(Math.max(0, totalExtraNoc), deudaRestante);
+                                  extNocLiquidar = Math.max(0, totalExtraNoc - compNoc);
+                              } else {
+                                  extDiuLiquidar = Math.max(0, horasExtraDiurnaReal);
+                                  extNocLiquidar = Math.max(0, totalExtraNoc);
+                              }
+                          } else {
+                              // Si Total de tiempo <= 0: El valor a pagar en pesos por extras debe ser forzosamente $0
+                              extDiuLiquidar = 0;
+                              extNocLiquidar = 0;
+                          }
+
+                          const vExtDiu = getVr('ext_diu', calcValor(extDiuLiquidar, 150), extDiuLiquidar);
+                          const vExtNoc = getVr('ext_noc', calcValor(extNocLiquidar, 150), extNocLiquidar);
                          const vExtFesDiu = getVr('ext_fes_diu', calcValor(totalExtFesDiu, 200), totalExtFesDiu);
                          const vExtFesNoc = getVr('ext_fes_noc', calcValor(totalExtFesNoc, 200), totalExtFesNoc);
                          const vTotalExtras = Number(vNocturnas) + Number(vFesDiu) + Number(vFesNoc) + Number(vExtDiu) + Number(vExtNoc) + Number(vExtFesDiu) + Number(vExtFesNoc);
 
-                         return (
-                            <>
-                               <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
-                                  <div className="flex flex-col">
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">26. Horas que debe</span>
-                                    {deudaAnterior < 0 && (
-                                        <span className="text-rose-400 text-[9px] mt-1 font-bold bg-rose-900/30 px-2 py-0.5 rounded border border-rose-800/50 w-fit">
-                                            ⚠️ Arrastra {Math.abs(deudaAnterior)}h pendientes
-                                        </span>
-                                    )}
-                                  </div>
-                                  <div className="w-24">
-                                     <input
-                                        type="number" step="0.1"
-                                        value={overrides[`${selectedWorkerData.cedula}_horas_que_debe`] !== undefined ? overrides[`${selectedWorkerData.cedula}_horas_que_debe`] : (selectedWorkerData.horas_debe !== undefined ? selectedWorkerData.horas_debe : "")}
-                                        onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_horas_que_debe`, e.target.value)}
-                                        className="w-full bg-slate-800 text-white border-slate-700 text-sm font-bold rounded-lg px-3 py-1.5 outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 text-right transition-all"
-                                     />
-                                  </div>
-                               </div>
-                               
-                               <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Horas Pendientes</span>
-                                  <span className="text-sm font-bold text-slate-300 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700/50">
-                                     {horasPendientes.toFixed(1)}
+                         // AUTO-REVISORES: Sumatorias crudas del Registro Diario (Columnas O - V)
+                         const rawO_diurnas = parseFloat(getTotal('diurnas')) || 0;
+                         const rawP_nocturnas = parseFloat(getTotal('nocturnas')) || 0;
+                         const rawQ_fesDiu = parseFloat(getTotal('fes_diu')) || 0;
+                         const rawR_fesNoc = parseFloat(getTotal('fes_noc')) || 0;
+                         const rawS_extDiu = parseFloat(getTotal('ext_diu')) || 0;
+                         const rawT_extNoc = parseFloat(getTotal('ext_noc')) || 0;
+                         const rawU_extFesDiu = parseFloat(getTotal('ext_fes_diu')) || 0;
+                         const rawV_extFesNoc = parseFloat(getTotal('ext_fes_noc')) || 0;
+
+                         // Valores finales a liquidar renderizados en cada fila
+                         const valDiurnas = overrides[`${selectedWorkerData.cedula}_tot_hr_diurnas`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_diurnas`]) : tDiurnas;
+                         const valNocturnas = overrides[`${selectedWorkerData.cedula}_horas_nocturnas`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_horas_nocturnas`]) : tNocturnas;
+                         const valFesDiu = overrides[`${selectedWorkerData.cedula}_tot_hr_fes_diu`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_fes_diu`]) : tFesDiu;
+                         const valFesNoc = overrides[`${selectedWorkerData.cedula}_tot_hr_fes_noc`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_fes_noc`]) : tFesNoc;
+                         const valExtDiu = overrides[`${selectedWorkerData.cedula}_tot_hr_ext_diu`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_ext_diu`]) : extDiuLiquidar;
+                         const valExtNoc = overrides[`${selectedWorkerData.cedula}_tot_hr_ext_noc`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_ext_noc`]) : extNocLiquidar;
+                         const valExtFesDiu = overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`]) : totalExtFesDiu;
+                         const valExtFesNoc = overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`]) : totalExtFesNoc;
+
+                         const renderAutoRevisor = (currentVal, rawVal) => {
+                            const isSynced = Math.abs((Number(currentVal) || 0) - (Number(rawVal) || 0)) < 0.05;
+                            if (isSynced) {
+                               return (
+                                  <span 
+                                     className="text-emerald-400 font-bold ml-1.5 cursor-default select-none text-xs" 
+                                     title="Sincronizado con Registro Diario"
+                                  >
+                                     ✓
                                   </span>
-                               </div>
+                               );
+                            }
+                            return (
+                               <span 
+                                  className="text-amber-400 font-bold ml-1.5 cursor-default select-none text-xs" 
+                                  title={`Modificado por cruce de cuentas o ajuste manual (Registro Diario: ${(Number(rawVal) || 0).toFixed(1)}h)`}
+                               >
+                                  ⚠️
+                               </span>
+                            );
+                         };
+
+                         return (
+                             <>
+                                {deudaAnterior < 0 && (
+                                   <div className="p-3 bg-rose-950/40 border border-rose-800/60 rounded-xl text-rose-300 text-xs font-black flex items-center gap-2 shadow-inner">
+                                      <span>⚠️ ADVERTENCIA: EL EMPLEADO DEBE {Math.abs(deudaAnterior).toFixed(1)} HORAS DE LA QUINCENA ANTERIOR</span>
+                                   </div>
+                                )}
+
+                                <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
+                                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">TOTAL DE EXTRAS (S + T)</span>
+                                   <span className={`text-sm font-black px-3 py-1.5 rounded-lg border ${
+                                       totalExtrasST < 0 
+                                           ? 'text-rose-400 bg-rose-950/50 border-rose-800/60' 
+                                           : totalExtrasST > 0 
+                                           ? 'text-emerald-400 bg-emerald-950/40 border-emerald-800/50' 
+                                           : 'text-slate-200 bg-slate-800 border-slate-700/50'
+                                   }`}>
+                                      {totalExtrasST > 0 ? `+${totalExtrasST.toFixed(1)}` : totalExtrasST.toFixed(1)} hrs
+                                   </span>
+                                </div>
 
                                <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
                                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Salario Básico (B37)</span>
@@ -713,111 +796,135 @@ export default function TabLiquidacion({
                                         </tr>
                                      </thead>
                                      <tbody className="divide-y divide-slate-800/60 text-sm font-bold">
-                                        <tr className="hover:bg-slate-800/50 transition-colors">
-                                           <td className="py-3 px-4 text-slate-300 whitespace-nowrap">28. Diurnas</td>
-                                           <td className="py-2 px-2 text-center text-slate-400">
-                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_diurnas`]} fallback={tDiurnas} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_diurnas`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded" />
-                                           </td>
-                                           <td className="py-3 px-4 text-center"><span className="bg-slate-800 text-slate-400 text-[9px] px-2 py-0.5 rounded-full border border-slate-700 whitespace-nowrap">0%</span></td>
-                                           <td className="py-2 px-2 text-right">
-                                               <div className="flex justify-end items-center gap-1">
-                                                  <span className="text-slate-500">$</span>
-                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_diurnas`]} fallback={0} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_diurnas`, val)} className="w-24 bg-transparent text-right text-slate-500 outline-none focus:ring-1 rounded" decimals={0} />
+                                         <tr className="hover:bg-slate-800/50 transition-colors">
+                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">28. Diurnas</td>
+                                            <td className="py-2 px-2 text-center text-slate-400">
+                                               <div className="flex items-center justify-center">
+                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_diurnas`]} fallback={tDiurnas} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_diurnas`, val)} className="w-16 bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded" />
+                                                  {renderAutoRevisor(valDiurnas, rawO_diurnas)}
                                                </div>
                                             </td>
-                                        </tr>
-                                        <tr className="hover:bg-slate-800/50 transition-colors">
-                                           <td className="py-3 px-4 text-slate-300 whitespace-nowrap">29. Nocturnas</td>
-                                           <td className="py-2 px-2 text-center text-indigo-300">
-                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_horas_nocturnas`]} fallback={tNocturnas} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_horas_nocturnas`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
-                                           </td>
-                                           <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">35%</span></td>
-                                           <td className="py-2 px-2 text-right">
-                                              <div className="flex justify-end items-center gap-1">
-                                                 <span className="text-indigo-400">$</span>
-                                                 <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_recargo_nocturno`]} fallback={vNocturnas} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_recargo_nocturno`, val)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" decimals={0} />
-                                              </div>
-                                           </td>
-                                        </tr>
-                                        <tr className="hover:bg-slate-800/50 transition-colors">
-                                           <td className="py-3 px-4 text-slate-300 whitespace-nowrap">30. Festiva Diurna</td>
-                                           <td className="py-2 px-2 text-center text-indigo-300">
-                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_fes_diu`]} fallback={tFesDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_fes_diu`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
-                                           </td>
-                                           <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">75%</span></td>
-                                           <td className="py-2 px-2 text-right">
-                                              <div className="flex justify-end items-center gap-1">
-                                                 <span className="text-indigo-400">$</span>
-                                                 <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_fes_diu`]} fallback={vFesDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_fes_diu`, val)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" decimals={0} />
-                                              </div>
-                                           </td>
-                                        </tr>
-                                        <tr className="hover:bg-slate-800/50 transition-colors">
-                                           <td className="py-3 px-4 text-slate-300 whitespace-nowrap">31. Fest Noc</td>
-                                           <td className="py-2 px-2 text-center text-indigo-300">
-                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_fes_noc`]} fallback={tFesNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_fes_noc`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
-                                           </td>
-                                           <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">210%</span></td>
-                                           <td className="py-2 px-2 text-right">
-                                              <div className="flex justify-end items-center gap-1">
-                                                 <span className="text-indigo-400">$</span>
-                                                 <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_fes_noc`]} fallback={vFesNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_fes_noc`, val)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" decimals={0} />
-                                              </div>
-                                           </td>
-                                        </tr>
-                                        <tr className="hover:bg-slate-800/50 transition-colors">
-                                           <td className="py-3 px-4 text-slate-300 whitespace-nowrap">32. Extra Diurna</td>
-                                           <td className="py-2 px-2 text-center text-emerald-300">
-                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_diu`]} fallback={horasExtraDiurnaReal} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_diu`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
-                                           </td>
-                                           <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">150%</span></td>
-                                           <td className="py-2 px-2 text-right">
-                                              <div className="flex justify-end items-center gap-1">
-                                                 <span className="text-emerald-400">$</span>
-                                                 <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_ext_diu`]} fallback={vExtDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_diu`, val)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" decimals={0} />
-                                              </div>
-                                           </td>
-                                        </tr>
-                                        <tr className="hover:bg-slate-800/50 transition-colors">
-                                           <td className="py-3 px-4 text-slate-300 whitespace-nowrap">33. Extra Noc</td>
-                                           <td className="py-2 px-2 text-center text-emerald-300">
-                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_noc`]} fallback={totalExtraNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_noc`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
-                                           </td>
-                                           <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">150%</span></td>
-                                           <td className="py-2 px-2 text-right">
-                                              <div className="flex justify-end items-center gap-1">
-                                                 <span className="text-emerald-400">$</span>
-                                                 <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_ext_noc`]} fallback={vExtNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_noc`, val)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" decimals={0} />
-                                              </div>
-                                           </td>
-                                        </tr>
-                                        <tr className="hover:bg-slate-800/50 transition-colors">
-                                           <td className="py-3 px-4 text-slate-300 whitespace-nowrap">34. Ext Fes Diu</td>
-                                           <td className="py-2 px-2 text-center text-emerald-300">
-                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`]} fallback={totalExtFesDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
-                                           </td>
-                                           <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">200%</span></td>
-                                           <td className="py-2 px-2 text-right">
-                                              <div className="flex justify-end items-center gap-1">
-                                                 <span className="text-emerald-400">$</span>
-                                                 <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_ext_fes_diu`]} fallback={vExtFesDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_fes_diu`, val)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" decimals={0} />
-                                              </div>
-                                           </td>
-                                        </tr>
-                                        <tr className="hover:bg-slate-800/50 transition-colors">
-                                           <td className="py-3 px-4 text-slate-300 whitespace-nowrap">35. Ext Fes Noc</td>
-                                           <td className="py-2 px-2 text-center text-emerald-300">
-                                              <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`]} fallback={totalExtFesNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`, val)} className="w-full bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
-                                           </td>
-                                           <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">200%</span></td>
-                                           <td className="py-2 px-2 text-right">
-                                              <div className="flex justify-end items-center gap-1">
-                                                 <span className="text-emerald-400">$</span>
-                                                 <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_ext_fes_noc`]} fallback={vExtFesNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_fes_noc`, val)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" decimals={0} />
-                                              </div>
-                                           </td>
-                                        </tr>
-                                     </tbody>
+                                            <td className="py-3 px-4 text-center"><span className="bg-slate-800 text-slate-400 text-[9px] px-2 py-0.5 rounded-full border border-slate-700 whitespace-nowrap">0%</span></td>
+                                            <td className="py-2 px-2 text-right">
+                                                <div className="flex justify-end items-center gap-1">
+                                                   <span className="text-slate-500">$</span>
+                                                   <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_diurnas`]} fallback={0} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_diurnas`, val)} className="w-24 bg-transparent text-right text-slate-500 outline-none focus:ring-1 rounded" decimals={0} />
+                                                </div>
+                                             </td>
+                                         </tr>
+                                         <tr className="hover:bg-slate-800/50 transition-colors">
+                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">29. Nocturnas</td>
+                                            <td className="py-2 px-2 text-center text-indigo-300">
+                                               <div className="flex items-center justify-center">
+                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_horas_nocturnas`]} fallback={tNocturnas} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_horas_nocturnas`, val)} className="w-16 bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
+                                                  {renderAutoRevisor(valNocturnas, rawP_nocturnas)}
+                                               </div>
+                                            </td>
+                                            <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">35%</span></td>
+                                            <td className="py-2 px-2 text-right">
+                                               <div className="flex justify-end items-center gap-1">
+                                                  <span className="text-indigo-400">$</span>
+                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_recargo_nocturno`]} fallback={vNocturnas} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_recargo_nocturno`, val)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" decimals={0} />
+                                               </div>
+                                            </td>
+                                         </tr>
+                                         <tr className="hover:bg-slate-800/50 transition-colors">
+                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">30. Festiva Diurna</td>
+                                            <td className="py-2 px-2 text-center text-indigo-300">
+                                               <div className="flex items-center justify-center">
+                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_fes_diu`]} fallback={tFesDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_fes_diu`, val)} className="w-16 bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
+                                                  {renderAutoRevisor(valFesDiu, rawQ_fesDiu)}
+                                               </div>
+                                            </td>
+                                            <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">90%</span></td>
+                                            <td className="py-2 px-2 text-right">
+                                               <div className="flex justify-end items-center gap-1">
+                                                  <span className="text-indigo-400">$</span>
+                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_fes_diu`]} fallback={vFesDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_fes_diu`, val)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" decimals={0} />
+                                               </div>
+                                            </td>
+                                         </tr>
+                                         <tr className="hover:bg-slate-800/50 transition-colors">
+                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">31. Fest Noc</td>
+                                            <td className="py-2 px-2 text-center text-indigo-300">
+                                               <div className="flex items-center justify-center">
+                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_fes_noc`]} fallback={tFesNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_fes_noc`, val)} className="w-16 bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
+                                                  {renderAutoRevisor(valFesNoc, rawR_fesNoc)}
+                                               </div>
+                                            </td>
+                                            <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">125%</span></td>
+                                            <td className="py-2 px-2 text-right">
+                                               <div className="flex justify-end items-center gap-1">
+                                                  <span className="text-indigo-400">$</span>
+                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_fes_noc`]} fallback={vFesNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_fes_noc`, val)} className="w-24 bg-transparent text-right text-indigo-400 outline-none focus:ring-1 rounded" decimals={0} />
+                                               </div>
+                                            </td>
+                                         </tr>
+                                         <tr className="hover:bg-slate-800/50 transition-colors">
+                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">32. Extra Diurna</td>
+                                            <td className="py-2 px-2 text-center text-emerald-300">
+                                               <div className="flex items-center justify-center">
+                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_diu`]} fallback={extDiuLiquidar} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_diu`, val)} className="w-16 bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
+                                                  {renderAutoRevisor(valExtDiu, rawS_extDiu)}
+                                               </div>
+                                            </td>
+                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">25%</span></td>
+                                            <td className="py-2 px-2 text-right">
+                                               <div className="flex justify-end items-center gap-1">
+                                                  <span className="text-emerald-400">$</span>
+                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_ext_diu`]} fallback={vExtDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_diu`, val)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" decimals={0} />
+                                               </div>
+                                            </td>
+                                         </tr>
+                                         <tr className="hover:bg-slate-800/50 transition-colors">
+                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">33. Extra Noc</td>
+                                            <td className="py-2 px-2 text-center text-emerald-300">
+                                               <div className="flex items-center justify-center">
+                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_noc`]} fallback={extNocLiquidar} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_noc`, val)} className="w-16 bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
+                                                  {renderAutoRevisor(valExtNoc, rawT_extNoc)}
+                                               </div>
+                                            </td>
+                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">75%</span></td>
+                                            <td className="py-2 px-2 text-right">
+                                               <div className="flex justify-end items-center gap-1">
+                                                  <span className="text-emerald-400">$</span>
+                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_ext_noc`]} fallback={vExtNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_noc`, val)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" decimals={0} />
+                                               </div>
+                                            </td>
+                                         </tr>
+                                         <tr className="hover:bg-slate-800/50 transition-colors">
+                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">34. Ext Fes Diu</td>
+                                            <td className="py-2 px-2 text-center text-emerald-300">
+                                               <div className="flex items-center justify-center">
+                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`]} fallback={totalExtFesDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`, val)} className="w-16 bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
+                                                  {renderAutoRevisor(valExtFesDiu, rawU_extFesDiu)}
+                                               </div>
+                                            </td>
+                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">100%</span></td>
+                                            <td className="py-2 px-2 text-right">
+                                               <div className="flex justify-end items-center gap-1">
+                                                  <span className="text-emerald-400">$</span>
+                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_ext_fes_diu`]} fallback={vExtFesDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_fes_diu`, val)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" decimals={0} />
+                                               </div>
+                                            </td>
+                                         </tr>
+                                         <tr className="hover:bg-slate-800/50 transition-colors">
+                                            <td className="py-3 px-4 text-slate-300 whitespace-nowrap">35. Ext Fes Noc</td>
+                                            <td className="py-2 px-2 text-center text-emerald-300">
+                                               <div className="flex items-center justify-center">
+                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`]} fallback={totalExtFesNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`, val)} className="w-16 bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
+                                                  {renderAutoRevisor(valExtFesNoc, rawV_extFesNoc)}
+                                               </div>
+                                            </td>
+                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">150%</span></td>
+                                            <td className="py-2 px-2 text-right">
+                                               <div className="flex justify-end items-center gap-1">
+                                                  <span className="text-emerald-400">$</span>
+                                                  <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_vr_ext_fes_noc`]} fallback={vExtFesNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_vr_ext_fes_noc`, val)} className="w-24 bg-transparent text-right text-emerald-400 outline-none focus:ring-1 rounded" decimals={0} />
+                                               </div>
+                                            </td>
+                                         </tr>
+                                      </tbody>
                                      <tfoot className="border-t border-slate-600">
                                         <tr>
                                            <td className="py-4 px-4 text-xs font-black uppercase tracking-widest text-slate-400 text-right whitespace-nowrap">TOTALES</td>

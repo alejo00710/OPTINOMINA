@@ -279,15 +279,25 @@ export default function ColillaPDF({ empleados = [], tituloReporte = "SÁBANA CO
                 />
                 <DetailRowCombined 
                   label="Ext. Festivas Nocturnas" 
-                  qty={emp.extras_festivas_nocturnas ?? emp.hefn_hrs ?? emp.festivas_nocturnas ?? emp.horas_ext_fest_noc ?? 0} 
+                  qty={emp.extras_festivas_nocturnas ?? emp.ext_fes_noc ?? emp.horas_ext_fest_noc ?? emp.hefn_hrs ?? emp.festivas_nocturnas ?? 0} 
                   qtyLabel="hrs" 
-                  money={emp.extras_festivas_nocturnas_val || emp.val_extras_festivas_nocturnas} 
+                  money={emp.val_extras_festivas_nocturnas || emp.extras_festivas_nocturnas_val || emp.val_ext_fes_noc || emp.valor_ext_fes_noc} 
                 />
 
                 {/* Deducciones y Retenciones */}
                 <View style={styles.sectionTitleBox}>
                   <Text style={styles.sectionTitle}>Deducciones y Retenciones</Text>
                 </View>
+                {Number(emp.horas_debe_acumuladas ?? (emp.horas_debe ? -emp.horas_debe : 0)) < 0 && (
+                  <View style={[styles.detailRow, { backgroundColor: '#fff1f2' }]}>
+                    <Text style={[styles.detailConcept, { color: '#be123c', fontWeight: 'bold' }]}>
+                      ⚠️ Horas que Debe (Banco de Horas)
+                    </Text>
+                    <Text style={[styles.detailValue, { color: '#be123c', fontWeight: 'bold' }]}>
+                      {`-${Math.abs(Number(emp.horas_debe_acumuladas ?? -emp.horas_debe)).toFixed(1)} hrs`}
+                    </Text>
+                  </View>
+                )}
                 <DetailRow label="Salud (4%)" value={emp.salud} />
                 <DetailRow label="Pensión (4%)" value={emp.pension} />
                 <DetailRow label="Solidaridad (1%)" value={emp.solidaridad} />
@@ -303,6 +313,9 @@ export default function ColillaPDF({ empleados = [], tituloReporte = "SÁBANA CO
                   <DetailRow label={`Otros: ${emp.motivo_otros || 'Descuento extra'}`} value={emp.otros_descuentos} />
                 )}
                 <DetailRow label="Saldo Préstamo" value={emp.saldo_prestamo} />
+                {Number(emp.saldo_optica || 0) > 0 && (
+                  <DetailRow label="Saldo Óptica" value={emp.saldo_optica} />
+                )}
                 
                 <View style={styles.totalRow}>
                   <Text style={styles.totalConcept}>Total Deducido</Text>

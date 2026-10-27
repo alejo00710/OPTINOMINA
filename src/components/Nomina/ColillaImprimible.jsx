@@ -32,6 +32,7 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
   const polizas = safeNumber(empleado.poliza_bolivar) + safeNumber(empleado.poliza_sura) + safeNumber(empleado.poliza_plenitud);
   const prestamos = safeNumber(empleado.prestamos);
   const saldoPrestamo = safeNumber(empleado.saldo_prestamo);
+  const saldoOptica = safeNumber(empleado.saldo_optica);
 
   return (
     <>
@@ -103,6 +104,11 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
           </div>
           <div className="font-bold text-[10px]">SALARIO BÁSICO: {formatCurrency(safeNumber(empleado.salario || empleado.salario_base))}</div>
         </div>
+        {Number(empleado.horas_debe_acumuladas ?? (empleado.horas_debe ? -empleado.horas_debe : 0)) < 0 && (
+          <div className="mb-2 p-1.5 bg-rose-50 border border-rose-200 rounded text-rose-800 text-[10px] font-black flex items-center gap-1.5">
+            <span>⚠️ AVISO: El trabajador arrastra una deuda de {Math.abs(Number(empleado.horas_debe_acumuladas ?? -empleado.horas_debe)).toFixed(1)} horas pendientes en el Banco de Horas.</span>
+          </div>
+        )}
 
         {/* 4. TABLA DE CONCEPTOS */}
         <table className="w-full border-collapse border border-[#9ca3af] mb-2 uppercase text-[10px]">
@@ -150,10 +156,10 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
                 <td className="px-2 text-right"></td>
               </tr>
             )}
-            {safeNumber(empleado.extras_festivas_nocturnas_val || empleado.val_extras_festivas_nocturnas) > 0 && (
+            {safeNumber(empleado.val_extras_festivas_nocturnas || empleado.extras_festivas_nocturnas_val || empleado.val_ext_fes_noc || empleado.valor_ext_fes_noc) > 0 && (
               <tr>
-                <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.extras_festivas_nocturnas ?? empleado.hefn_hrs ?? empleado.festivas_nocturnas ?? empleado.horas_ext_fest_noc)} Hrs. EXTRAS FESTIVAS NOCTURNAS</td>
-                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.extras_festivas_nocturnas_val || empleado.val_extras_festivas_nocturnas))}</td>
+                <td className="border-r border-[#9ca3af] px-2 text-left">{formatHour(empleado.extras_festivas_nocturnas ?? empleado.ext_fes_noc ?? empleado.horas_ext_fest_noc ?? empleado.hefn_hrs ?? empleado.festivas_nocturnas ?? 0)} Hrs. EXTRAS FESTIVAS NOCTURNAS</td>
+                <td className="border-r border-[#9ca3af] px-2 text-right">{formatCurrency(safeNumber(empleado.val_extras_festivas_nocturnas || empleado.extras_festivas_nocturnas_val || empleado.val_ext_fes_noc || empleado.valor_ext_fes_noc))}</td>
                 <td className="px-2 text-right"></td>
               </tr>
             )}
@@ -222,6 +228,17 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
             )}
 
             {/* DEDUCCIONES */}
+            {Number(empleado.horas_debe_acumuladas ?? (empleado.horas_debe ? -empleado.horas_debe : 0)) < 0 && (
+              <tr className="bg-rose-50/60 font-bold">
+                <td className="border-r border-[#9ca3af] px-2 text-left text-rose-800">
+                  ⚠️ HORAS QUE DEBE (BANCO DE HORAS): {Math.abs(Number(empleado.horas_debe_acumuladas ?? -empleado.horas_debe)).toFixed(1)} HRS PENDIENTES
+                </td>
+                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
+                <td className="px-2 text-right text-rose-700 font-black">
+                  -{Math.abs(Number(empleado.horas_debe_acumuladas ?? -empleado.horas_debe)).toFixed(1)} hrs
+                </td>
+              </tr>
+            )}
             {safeNumber(empleado.salud) > 0 && (
               <tr>
                 <td className="border-r border-[#9ca3af] px-2 text-left">APORTES A SALUD TRABAJADOR (4%)</td>
@@ -330,9 +347,17 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
         </div>
 
         <div className="flex justify-between items-end mt-12">
-          <div className="w-1/2 flex items-center">
-            <span className="font-normal text-[10px] underline mr-2">Saldo Préstamo:</span>
-            <span className="font-bold text-[10px] underline">{formatCurrency(saldoPrestamo)}</span>
+          <div className="w-1/2 flex flex-col gap-1">
+            <div className="flex items-center">
+              <span className="font-normal text-[10px] underline mr-2">Saldo Préstamo:</span>
+              <span className="font-bold text-[10px] underline">{formatCurrency(saldoPrestamo)}</span>
+            </div>
+            {saldoOptica > 0 && (
+              <div className="flex items-center">
+                <span className="font-normal text-[10px] underline mr-2">Saldo Óptica:</span>
+                <span className="font-bold text-[10px] underline">{formatCurrency(saldoOptica)}</span>
+              </div>
+            )}
           </div>
           <div className="w-1/2 flex flex-col items-center">
             <div className="text-center font-bold text-[10px] w-full">FIRMA DE RECIBIDO</div>
