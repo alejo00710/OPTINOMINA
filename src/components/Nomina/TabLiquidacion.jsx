@@ -148,13 +148,17 @@ export default function TabLiquidacion({
             return;
         }
 
-        // 2. Consultar historico_nominas_v2 (más reciente)
-        const { data: v2Data } = await supabase
+        // 2. Consultar historico_nominas_v2 (más reciente anterior a la quincena en curso)
+        let queryV2 = supabase
           .from('historico_nominas_v2')
           .select('empleados_jsonb')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
+          .order('created_at', { ascending: false });
+
+        if (startDate) {
+          queryV2 = queryV2.lt('fecha_inicio', startDate);
+        }
+
+        const { data: v2Data } = await queryV2.limit(1).maybeSingle();
 
         if (v2Data && v2Data.empleados_jsonb) {
             const pastWorker = v2Data.empleados_jsonb.find(w => String(w.cedula) === String(selectedWorkerData.cedula));

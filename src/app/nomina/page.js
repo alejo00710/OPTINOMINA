@@ -441,7 +441,18 @@ export default function NominaPage() {
         }
       };
 
-      // 3. Insertar directamente en historico_nominas_v2 vía Supabase
+      // 3. Reemplazo seguro (Upsert): Borrar foto anterior si existe para evitar duplicados
+      await supabase.from('historico_nominas_v2').delete().eq('fecha_inicio', startDate).eq('fecha_fin', endDate);
+      try {
+        await supabase.from('historial_nominas').delete().eq('fecha_inicio', startDate).eq('fecha_fin', endDate);
+      } catch (errLeg1) {
+        console.warn("Aviso al borrar historial_nominas por fecha_inicio:", errLeg1);
+      }
+      try {
+        await supabase.from('historial_nominas').delete().eq('rango_fechas', `${startDate} al ${endDate}`);
+      } catch (errLeg2) {}
+
+      // Inmediatamente después, insertar directamente en historico_nominas_v2 vía Supabase
       const { error } = await supabase
         .from('historico_nominas_v2')
         .insert([payload]);
@@ -650,10 +661,8 @@ export default function NominaPage() {
         const today = new Date().toISOString().split('T')[0];
 
         // Determinar si hay una quincena activa con progreso guardado en la base de datos
-        const hasActiveDraft = cloudDraft && !draftError && Boolean(cloudDraft.start_date) && (
-          (cloudDraft.attendance_logs && Object.keys(cloudDraft.attendance_logs).length > 0) ||
-          (cloudDraft.overrides && Object.keys(cloudDraft.overrides).filter(k => k !== '_MASTER_SCHEDULE_JSON').length > 0)
-        );
+        // Garantizar que la existencia de registros históricos no bloquee el borrador activo
+        const hasActiveDraft = cloudDraft && !draftError && Boolean(cloudDraft.start_date);
 
         if (hasActiveDraft) {
           try {
@@ -707,7 +716,15 @@ export default function NominaPage() {
           setStartDate(prev => payload.new.start_date || prev);
           setEndDate(prev => payload.new.end_date || prev);
           setAttendanceLogs(payload.new.attendance_logs || {});
-          setOverrides(payload.new.overrides || {});
+          let newOverrides = payload.new.overrides || {};
+          if (newOverrides['_MASTER_SCHEDULE_JSON']) {
+            setWeeklySchedules(newOverrides['_MASTER_SCHEDULE_JSON']);
+            const cleanOverrides = { ...newOverrides };
+            delete cleanOverrides['_MASTER_SCHEDULE_JSON'];
+            setOverrides(cleanOverrides);
+          } else {
+            setOverrides(newOverrides);
+          }
         }
       })
       .subscribe();
@@ -1701,17 +1718,7 @@ processedLogs.forEach(day => {
         });
       }
 
-      // 2. RUTINA DE SANITIZACIÓN: Purgar solo marcas de reloj intermedias si existieran
-      Object.keys(frozenOverrides).forEach(key => {
-          if (
-              key.includes('_hr_ent_pago') ||
-              key.includes('_hr_sal_pago')
-          ) {
-              delete frozenOverrides[key];
-          }
-      });
-
-      // 3. PERSISTENCIA DE HORARIOS (AMNESIA FIX)
+      // 2. PERSISTENCIA DE HORARIOS (AMNESIA FIX)
       // Guardamos el estado exacto de los horarios semanales para que la app no los olvide al recargar
       if (weeklySchedules && weeklySchedules.length > 0) {
           frozenOverrides['_MASTER_SCHEDULE_JSON'] = weeklySchedules;
@@ -1727,6 +1734,7 @@ processedLogs.forEach(day => {
         id: 'quincena_activa',
         start_date: startDate,
         end_date: endDate,
+        nomina_rows: nominaRows,
         attendance_logs: attendanceLogs,
         overrides: frozenOverrides,
         updated_at: new Date().toISOString()
