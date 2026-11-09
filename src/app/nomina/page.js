@@ -1827,6 +1827,14 @@ processedLogs.forEach(day => {
     return t;
   }, [filteredPayrollData]);
 
+  const [expandedBanks, setExpandedBanks] = useState({});
+  const toggleBankExpand = (bankName) => {
+    setExpandedBanks(prev => ({
+      ...prev,
+      [bankName]: !prev[bankName]
+    }));
+  };
+
   // Resumen de Dispersión por Banco
   const bankSummary = useMemo(() => {
     const summary = {};
@@ -1834,16 +1842,42 @@ processedLogs.forEach(day => {
     let totalEmployees = 0;
 
     payrollData.forEach(row => {
+      // Filtro de Vinculados: omitir empleados temporales / en misión
+      const tipo = String(row.tipo_vinculacion || row.masterRow?.tipo_vinculacion || row.tipo_contrato || row.masterRow?.tipo_contrato || row.vinculacion || row.masterRow?.vinculacion || '').toLowerCase();
+      const empresa = String(row.empresa || row.masterRow?.empresa || row.agencia || row.masterRow?.agencia || '').toLowerCase();
+      if (tipo.includes('temporal') || tipo.includes('misión') || tipo.includes('mision') || empresa.includes('saitemp')) {
+        return;
+      }
+
       const rawBank = row.banco || row.entidad_bancaria || row.masterRow?.banco || "";
       const bankClean = String(rawBank).trim().toUpperCase();
-      const bankName = (bankClean && bankClean !== "-" && bankClean !== "N/A") 
+
+      let mainBank = (bankClean && bankClean !== "-" && bankClean !== "N/A") 
         ? bankClean 
         : "SIN BANCO ASIGNADO";
+
+      let subBank = mainBank;
+      if (bankClean.includes("NEQUI")) {
+        mainBank = "BANCOLOMBIA";
+        subBank = "NEQUI";
+      } else if (bankClean.includes("BANCOLOMBIA")) {
+        mainBank = "BANCOLOMBIA";
+        subBank = "CUENTA BANCOLOMBIA";
+      }
+
       const netPay = Number(row.neto_pagar || row.total_neto || 0);
       
-      if (!summary[bankName]) summary[bankName] = { count: 0, total: 0 };
-      summary[bankName].count += 1;
-      summary[bankName].total += netPay;
+      if (!summary[mainBank]) {
+        summary[mainBank] = { count: 0, total: 0, subGroups: {} };
+      }
+      summary[mainBank].count += 1;
+      summary[mainBank].total += netPay;
+
+      if (!summary[mainBank].subGroups[subBank]) {
+        summary[mainBank].subGroups[subBank] = { count: 0, total: 0 };
+      }
+      summary[mainBank].subGroups[subBank].count += 1;
+      summary[mainBank].subGroups[subBank].total += netPay;
       
       grandTotal += netPay;
       totalEmployees += 1;
@@ -2477,41 +2511,73 @@ const handleSaveToCloud = async () => {
                          })
                          .map(([bankName, data]) => {
                             const isUnassigned = bankName === "SIN BANCO ASIGNADO";
+                            const subGroupsEntries = Object.entries(data.subGroups || {});
+                            const hasSubGroups = subGroupsEntries.length > 1 || (bankName === "BANCOLOMBIA" && subGroupsEntries.length > 0);
+                            const isExpanded = Boolean(expandedBanks[bankName]);
+
                             return (
-                               <tr 
-                                  key={bankName}
-                                  className={`transition-colors ${
-                                     isUnassigned 
-                                        ? 'bg-rose-50/70 hover:bg-rose-100/70 text-rose-700' 
-                                        : 'hover:bg-slate-50/80 text-slate-700'
-                                  }`}
-                               >
-                                  <td className="py-3.5 px-4 flex items-center gap-2">
-                                     {isUnassigned ? (
-                                        <span className="text-rose-500 font-bold" title="Requiere asignar banco en el perfil">⚠️</span>
-                                     ) : (
-                                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                                     )}
-                                     <span className={`font-black ${isUnassigned ? 'text-rose-700 font-bold' : 'text-slate-800'}`}>
-                                        {bankName}
-                                     </span>
-                                     {isUnassigned && (
-                                        <span className="text-[10px] bg-rose-100 text-rose-700 border border-rose-300 px-2 py-0.5 rounded-full font-bold ml-1">
-                                           Atención requerida
+                               <React.Fragment key={bankName}>
+                                  <tr 
+                                     onClick={hasSubGroups ? () => toggleBankExpand(bankName) : undefined}
+                                     className={`transition-colors ${
+                                        hasSubGroups ? 'cursor-pointer select-none' : ''
+                                     } ${
+                                        isUnassigned 
+                                           ? 'bg-rose-50/70 hover:bg-rose-100/70 text-rose-700' 
+                                           : 'hover:bg-slate-50/80 text-slate-700'
+                                     }`}
+                                  >
+                                     <td className="py-3.5 px-4 flex items-center gap-2">
+                                        {isUnassigned ? (
+                                           <span className="text-rose-500 font-bold" title="Requiere asignar banco en el perfil">⚠️</span>
+                                        ) : (
+                                           <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                        )}
+                                        <span className={`font-black ${isUnassigned ? 'text-rose-700 font-bold' : 'text-slate-800'}`}>
+                                           {bankName}
                                         </span>
-                                     )}
-                                  </td>
-                                  <td className="py-3.5 px-4 text-center">
-                                     <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-black ${
-                                        isUnassigned ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
-                                     }`}>
-                                        {data.count}
-                                     </span>
-                                  </td>
-                                  <td className={`py-3.5 px-4 text-right font-black ${isUnassigned ? 'text-rose-700' : 'text-slate-900'}`}>
-                                     ${fmtCOP(data.total)}
-                                  </td>
-                               </tr>
+                                        {hasSubGroups && (
+                                           <span className="text-[10px] text-slate-400 font-bold ml-1 transition-transform inline-flex items-center">
+                                              {isExpanded ? '▼' : '▶'}
+                                           </span>
+                                        )}
+                                        {isUnassigned && (
+                                           <span className="text-[10px] bg-rose-100 text-rose-700 border border-rose-300 px-2 py-0.5 rounded-full font-bold ml-1">
+                                              Atención requerida
+                                           </span>
+                                        )}
+                                     </td>
+                                     <td className="py-3.5 px-4 text-center">
+                                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-black ${
+                                           isUnassigned ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
+                                        }`}>
+                                           {data.count}
+                                        </span>
+                                     </td>
+                                     <td className={`py-3.5 px-4 text-right font-black ${isUnassigned ? 'text-rose-700' : 'text-slate-900'}`}>
+                                        ${fmtCOP(data.total)}
+                                     </td>
+                                  </tr>
+                                  {isExpanded && subGroupsEntries.map(([subName, subData]) => (
+                                     <tr 
+                                        key={`${bankName}_${subName}`}
+                                        className="bg-slate-50/80 hover:bg-slate-100/70 border-t border-slate-100 text-xs font-semibold text-slate-600 transition-colors"
+                                     >
+                                        <td className="py-2.5 px-4 pl-10 flex items-center gap-2">
+                                           <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                                           <span className="font-bold text-slate-700">{subName}</span>
+                                        </td>
+                                        <td className="py-2.5 px-4 text-center">
+                                           <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-bold bg-white border border-slate-200 text-slate-600 shadow-2xs">
+                                              {subData.count}
+                                           </span>
+                                        </td>
+                                        <td className="py-2.5 px-4 text-right font-bold text-slate-800">
+                                           ${fmtCOP(subData.total)}
+                                        </td>
+                                     </tr>
+                                  ))}
+                               </React.Fragment>
                             );
                          })}
                    </tbody>
