@@ -5,7 +5,7 @@ import { supabase } from '@/utils/supabase';
 const CeldaTurno = ({ valor, onChange, getTurnColor }) => {
   const oficiales = [
     '6AM A 2PM', '2PM A 10PM', '10PM A 6AM', '6AM A 6PM', '6PM A 6AM', 
-    '7:30AM A 5PM', '7:30AM A 4PM', '7AM A 4PM', 'DESCANSO', 'VACACIONES', 
+    '7:30AM A 5PM', '7:30AM A 4PM', '7AM A 4PM', 'DESCANSO', 'DEBE', 'VACACIONES', 
     'LICENCIA REMUNERADA', 'LICENCIA NO REMUNERADA', 
     'INCAPACIDAD GENERAL', 'INCAPACIDAD ACCIDENTE LABORAL', 
     'CALAMIDAD', 'SANCIONADO',
@@ -240,6 +240,7 @@ export default function TabHorarios({ empleados }) {
     if (t.includes('6AM A 6PM') || t.includes('6PM A 6AM')) return 'bg-yellow-300 text-black';
     if (t.includes('7:30AM A 5PM') || t.includes('7:30 A 5PM') || t.includes('7:30AM A 4PM') || t.includes('7AM A 4PM')) return 'bg-teal-100 text-teal-900 font-semibold';
     if (t.includes('DESCANSO')) return 'bg-white font-bold text-black';
+    if (t.includes('DEBE')) return 'bg-rose-100 text-rose-800 font-bold border border-rose-300';
     
     if (t.includes('VACACIONES')) return 'bg-amber-100 text-amber-800 font-bold';
     if (t.includes('INCAPACIDAD ACCIDENTE LABORAL')) return 'bg-red-200 text-red-900 font-bold';
@@ -254,7 +255,7 @@ export default function TabHorarios({ empleados }) {
 
     const oficiales = [
       '6AM A 2PM', '2PM A 10PM', '10PM A 6AM', '6AM A 6PM', '6PM A 6AM', 
-      '7:30AM A 5PM', '7:30AM A 4PM', '7AM A 4PM', 'DESCANSO', 'VACACIONES', 
+      '7:30AM A 5PM', '7:30AM A 4PM', '7AM A 4PM', 'DESCANSO', 'DEBE', 'VACACIONES', 
       'LICENCIA REMUNERADA', 'LICENCIA NO REMUNERADA', 
       'INCAPACIDAD GENERAL', 'INCAPACIDAD ACCIDENTE LABORAL', 
       'CALAMIDAD', 'SANCIONADO',

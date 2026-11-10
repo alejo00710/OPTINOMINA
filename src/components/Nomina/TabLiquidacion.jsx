@@ -13,21 +13,34 @@ export const OFFICIAL_SHIFTS = [
   '7:30AM A 5PM', '7:30AM A 4PM', '7AM A 4PM'
 ];
 
-const STATUS_OPTIONS = [
+export const NOVEDADES_ESTADO = [
   'Normal', 
-  ...OFFICIAL_SHIFTS,
-  'DEBE', 'LICENCIA NO REMUNERADA', 'LICENCIA REMUNERADA', 
-  'SANCIONADO', 'CALAMIDAD', 'VACACIONES', 'INCAPACIDAD GENERAL', 
-  'INCAPACIDAD ACCIDENTE LABORAL', 'FESTIVO', 'LNR EMPRESA', 'TERMINACION DE CONTRATO', 'Votacion', 'Descanso', 
-  'No marcacion', 'Novedad'
+  'Descanso',
+  'DEBE', 
+  'LICENCIA NO REMUNERADA', 
+  'LICENCIA REMUNERADA', 
+  'SANCIONADO', 
+  'CALAMIDAD', 
+  'VACACIONES', 
+  'INCAPACIDAD GENERAL', 
+  'INCAPACIDAD ACCIDENTE LABORAL', 
+  'FESTIVO', 
+  'LNR EMPRESA', 
+  'TERMINACION DE CONTRATO', 
+  'Votacion', 
+  'No marcacion', 
+  'Novedad'
 ];
 
+export const STATUS_OPTIONS = NOVEDADES_ESTADO;
+
 const getStatusColor = (status) => {
-  if (OFFICIAL_SHIFTS.includes(status)) {
+  if (OFFICIAL_SHIFTS.includes(status) || (typeof status === 'string' && status.includes(' A ') && (status.includes('AM') || status.includes('PM')))) {
     return "bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold";
   }
   switch (status) {
     case "Normal": return "bg-green-100 text-green-800";
+    case "Descanso": return "bg-blue-100 text-blue-800";
     case "DEBE": return "bg-orange-100 text-orange-900 border-orange-300 font-bold";
     case "LICENCIA NO REMUNERADA": return "bg-gray-100 text-gray-800";
     case "LICENCIA REMUNERADA": return "bg-gray-100 text-gray-800";
@@ -422,16 +435,37 @@ export default function TabLiquidacion({
                                   <span className="text-slate-400">{dayName}</span> 
                                   {displayDate}
                                   {(() => {
-                                     const currentSelectOptions = (statusVal && !STATUS_OPTIONS.includes(statusVal))
-                                       ? [statusVal, ...STATUS_OPTIONS]
-                                       : STATUS_OPTIONS;
+                                     const optionsToRender = [];
+                                     
+                                     // 1. Regla de Oro de Binding: Si el día ya tiene asignado un turno horario (ej: "6AM A 2PM")
+                                     // o un valor que no está en las novedades oficiales, inyectarlo dinámicamente como primera opción válida
+                                     if (statusVal && !NOVEDADES_ESTADO.some(opt => opt.toUpperCase() === String(statusVal).toUpperCase())) {
+                                        optionsToRender.push(statusVal);
+                                     }
+
+                                     // 2. Si hay un turno sincronizado del día que sea diferente y no esté en las opciones, inyectarlo
+                                     const turnoSync = day.turnoPuroDelJSON || day.turno;
+                                     if (turnoSync && typeof turnoSync === 'string') {
+                                        const normSync = normalizeZkShift(turnoSync);
+                                        if (normSync && !optionsToRender.some(opt => opt.toUpperCase() === normSync.toUpperCase()) && !NOVEDADES_ESTADO.some(opt => opt.toUpperCase() === normSync.toUpperCase())) {
+                                           optionsToRender.push(normSync);
+                                        }
+                                     }
+
+                                     // 3. Añadir estrictamente solo las novedades permitidas (sin la lista de turnos horarios)
+                                     NOVEDADES_ESTADO.forEach(nov => {
+                                        if (!optionsToRender.some(opt => opt.toUpperCase() === nov.toUpperCase())) {
+                                           optionsToRender.push(nov);
+                                        }
+                                     });
+
                                      return (
                                         <select 
                                            value={statusVal} 
                                            onChange={(e) => handleCellEdit(`${prefix}_novedad_status`, e.target.value)} 
                                            className={`ml-1 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider outline-none cursor-pointer text-center ${getStatusColor(statusVal)} hover:opacity-80`}
                                         >
-                                           {currentSelectOptions.map(opt => (
+                                           {optionsToRender.map(opt => (
                                              <option key={opt} value={opt}>{opt}</option>
                                            ))}
                                         </select>
@@ -1043,7 +1077,7 @@ export default function TabLiquidacion({
                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 overflow-hidden break-words">
                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-900 mb-4 border-b border-slate-100 pb-2">NOVEDADES:</h3>
                    <div className="flex flex-wrap gap-2 mb-6">
-                      {STATUS_OPTIONS.map(opt => (
+                      {NOVEDADES_ESTADO.map(opt => (
                          <span key={opt} className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md ${getStatusColor(opt)}`}>
                             {opt}
                          </span>
