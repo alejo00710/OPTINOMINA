@@ -736,83 +736,118 @@ export default function TabLiquidacion({
                             );
                          };
 
-                         const tieneDeudaAmortizar = deudaAnterior < 0 || 
-                             Number(selectedWorkerData.horas_debe_acumuladas || 0) < 0 || 
-                             Number(selectedWorkerData.deuda_inicial || 0) < 0 ||
-                             Number(selectedWorkerData.horas_descontadas_deuda || 0) > 0;
+                          const deudaAnteriorQuincena = selectedWorkerData.deuda_anterior_quincena !== undefined
+                             ? Number(selectedWorkerData.deuda_anterior_quincena)
+                             : (Number(selectedWorkerData.masterRow?.horas_debe_acumuladas ?? 0) < 0 
+                                 ? Number(selectedWorkerData.masterRow?.horas_debe_acumuladas) 
+                                 : (deudaAnterior < 0 ? deudaAnterior : 0));
+
+                          const tieneDeudaAmortizar = true;
+
+                          const deudaTotalAntesCobro = Number(
+                             selectedWorkerData.horas_debe_inicial !== undefined
+                                ? selectedWorkerData.horas_debe_inicial
+                                : (selectedWorkerData.deuda_inicial !== undefined 
+                                    ? selectedWorkerData.deuda_inicial 
+                                    : (selectedWorkerData.horas_debe_acumuladas !== undefined 
+                                        ? selectedWorkerData.horas_debe_acumuladas 
+                                        : deudaAnterior))
+                          );
 
                           const deudaAmortizarHoras = Math.abs(
-                             deudaAnterior < 0 
-                               ? deudaAnterior 
-                               : (Number(selectedWorkerData.deuda_inicial || 0) < 0 
-                                   ? Number(selectedWorkerData.deuda_inicial) 
-                                   : (Number(selectedWorkerData.horas_debe_acumuladas || 0) < 0 
-                                       ? Number(selectedWorkerData.horas_debe_acumuladas) 
-                                       : Number(selectedWorkerData.horas_descontadas_deuda || 0)))
+                             deudaTotalAntesCobro < 0 ? deudaTotalAntesCobro : (deudaAnterior < 0 ? deudaAnterior : 0)
                           );
 
                           const horasCobrarVal = overrides[`${selectedWorkerData.cedula}_horas_cobrar_deuda`] !== undefined
                              ? overrides[`${selectedWorkerData.cedula}_horas_cobrar_deuda`]
-                             : (selectedWorkerData.horas_descontadas_deuda !== undefined && selectedWorkerData.horas_descontadas_deuda > 0 ? selectedWorkerData.horas_descontadas_deuda : '');
-                          const tipoCobroVal = overrides[`${selectedWorkerData.cedula}_tipo_cobro_deuda`] || 'diurnas';
+                             : (selectedWorkerData.horas_descontadas_deuda !== undefined && selectedWorkerData.horas_descontadas_deuda > 0 ? selectedWorkerData.horas_descontadas_deuda : "");
+                          const tipoCobroVal = overrides[`${selectedWorkerData.cedula}_tipo_cobro_deuda`] || "diurnas";
                           const estaCobrando = Number(horasCobrarVal) > 0;
+
+                          const nuevaDeudaManualVal = overrides[`${selectedWorkerData.cedula}_nueva_deuda_manual`] !== undefined
+                             ? overrides[`${selectedWorkerData.cedula}_nueva_deuda_manual`]
+                             : (selectedWorkerData.nueva_deuda_manual !== undefined ? selectedWorkerData.nueva_deuda_manual : 0);
+
+                          const saldoDeudaActual = Math.abs(Number(selectedWorkerData.horas_debe_acumuladas !== undefined ? selectedWorkerData.horas_debe_acumuladas : (selectedWorkerData.nueva_deuda_acumulada || 0)));
 
                           return (
                               <>
-                                 {deudaAnterior < 0 && (
+                                 {deudaAnteriorQuincena < 0 && (
                                     <div className="p-3 bg-rose-950/40 border border-rose-800/60 rounded-xl text-rose-300 text-xs font-black flex items-center gap-2 shadow-inner">
-                                       <span>⚠️ ADVERTENCIA: EL EMPLEADO DEBE {Math.abs(deudaAnterior).toFixed(1)} HORAS DE LA QUINCENA ANTERIOR</span>
+                                       <span>⚠️ ADVERTENCIA: EL EMPLEADO DEBE {Math.abs(deudaAnteriorQuincena).toFixed(1)} HORAS DE LA QUINCENA ANTERIOR</span>
                                     </div>
                                  )}
 
-                                 {tieneDeudaAmortizar && (
-                                    <div className="p-4 bg-slate-800/90 border border-amber-500/40 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg backdrop-blur-sm">
-                                       <div className="flex items-center gap-3">
-                                          <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-black text-lg border border-amber-500/30 shrink-0">
-                                             ⏳
-                                          </div>
-                                          <div>
-                                             <h4 className="text-xs font-black uppercase tracking-wider text-amber-300">AMORTIZACIÓN BANCO DE HORAS</h4>
-                                             <p className="text-[11px] text-slate-300 font-medium">
-                                                Deuda acumulada: <span className="font-bold text-rose-400">{deudaAmortizarHoras.toFixed(1)} hrs</span>. Cobrar directamente de horas ordinarias.
-                                             </p>
-                                          </div>
+                                 <div className="p-4 bg-slate-800/90 border border-amber-500/40 rounded-2xl flex flex-col xl:flex-row xl:items-center justify-between gap-4 shadow-lg backdrop-blur-sm">
+                                    <div className="flex items-center gap-3">
+                                       <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-black text-lg border border-amber-500/30 shrink-0">
+                                          ⏳
                                        </div>
-                                       <div className="flex items-center gap-4 flex-wrap">
-                                          <div className="flex items-center gap-2 bg-slate-900/60 px-3 py-1.5 rounded-xl border border-slate-700/60">
-                                             <label className="text-xs font-bold text-slate-200 select-none">
-                                                Horas a cobrar en esta Q:
-                                             </label>
-                                             <input
-                                                type="number"
-                                                min="0"
-                                                max={deudaAmortizarHoras}
-                                                step="0.5"
-                                                placeholder="0.0"
-                                                value={horasCobrarVal}
-                                                onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_horas_cobrar_deuda`, e.target.value)}
-                                                className="w-20 bg-slate-800 text-amber-300 font-black text-xs rounded-lg px-2.5 py-1 border border-amber-500/40 outline-none focus:ring-1 focus:ring-amber-400 text-center"
-                                             />
-                                          </div>
-                                          <div className="flex items-center gap-2 bg-slate-900/60 px-3 py-1.5 rounded-xl border border-slate-700/60">
-                                             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tipo:</span>
-                                             <select
-                                                value={tipoCobroVal}
-                                                onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tipo_cobro_deuda`, e.target.value)}
-                                                disabled={!estaCobrando}
-                                                className={`text-xs font-bold rounded-lg px-2.5 py-1 border transition-all ${
-                                                   estaCobrando 
-                                                      ? 'bg-slate-800 text-amber-300 border-amber-500/40 focus:border-amber-400 cursor-pointer' 
-                                                      : 'bg-slate-800/40 text-slate-500 border-slate-700/40 cursor-not-allowed opacity-50'
-                                                }`}
-                                             >
-                                                <option value="diurnas">diurnas</option>
-                                                <option value="nocturnas">nocturnas</option>
-                                             </select>
-                                          </div>
+                                       <div>
+                                          <h4 className="text-xs font-black uppercase tracking-wider text-amber-300">AMORTIZACIÓN BANCO DE HORAS</h4>
+                                          <p className="text-[11px] text-slate-300 font-medium">
+                                             Deuda acumulada: <span className="font-bold text-rose-400">{saldoDeudaActual.toFixed(1)} hrs</span>
+                                             {Number(selectedWorkerData.horas_descontadas_deuda || 0) > 0 && (
+                                                <span className="text-emerald-400 ml-1">({Number(selectedWorkerData.horas_descontadas_deuda).toFixed(1)} hrs amortizadas)</span>
+                                             )}
+                                             . Cobrar directamente de horas ordinarias.
+                                          </p>
                                        </div>
                                     </div>
-                                 )}
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                       {/* Inyección manual de nueva deuda */}
+                                       <div className="flex items-center gap-2 bg-rose-950/30 px-3 py-1.5 rounded-xl border border-rose-500/50 shadow-inner">
+                                          <label className="text-xs font-bold text-rose-300 select-none">
+                                             Generar nueva deuda manual (Hrs):
+                                          </label>
+                                          <input
+                                             type="number"
+                                             min="0"
+                                             step="0.5"
+                                             placeholder="0"
+                                             value={nuevaDeudaManualVal}
+                                             onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_nueva_deuda_manual`, e.target.value)}
+                                             className="w-20 bg-slate-900/80 text-rose-300 font-black text-xs rounded-lg px-2.5 py-1 border border-rose-500/60 outline-none focus:ring-1 focus:ring-rose-400 text-center"
+                                          />
+                                       </div>
+
+                                       {/* Horas a cobrar en esta quincena */}
+                                       <div className="flex items-center gap-2 bg-slate-900/60 px-3 py-1.5 rounded-xl border border-slate-700/60">
+                                          <label className="text-xs font-bold text-slate-200 select-none">
+                                             Horas a cobrar en esta Q:
+                                          </label>
+                                          <input
+                                             type="number"
+                                             min="0"
+                                             max={deudaAmortizarHoras}
+                                             step="0.5"
+                                             placeholder="0.0"
+                                             value={horasCobrarVal}
+                                             onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_horas_cobrar_deuda`, e.target.value)}
+                                             className="w-20 bg-slate-800 text-amber-300 font-black text-xs rounded-lg px-2.5 py-1 border border-amber-500/40 outline-none focus:ring-1 focus:ring-amber-400 text-center"
+                                          />
+                                       </div>
+
+                                       {/* Tipo de Cobro */}
+                                       <div className="flex items-center gap-2 bg-slate-900/60 px-3 py-1.5 rounded-xl border border-slate-700/60">
+                                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tipo:</span>
+                                          <select
+                                             value={tipoCobroVal}
+                                             onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_tipo_cobro_deuda`, e.target.value)}
+                                             disabled={!estaCobrando}
+                                             className={`text-xs font-bold rounded-lg px-2.5 py-1 border transition-all ${
+                                                estaCobrando 
+                                                   ? "bg-slate-800 text-amber-300 border-amber-500/40 focus:border-amber-400 cursor-pointer" 
+                                                   : "bg-slate-800/40 text-slate-500 border-slate-700/40 cursor-not-allowed opacity-50"
+                                             }`}
+                                          >
+                                             <option value="diurnas">diurnas</option>
+                                             <option value="nocturnas">nocturnas</option>
+                                          </select>
+                                       </div>
+                                    </div>
+                                 </div>
+
 
                                 <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">TOTAL DE EXTRAS (S + T)</span>

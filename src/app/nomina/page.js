@@ -400,8 +400,10 @@ export default function NominaPage() {
 
         return {
           ...emp,
+          deuda_anterior_quincena: emp.deuda_anterior_quincena !== undefined ? Number(emp.deuda_anterior_quincena) : deudaInicial,
           deuda_inicial: deudaInicial,
           horas_debe_inicial: deudaInicial,
+          nueva_deuda_manual: Number(emp.nueva_deuda_manual || 0),
           nueva_deuda_acumulada: nuevaDeudaAcumulada,
           horas_debe_acumuladas: nuevaDeudaAcumulada,
           saldo_prestamo: saldoPrestamo,
@@ -1137,7 +1139,23 @@ processedLogs.forEach(day => {
       const deudaAcumuladaEmp = Number(emp.deuda_inicial ?? emp.horas_debe_acumuladas ?? emp.masterRow?.horas_debe_acumuladas ?? 0);
       const deudaInicialNeg = deudaAcumuladaEmp < 0 ? deudaAcumuladaEmp : 0;
       const nuevaFaltaNeg = horasDebe > 0 ? -horasDebe : 0;
-      const deudaPreviaNeg = parseFloat((deudaInicialNeg + nuevaFaltaNeg).toFixed(2));
+
+      // =========================================================================
+      // DESHABILITAR PENALIZACIONES BIOMÉTRICAS INESTABLES (BANCO DE HORAS):
+      // Las llegadas tarde (llegada_tarde, llegada_tarde_min) y comidas excedidas (comidas_excedidas, comidas_excedidas_min)
+      // quedan estrictamente EXCLUIDAS de la generación automática de deuda de tiempo.
+      // El sistema solo genera negativo automático por ausencias completas o turnos incompletos severos (horasDebe),
+      // o mediante la inyección del campo manual "nueva deuda manual".
+      // (NO sumar sumLlegadasMin ni sumComidasMin al tiempo negativo).
+      // =========================================================================
+
+      // Inyección manual de nueva deuda (Banco de Horas):
+      const nuevaDeudaManual = Math.max(0, Number(overrides[`${cedula}_nueva_deuda_manual`] || 0));
+      const nuevaDeudaManualNeg = nuevaDeudaManual > 0 ? -nuevaDeudaManual : 0;
+
+      // FÓRMULA DE SALDO EN VIVO:
+      // Deuda Anterior (negativa) - nuevaDeudaManual (se vuelve más negativa) + ausencias completas
+      const deudaPreviaNeg = parseFloat((deudaInicialNeg + nuevaFaltaNeg + nuevaDeudaManualNeg).toFixed(2));
 
       // AMORTIZACIÓN MANUAL DEL BANCO DE HORAS (Cobro directo parcial/total en ordinarias)
       const rawCobroParcial = overrides[`${cedula}_horas_cobrar_deuda`] !== undefined 
@@ -1576,8 +1594,10 @@ processedLogs.forEach(day => {
       const finalRow = {
         masterRow: emp,
         ...emp,
+        deuda_anterior_quincena: deudaInicialNeg,
         deuda_inicial: deudaPreviaNeg,
         horas_debe_inicial: deudaPreviaNeg,
+        nueva_deuda_manual: nuevaDeudaManual,
         nueva_deuda_acumulada: nuevaDeudaAcumulada,
         dias_pagados: diasPagados,
         horas_debe: horasDebe,
