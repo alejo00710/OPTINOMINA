@@ -31,8 +31,17 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
 
   const polizas = safeNumber(empleado.poliza_bolivar) + safeNumber(empleado.poliza_sura) + safeNumber(empleado.poliza_plenitud);
   const prestamos = safeNumber(empleado.prestamos);
+  // Lectura estricta e inmutable de la quincena (NUNCA leer de masterRow ni directorio en vivo)
   const saldoPrestamo = safeNumber(empleado.saldo_prestamo);
   const saldoOptica = safeNumber(empleado.saldo_optica);
+
+  const horasDebeBanco = empleado.horas_debe_acumuladas !== undefined
+    ? Number(empleado.horas_debe_acumuladas)
+    : (empleado.nueva_deuda_acumulada !== undefined
+        ? Number(empleado.nueva_deuda_acumulada)
+        : (empleado.horas_debe ? -Number(empleado.horas_debe) : 0));
+  const tieneDeudaBanco = horasDebeBanco < 0;
+  const cantDeudaHoras = Math.abs(horasDebeBanco).toFixed(1);
 
   return (
     <>
@@ -104,9 +113,14 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
           </div>
           <div className="font-bold text-[10px]">SALARIO BÁSICO: {formatCurrency(safeNumber(empleado.salario || empleado.salario_base))}</div>
         </div>
-        {Number(empleado.horas_debe_acumuladas ?? (empleado.horas_debe ? -empleado.horas_debe : 0)) < 0 && (
+        {tieneDeudaBanco && (
           <div className="mb-2 p-1.5 bg-rose-50 border border-rose-200 rounded text-rose-800 text-[10px] font-black flex items-center gap-1.5">
-            <span>⚠️ AVISO: El trabajador arrastra una deuda de {Math.abs(Number(empleado.horas_debe_acumuladas ?? -empleado.horas_debe)).toFixed(1)} horas pendientes en el Banco de Horas.</span>
+            <span>⚠️ AVISO: El trabajador arrastra una deuda de {cantDeudaHoras} horas pendientes en el Banco de Horas.</span>
+          </div>
+        )}
+        {empleado.mensaje_cobro_deuda && (
+          <div className="mb-2 p-1.5 bg-amber-50 border border-amber-300 rounded text-amber-900 text-[10px] font-bold flex items-center gap-1.5">
+            <span>ℹ️ AMORTIZACIÓN BANCO DE HORAS: {empleado.mensaje_cobro_deuda}</span>
           </div>
         )}
 
@@ -228,14 +242,25 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
             )}
 
             {/* DEDUCCIONES */}
-            {Number(empleado.horas_debe_acumuladas ?? (empleado.horas_debe ? -empleado.horas_debe : 0)) < 0 && (
+            {tieneDeudaBanco && (
               <tr className="bg-rose-50/60 font-bold">
                 <td className="border-r border-[#9ca3af] px-2 text-left text-rose-800">
-                  ⚠️ HORAS QUE DEBE (BANCO DE HORAS): {Math.abs(Number(empleado.horas_debe_acumuladas ?? -empleado.horas_debe)).toFixed(1)} HRS PENDIENTES
+                  ⚠️ HORAS QUE DEBE (BANCO DE HORAS): {cantDeudaHoras} HRS PENDIENTES
                 </td>
                 <td className="border-r border-[#9ca3af] px-2 text-right"></td>
                 <td className="px-2 text-right text-rose-700 font-black">
-                  -{Math.abs(Number(empleado.horas_debe_acumuladas ?? -empleado.horas_debe)).toFixed(1)} hrs
+                  -{cantDeudaHoras} hrs
+                </td>
+              </tr>
+            )}
+            {empleado.mensaje_cobro_deuda && (
+              <tr className="bg-amber-50/60 font-bold border-b border-[#9ca3af]">
+                <td className="border-r border-[#9ca3af] px-2 text-left text-amber-900">
+                  ℹ️ AMORTIZACIÓN BANCO DE HORAS ({empleado.mensaje_cobro_deuda})
+                </td>
+                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
+                <td className="px-2 text-right text-amber-800 font-black">
+                  -{Number(empleado.horas_descontadas_deuda || 0).toFixed(1)} hrs
                 </td>
               </tr>
             )}

@@ -144,7 +144,7 @@ export default function TabHistorico() {
           ['Extras Nocturnas', safeNumber(emp.extras_nocturnas)],
           ['Extras Festivas', safeNumber(emp.extras_festivas)],
           ['Extras Festivas Nocturnas', safeNumber(emp.extras_festivas_nocturnas ?? emp.ext_fes_noc ?? emp.horas_ext_fest_noc)],
-          ['Horas que Debe (Banco de Horas)', safeNumber(emp.horas_debe_acumuladas ?? (emp.horas_debe ? -emp.horas_debe : 0))],
+          ['Horas que Debe (Banco de Horas)', safeNumber(emp.horas_debe_acumuladas !== undefined ? emp.horas_debe_acumuladas : (emp.nueva_deuda_acumulada !== undefined ? emp.nueva_deuda_acumulada : (emp.horas_debe ? -emp.horas_debe : 0)))],
           ['Días Incapacidad', safeNumber(emp.dias_incapacidad)],
           ['', ''],
           ['--- DEVENGADOS ---', ''],
@@ -236,9 +236,14 @@ export default function TabHistorico() {
                     <td className="py-3 px-6 text-center">
                       {(() => {
                         const emps = item.payload_json?.nomina_calculada || [];
-                        const empsConDeuda = emps.filter(e => Number(e.horas_debe_acumuladas ?? (e.balance_extras_st < 0 ? e.balance_extras_st : 0) ?? 0) < 0);
+                        const getWorkerDeuda = (e) => e.horas_debe_acumuladas !== undefined
+                          ? Number(e.horas_debe_acumuladas)
+                          : (e.nueva_deuda_acumulada !== undefined
+                              ? Number(e.nueva_deuda_acumulada)
+                              : (e.balance_extras_st < 0 ? Number(e.balance_extras_st) : 0));
+                        const empsConDeuda = emps.filter(e => getWorkerDeuda(e) < 0);
                         const tieneDeuda = empsConDeuda.length > 0;
-                        const totalDeudaHoras = empsConDeuda.reduce((acc, e) => acc + Math.abs(Number(e.horas_debe_acumuladas ?? e.balance_extras_st ?? 0)), 0);
+                        const totalDeudaHoras = empsConDeuda.reduce((acc, e) => acc + Math.abs(getWorkerDeuda(e)), 0);
 
                         return tieneDeuda ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-700 border border-rose-200">

@@ -288,16 +288,34 @@ export default function ColillaPDF({ empleados = [], tituloReporte = "SÁBANA CO
                 <View style={styles.sectionTitleBox}>
                   <Text style={styles.sectionTitle}>Deducciones y Retenciones</Text>
                 </View>
-                {Number(emp.horas_debe_acumuladas ?? (emp.horas_debe ? -emp.horas_debe : 0)) < 0 && (
-                  <View style={[styles.detailRow, { backgroundColor: '#fff1f2' }]}>
-                    <Text style={[styles.detailConcept, { color: '#be123c', fontWeight: 'bold' }]}>
-                      ⚠️ Horas que Debe (Banco de Horas)
+                {emp.mensaje_cobro_deuda && (
+                  <View style={[styles.detailRow, { backgroundColor: '#fef3c7' }]}>
+                    <Text style={[styles.detailConcept, { color: '#92400e', fontWeight: 'bold' }]}>
+                      {`ℹ️ Amortización Banco Horas (${emp.mensaje_cobro_deuda})`}
                     </Text>
-                    <Text style={[styles.detailValue, { color: '#be123c', fontWeight: 'bold' }]}>
-                      {`-${Math.abs(Number(emp.horas_debe_acumuladas ?? -emp.horas_debe)).toFixed(1)} hrs`}
+                    <Text style={[styles.detailValue, { color: '#92400e', fontWeight: 'bold' }]}>
+                      {`-${Number(emp.horas_descontadas_deuda || 0).toFixed(1)} hrs`}
                     </Text>
                   </View>
                 )}
+                {(() => {
+                  const horasDebeBanco = emp.horas_debe_acumuladas !== undefined
+                    ? Number(emp.horas_debe_acumuladas)
+                    : (emp.nueva_deuda_acumulada !== undefined
+                        ? Number(emp.nueva_deuda_acumulada)
+                        : (emp.horas_debe ? -Number(emp.horas_debe) : 0));
+                  if (horasDebeBanco >= 0) return null;
+                  return (
+                    <View style={[styles.detailRow, { backgroundColor: '#fff1f2' }]}>
+                      <Text style={[styles.detailConcept, { color: '#be123c', fontWeight: 'bold' }]}>
+                        ⚠️ Horas que Debe (Banco de Horas)
+                      </Text>
+                      <Text style={[styles.detailValue, { color: '#be123c', fontWeight: 'bold' }]}>
+                        {`-${Math.abs(horasDebeBanco).toFixed(1)} hrs`}
+                      </Text>
+                    </View>
+                  );
+                })()}
                 <DetailRow label="Salud (4%)" value={emp.salud} />
                 <DetailRow label="Pensión (4%)" value={emp.pension} />
                 <DetailRow label="Solidaridad (1%)" value={emp.solidaridad} />

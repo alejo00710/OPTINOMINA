@@ -385,23 +385,31 @@ export default function NominaPage() {
         const devoluciones = Number(emp.devoluciones || emp.masterRow?.devoluciones || 0);
         const motivo_devoluciones = emp.motivo_devoluciones || emp.masterRow?.motivo_devoluciones || '';
 
-        // Sistema dinámico de Arrastre de Deuda / Banco de Horas
-        // Regla: Suma total de tiempo = (extras_diurnas + extras_nocturnas) + horas_debe_acumuladas (deuda en negativo)
-        const extDiu = Number(emp.extras_diurnas || 0);
-        const extNoc = Number(emp.extras_nocturnas || 0);
-        const balanceExtrasST = extDiu + extNoc;
+        // Sistema dinámico de Arrastre de Deuda / Banco de Horas (Snapshot congelado)
+        // Guardar explícitamente deuda_inicial y nueva_deuda_acumulada sin reacumulaciones
+        const deudaInicial = emp.deuda_inicial !== undefined
+          ? Number(emp.deuda_inicial)
+          : (Number(emp.masterRow?.horas_debe_acumuladas ?? 0) < 0 ? Number(emp.masterRow?.horas_debe_acumuladas) : 0);
         
-        const prevDeuda = Number(emp.horas_debe_acumuladas ?? emp.masterRow?.horas_debe_acumuladas ?? 0);
-        const prevDeudaNeg = prevDeuda < 0 ? prevDeuda : 0;
-        const sumaTotalTiempo = balanceExtrasST + prevDeudaNeg;
-        
-        // Si Total de tiempo < 0: conserva el saldo negativo para la próxima quincena.
-        // Si Total de tiempo >= 0: la deuda acumulada para la próxima quincena pasa a ser 0.
-        const nuevaDeudaAcumulada = sumaTotalTiempo < 0 ? parseFloat(sumaTotalTiempo.toFixed(2)) : 0;
+        const nuevaDeudaAcumulada = emp.nueva_deuda_acumulada !== undefined
+          ? Number(emp.nueva_deuda_acumulada)
+          : (emp.horas_debe_acumuladas !== undefined ? Number(emp.horas_debe_acumuladas) : 0);
+
+        const saldoPrestamo = Number(emp.saldo_prestamo !== undefined ? emp.saldo_prestamo : (Math.max(0, Number(emp.masterRow?.prestamo_total || emp.prestamo_total || 0) - Number(emp.prestamos || 0))));
+        const saldoOptica = Number(emp.saldo_optica !== undefined ? emp.saldo_optica : (Math.max(0, Number(emp.masterRow?.optica_total || emp.optica_total || 0) - optica)));
 
         return {
           ...emp,
+          deuda_inicial: deudaInicial,
+          horas_debe_inicial: deudaInicial,
+          nueva_deuda_acumulada: nuevaDeudaAcumulada,
           horas_debe_acumuladas: nuevaDeudaAcumulada,
+          saldo_prestamo: saldoPrestamo,
+          saldo_optica: saldoOptica,
+          cobrar_deuda: emp.cobrar_deuda || false,
+          tipo_cobro_deuda: emp.tipo_cobro_deuda || 'diurnas',
+          horas_descontadas_deuda: emp.horas_descontadas_deuda || 0,
+          mensaje_cobro_deuda: emp.mensaje_cobro_deuda || null,
           intereses_cesantias,
           devoluciones,
           motivo_devoluciones,
@@ -498,43 +506,32 @@ export default function NominaPage() {
     setIsClosing(true);
     try {
       const rawRows = typeof filteredPayrollData !== 'undefined' ? filteredPayrollData : nominaRows;
-      
-      const nominaParaGuardar = rawRows.map(emp => {
-        const optica = Number(emp.optica || emp.masterRow?.optica || emp.cuota_optica || emp.masterRow?.cuota_optica || 0);
-        const extDiu = Number(emp.extras_diurnas || 0);
-        const extNoc = Number(emp.extras_nocturnas || 0);
-        const balanceExtrasST = extDiu + extNoc;
-        
-        const prevDeuda = Number(emp.horas_debe_acumuladas ?? emp.masterRow?.horas_debe_acumuladas ?? 0);
-        const prevDeudaNeg = prevDeuda < 0 ? prevDeuda : 0;
-        const sumaTotalTiempo = balanceExtrasST + prevDeudaNeg;
-        
-        const nuevaDeudaAcumulada = sumaTotalTiempo < 0 ? parseFloat(sumaTotalTiempo.toFixed(2)) : 0;
-
-        return {
-          ...emp,
-          horas_debe_acumuladas: nuevaDeudaAcumulada,
-          optica
-        };
-      });
 
       // 1. Amortización de deudas a largo plazo (Préstamos y Óptica) y actualización de horas_debe_acumuladas
-      const debtPromises = nominaParaGuardar.map(async (empRow) => {
+      const debtPromises = rawRows.map(async (empRow) => {
           const deduccionPrestamo = Number(empRow.prestamos) || 0;
-          const deduccionOptica = Number(empRow.optica) || 0;
+          const deduccionOptica = Number(empRow.optica || empRow.cuota_optica || 0);
           
           const updateFields = {};
           if (deduccionPrestamo > 0) {
               const currentPrestamoTotal = Number(empRow.masterRow?.prestamo_total || empRow.prestamo_total || 0);
-              updateFields.prestamo_total = Math.max(0, currentPrestamoTotal - deduccionPrestamo);
+              updateFields.prestamo_total = Math.max(0, empRow.saldo_prestamo !== undefined ? Number(empRow.saldo_prestamo) : (currentPrestamoTotal - deduccionPrestamo));
           }
           if (deduccionOptica > 0) {
               const currentOpticaTotal = Number(empRow.masterRow?.optica_total || empRow.optica_total || 0);
-              updateFields.optica_total = Math.max(0, currentOpticaTotal - deduccionOptica);
+              updateFields.optica_total = Math.max(0, empRow.saldo_optica !== undefined ? Number(empRow.saldo_optica) : (currentOpticaTotal - deduccionOptica));
           }
-          if (empRow.horas_debe_acumuladas !== undefined) {
-              updateFields.horas_debe_acumuladas = empRow.horas_debe_acumuladas;
-          }
+          
+          // REGLA MATEMÁTICA ESTRICTA: El campo horas_debe_acumuladas en la base de datos DEBE ser
+          // reemplazado (set absoluto) por el valor final de la nueva deuda calculada en el cruce de cuentas.
+          // NO se debe hacer una operación matemática relativa (no hacer horas_debe_acumuladas + nueva_deuda en el SQL/update),
+          // porque el motor JS (mathNomina.js o page.js) ya calculó el balance neto final. Si el motor JS dijo que el saldo final es -4,
+          // a la BD se le inyecta el -4 directamente.
+          const finalDeuda = empRow.nueva_deuda_acumulada !== undefined 
+              ? Number(empRow.nueva_deuda_acumulada)
+              : (empRow.horas_debe_acumuladas !== undefined ? Number(empRow.horas_debe_acumuladas) : 0);
+          
+          updateFields.horas_debe_acumuladas = finalDeuda;
           
           if (Object.keys(updateFields).length > 0) {
               try {
@@ -1099,7 +1096,7 @@ processedLogs.forEach(day => {
       const salarioBase = resolveValue(overrides, `${cedula}_salario_base`, () => Number(emp.salario_base || emp.salario || 0));
 
       // Allow global overrides for the summed hours
-      const finalDiurnas = resolveValue(overrides, `${cedula}_horas_diurnas`, () => sumDiurnas);
+      let finalDiurnas = resolveValue(overrides, `${cedula}_horas_diurnas`, () => sumDiurnas);
       let finalNocturnas = resolveValue(overrides, `${cedula}_horas_nocturnas`, () => sumNocturnas);
       let finalFesDiu = resolveValue(overrides, `${cedula}_festivas_diurnas`, () => sumFesDiu);
       let finalFesNoc = resolveValue(overrides, `${cedula}_festivas_nocturnas`, () => sumFesNoc);
@@ -1136,46 +1133,52 @@ processedLogs.forEach(day => {
       }
 
 
-      // CRUCE DE CUENTAS (BALANZA DE EXTRAS VS DEUDA)
-      // Recuperar deuda previa del colaborador
-      const deudaAcumuladaEmp = Number(emp.horas_debe_acumuladas ?? emp.masterRow?.horas_debe_acumuladas ?? 0);
-      const deudaPreviaNeg = deudaAcumuladaEmp < 0 ? deudaAcumuladaEmp : (horasDebe > 0 ? -horasDebe : 0);
+      // Recuperar deuda previa del colaborador y acumular nuevas deudas por faltas si existen
+      const deudaAcumuladaEmp = Number(emp.deuda_inicial ?? emp.horas_debe_acumuladas ?? emp.masterRow?.horas_debe_acumuladas ?? 0);
+      const deudaInicialNeg = deudaAcumuladaEmp < 0 ? deudaAcumuladaEmp : 0;
+      const nuevaFaltaNeg = horasDebe > 0 ? -horasDebe : 0;
+      const deudaPreviaNeg = parseFloat((deudaInicialNeg + nuevaFaltaNeg).toFixed(2));
 
-      // Suma total de tiempo = (extras_diurnas + extras_nocturnas) + horas_debe_acumuladas (la deuda viene en negativo)
-      const balanceExtrasST = finalExtDiu + finalExtNoc;
-      const sumaTotalTiempoExtras = balanceExtrasST + deudaPreviaNeg;
+      // AMORTIZACIÓN MANUAL DEL BANCO DE HORAS (Cobro directo parcial/total en ordinarias)
+      const rawCobroParcial = overrides[`${cedula}_horas_cobrar_deuda`] !== undefined 
+          ? Number(overrides[`${cedula}_horas_cobrar_deuda`] || 0)
+          : (overrides[`${cedula}_cobrar_deuda`] === true || overrides[`${cedula}_cobrar_deuda`] === "true" ? Math.abs(deudaPreviaNeg) : 0);
+      const maxDeudaPermitida = Math.abs(deudaPreviaNeg);
+      const horasADescontar = deudaPreviaNeg < 0 ? Math.min(Math.max(0, rawCobroParcial), maxDeudaPermitida) : 0;
+      const tipoCobroDeuda = overrides[`${cedula}_tipo_cobro_deuda`] || 'diurnas';
+      let horasDescontadasDeuda = 0;
+      let mensajeCobroDeuda = null;
 
-      let extDiuLiquidar = 0;
-      let extNocLiquidar = 0;
-      let nuevaDeudaAcumulada = 0;
+      // Saldo restante tras el cobro parcial/total en ordinarias (ej. -8 + 4 = -4)
+      let deudaRestanteTrasCobro = deudaPreviaNeg;
 
-      if (sumaTotalTiempoExtras <= 0) {
-          // Si Total de tiempo <= 0 (ganan las negativas):
-          // El valor a pagar en pesos por extras debe ser forzosamente $0.
-          // El saldo negativo de horas se conserva para guardarlo en la base de datos al cerrar la quincena.
-          extDiuLiquidar = 0;
-          extNocLiquidar = 0;
-          nuevaDeudaAcumulada = parseFloat(sumaTotalTiempoExtras.toFixed(2));
-      } else {
-          // Si Total de tiempo > 0 (ganan las positivas):
-          // El empleado pagó su deuda con tiempo extra y le sobró tiempo a favor.
-          // Se debe liquidar en dinero solo ese tiempo restante a favor, y la deuda acumulada para la próxima quincena pasa a ser 0.
-          const absDeuda = Math.abs(deudaPreviaNeg);
-          if (absDeuda > 0) {
-              const compDiu = Math.min(Math.max(0, finalExtDiu), absDeuda);
-              extDiuLiquidar = Math.max(0, finalExtDiu - compDiu);
-              const deudaRestante = absDeuda - compDiu;
-              const compNoc = Math.min(Math.max(0, finalExtNoc), deudaRestante);
-              extNocLiquidar = Math.max(0, finalExtNoc - compNoc);
+      if (horasADescontar > 0 && deudaPreviaNeg < 0) {
+          horasDescontadasDeuda = horasADescontar;
+          if (tipoCobroDeuda === 'nocturnas') {
+              finalNocturnas = Math.max(0, finalNocturnas - horasDescontadasDeuda);
           } else {
-              extDiuLiquidar = Math.max(0, finalExtDiu);
-              extNocLiquidar = Math.max(0, finalExtNoc);
+              finalDiurnas = Math.max(0, finalDiurnas - horasDescontadasDeuda);
           }
-          nuevaDeudaAcumulada = 0;
+          
+          deudaRestanteTrasCobro = Math.min(0, parseFloat((deudaPreviaNeg + horasDescontadasDeuda).toFixed(2)));
+          mensajeCobroDeuda = `Amortización Banco Horas: Se descontaron ${horasDescontadasDeuda.toFixed(1)} hrs de su saldo pendiente en Ordinarias ${tipoCobroDeuda === 'diurnas' ? 'Diurnas' : 'Nocturnas'}.`;
       }
+      const cobrarDeuda = horasDescontadasDeuda > 0;
 
+      // CRUCE AUTOMÁTICO DESHABILITADO:
+      // Las horas extras se liquidan al 100% brutas trabajadas sin descontar deuda previa.
+      const balanceExtrasST = finalExtDiu + finalExtNoc;
+      const sumaTotalTiempoExtras = balanceExtrasST;
+
+      const extDiuLiquidar = Math.max(0, finalExtDiu);
+      const extNocLiquidar = Math.max(0, finalExtNoc);
       const extraDiurnaNeto = extDiuLiquidar;
       const horasPendientes = finalExtDiu + finalExtNoc + finalExtFesDiu + finalExtFesNoc;
+
+      // PRESERVACIÓN DE LA DEUDA:
+      // Si no se amortiza manualmente en ordinarias, la deuda se preserva intacta para el cierre de quincena.
+      // Las horas extras trabajadas ya NO reducen este saldo de forma automática.
+      const nuevaDeudaAcumulada = deudaRestanteTrasCobro;
       
       const comisiones = resolveValue(overrides, `${cedula}_comisiones`, () => 0);
       const interesesCesantias = resolveValue(overrides, `${cedula}_intereses_cesantias`, () => parseLocalNumber(emp.intereses_cesantias));
@@ -1287,7 +1290,11 @@ processedLogs.forEach(day => {
       const valorDiaBase = salarioBase / 30;
 
       // Sueldo y Auxilio de Transporte basados en diasPagados
-      const sueldoCalc = Math.round(valorDiaBase * diasPagados);
+      let sueldoCalc = Math.round(valorDiaBase * diasPagados);
+      if (cobrarDeuda && horasDescontadasDeuda > 0 && tipoCobroDeuda === 'diurnas') {
+          const valorHoraOrdinaria = salarioBase / 240;
+          sueldoCalc = Math.max(0, sueldoCalc - Math.round(valorHoraOrdinaria * horasDescontadasDeuda));
+      }
       const ganaAuxilio = salarioBase <= (globalSmmlv * 2);
       const transporteCalc = ganaAuxilio ? Math.round((globalAuxTransporte / 30) * diasPagados) : 0;
 
@@ -1569,9 +1576,18 @@ processedLogs.forEach(day => {
       const finalRow = {
         masterRow: emp,
         ...emp,
+        deuda_inicial: deudaPreviaNeg,
+        horas_debe_inicial: deudaPreviaNeg,
+        nueva_deuda_acumulada: nuevaDeudaAcumulada,
         dias_pagados: diasPagados,
         horas_debe: horasDebe,
         horas_debe_acumuladas: nuevaDeudaAcumulada,
+        saldo_prestamo: saldoPrestamo,
+        saldo_optica: saldoOptica,
+        cobrar_deuda: cobrarDeuda,
+        tipo_cobro_deuda: tipoCobroDeuda,
+        horas_descontadas_deuda: horasDescontadasDeuda,
+        mensaje_cobro_deuda: mensajeCobroDeuda,
         horas_pendientes: horasPendientes,
         horas_diurnas: finalDiurnas,
         horas_nocturnas: finalNocturnas,
@@ -3003,13 +3019,7 @@ const handleSaveToCloud = async () => {
                 if (col.key === 'extras_diurnas') val = finalExtraDiurna;
                 if (col.key === 'extras_nocturnas') val = finalExtraNocturna;
 
-                // Candado estricto: Las tarjetas de VR. PAGAR de extras reflejan $0 si el balance general de extras es negativo
-                if ((col.key === 'val_extras_diurnas' || col.key === 'val_extras_nocturnas') && overrides[cKey] === undefined) {
-                    const totalTiempoST = Number(workerData.suma_total_tiempo_extras ?? (Number(workerData.extras_diurnas || 0) + Number(workerData.extras_nocturnas || 0) + (Number(workerData.horas_debe_acumuladas || 0) < 0 ? Number(workerData.horas_debe_acumuladas) : 0)));
-                    if (totalTiempoST <= 0) {
-                        val = 0;
-                    }
-                }
+                // Cruce automático deshabilitado: Las tarjetas de VR. PAGAR de extras reflejan su valor calculado directamente
 
                 if (col.isCurrency && val !== "") val = Math.round(Number(val));
                 
