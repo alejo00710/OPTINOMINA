@@ -3,14 +3,16 @@ import { timeStrToDecimal, getDecimalHours } from "./mathNomina";
 export const SMLV = 1750905;
 export const AUX_TRANSPORTE = 249095;
 export const MINIMO_DIARIO_INCAPACIDAD = 58363.5;
-export const DIVISOR_HORAS_EXTRAS = 240;
-export const DIVISOR_RECARGOS_NOCTURNOS = 240;
+export const DIVISOR_HORAS_EXTRAS = 210;
+export const DIVISOR_RECARGOS_NOCTURNOS = 210;
 export const HORA_INICIO_DIURNA = "04:00";
 export const HORA_FIN_DIURNA = "18:00";
 export const FACTOR_EXTRA_DIURNA = 1.25;
 export const FACTOR_EXTRA_NOCTURNA = 1.75;
-export const FACTOR_EXTRA_FESTIVA = 2.0;
-export const FACTOR_EXTRA_FESTIVA_NOCTURNA = 2.5;
+export const FACTOR_EXTRA_FESTIVA = 2.15;
+export const FACTOR_EXTRA_FESTIVA_NOCTURNA = 2.65;
+export const FACTOR_FESTIVA_DIURNA = 0.90;
+export const FACTOR_FESTIVA_NOCTURNA = 1.25;
 export const FACTOR_RECARGO_NOCTURNO = 0.35;
 
 // --- Config Parameters ---
@@ -205,12 +207,12 @@ export const DAILY_COLUMNS = [
 export const LIQUIDATION_CONCEPTS = [
   { key: "h_diurna", label: "Horas Diurnas Ordinarias", pctKey: "h_diurna_pct", hrKey: "h_diurna_hr", valKey: "h_diurna_val", defaultPct: 0.0, textClass: "text-slate-900" },
   { key: "h_nocturna", label: "Recargo Nocturno Ordinario", pctKey: "h_nocturna_pct", hrKey: "h_nocturna_hr", valKey: "h_nocturna_val", defaultPct: 0.35, textClass: "text-indigo-900 font-bold" },
-  { key: "h_festiva_diurna", label: "Recargo Festivo Diurno", pctKey: "h_festiva_diurna_pct", hrKey: "h_festiva_diurna_hr", valKey: "h_festiva_diurna_val", defaultPct: 0.75, textClass: "text-emerald-900" },
-  { key: "h_festiva_nocturna", label: "Recargo Festivo Nocturno", pctKey: "h_festiva_nocturna_pct", hrKey: "h_festiva_nocturna_hr", valKey: "h_festiva_nocturna_val", defaultPct: 2.1, textClass: "text-purple-900" },
-  { key: "h_extra_diurna", label: "Horas Extras Diurnas (S24 - Debe B26)", pctKey: "h_extra_diurna_pct", hrKey: "h_extra_diurna_hr", valKey: "h_extra_diurna_val", defaultPct: 1.5, textClass: "text-amber-900 font-bold" },
+  { key: "h_festiva_diurna", label: "Recargo Festivo Diurno", pctKey: "h_festiva_diurna_pct", hrKey: "h_festiva_diurna_hr", valKey: "h_festiva_diurna_val", defaultPct: 0.90, textClass: "text-emerald-900" },
+  { key: "h_festiva_nocturna", label: "Recargo Festivo Nocturno", pctKey: "h_festiva_nocturna_pct", hrKey: "h_festiva_nocturna_hr", valKey: "h_festiva_nocturna_val", defaultPct: 1.25, textClass: "text-purple-900" },
+  { key: "h_extra_diurna", label: "Horas Extras Diurnas (S24 - Debe B26)", pctKey: "h_extra_diurna_pct", hrKey: "h_extra_diurna_hr", valKey: "h_extra_diurna_val", defaultPct: 1.25, textClass: "text-amber-900 font-bold" },
   { key: "h_extra_nocturna", label: "Horas Extras Nocturnas", pctKey: "h_extra_nocturna_pct", hrKey: "h_extra_nocturna_hr", valKey: "h_extra_nocturna_val", defaultPct: 1.75, textClass: "text-orange-900" },
-  { key: "h_extra_festiva_diurna", label: "Extras Festivas Diurnas", pctKey: "h_extra_festiva_diurna_pct", hrKey: "h_extra_festiva_diurna_hr", valKey: "h_extra_festiva_diurna_val", defaultPct: 2.0, textClass: "text-red-900" },
-  { key: "h_extra_festiva_nocturna", label: "Extras Festivas Nocturnas", pctKey: "h_extra_festiva_nocturna_pct", hrKey: "h_extra_festiva_nocturna_hr", valKey: "h_extra_festiva_nocturna_val", defaultPct: 2.5, textClass: "text-rose-900" }
+  { key: "h_extra_festiva_diurna", label: "Extras Festivas Diurnas", pctKey: "h_extra_festiva_diurna_pct", hrKey: "h_extra_festiva_diurna_hr", valKey: "h_extra_festiva_diurna_val", defaultPct: 2.15, textClass: "text-red-900" },
+  { key: "h_extra_festiva_nocturna", label: "Extras Festivas Nocturnas", pctKey: "h_extra_festiva_nocturna_pct", hrKey: "h_extra_festiva_nocturna_hr", valKey: "h_extra_festiva_nocturna_val", defaultPct: 2.65, textClass: "text-rose-900" }
 ];
 
 export const DEFAULT_FORMULAS = {
@@ -218,8 +220,8 @@ export const DEFAULT_FORMULAS = {
   recargo_nocturno: '((salario_base / 210) * 0.35) * horas_nocturnas',
   val_extras_diurnas: '(salario_base / 210) * 1.25 * extras_diurnas',
   val_extras_nocturnas: '(salario_base / 210) * 1.75 * extras_nocturnas',
-  val_extras_festivas: '(salario_base / 210) * 2 * extras_festivas',
-  val_extras_festivas_nocturnas: '(salario_base / 210) * 2.5 * extras_festivas_nocturnas',
+  val_extras_festivas: '(salario_base / 210) * 2.15 * extras_festivas',
+  val_extras_festivas_nocturnas: '(salario_base / 210) * 2.65 * extras_festivas_nocturnas',
   transporte: 'salario_base <= (smlv_base * 2) ? (aux_transporte_base / 30) * dias_pagados : 0',
   incapacidad: '((salario_base / 30) * (2/3)) < (smlv_base / 30) ? (smlv_base / 30) * dias_incapacidad : ((salario_base / 30) * (2/3)) * dias_incapacidad',
   val_vacaciones: '(salario_base / 30) * dias_vacaciones',

@@ -1310,7 +1310,7 @@ processedLogs.forEach(day => {
       // Sueldo y Auxilio de Transporte basados en diasPagados
       let sueldoCalc = Math.round(valorDiaBase * diasPagados);
       if (cobrarDeuda && horasDescontadasDeuda > 0 && tipoCobroDeuda === 'diurnas') {
-          const valorHoraOrdinaria = salarioBase / 240;
+          const valorHoraOrdinaria = salarioBase / 210;
           sueldoCalc = Math.max(0, sueldoCalc - Math.round(valorHoraOrdinaria * horasDescontadasDeuda));
       }
       const ganaAuxilio = salarioBase <= (globalSmmlv * 2);

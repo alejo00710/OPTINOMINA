@@ -648,7 +648,7 @@ export default function TabLiquidacion({
                          const calcValor = (horas, porcentaje) => {
                               const hrs = parseFloat(horas) || 0;
                               if (hrs <= 0) return 0;
-                             return Math.round((salarioBase / 240) * (porcentaje / 100) * hrs);
+                             return Math.round((salarioBase / 210) * (porcentaje / 100) * hrs);
                          };
                          
                          const horasDebe = Number(overrides[`${selectedWorkerData.cedula}_horas_que_debe`] !== undefined ? overrides[`${selectedWorkerData.cedula}_horas_que_debe`] : (selectedWorkerData.horas_debe || 0));
@@ -680,18 +680,18 @@ export default function TabLiquidacion({
                          const calcVNocturnas = calcValor(tNocturnas, 35);
                          const vNocturnas = tNocturnas === 0 ? 0 : (overrides[`${selectedWorkerData.cedula}_recargo_nocturno`] !== undefined && overrides[`${selectedWorkerData.cedula}_recargo_nocturno`] !== "" ? Number(overrides[`${selectedWorkerData.cedula}_recargo_nocturno`]) : calcVNocturnas);
                          
-                                                   const vFesDiu = getVr('fes_diu', calcValor(tFesDiu, 75), tFesDiu);
-                          const vFesNoc = getVr('fes_noc', calcValor(tFesNoc, 210), tFesNoc);
+                                                   const vFesDiu = getVr('fes_diu', calcValor(tFesDiu, 90), tFesDiu);
+                          const vFesNoc = getVr('fes_noc', calcValor(tFesNoc, 125), tFesNoc);
 
                           // CRUCE AUTOMÁTICO DESHABILITADO:
                           // Las horas extras trabajadas se liquidan brutas sin descontar deuda previa.
                           const extDiuLiquidar = Math.max(0, horasExtraDiurnaReal);
                           const extNocLiquidar = Math.max(0, totalExtraNoc);
 
-                          const vExtDiu = getVr('ext_diu', calcValor(extDiuLiquidar, 150), extDiuLiquidar);
-                          const vExtNoc = getVr('ext_noc', calcValor(extNocLiquidar, 150), extNocLiquidar);
-                         const vExtFesDiu = getVr('ext_fes_diu', calcValor(totalExtFesDiu, 200), totalExtFesDiu);
-                         const vExtFesNoc = getVr('ext_fes_noc', calcValor(totalExtFesNoc, 200), totalExtFesNoc);
+                          const vExtDiu = getVr('ext_diu', calcValor(extDiuLiquidar, 125), extDiuLiquidar);
+                          const vExtNoc = getVr('ext_noc', calcValor(extNocLiquidar, 175), extNocLiquidar);
+                         const vExtFesDiu = getVr('ext_fes_diu', calcValor(totalExtFesDiu, 215), totalExtFesDiu);
+                         const vExtFesNoc = getVr('ext_fes_noc', calcValor(totalExtFesNoc, 265), totalExtFesNoc);
                          const vTotalExtras = Number(vNocturnas) + Number(vFesDiu) + Number(vFesNoc) + Number(vExtDiu) + Number(vExtNoc) + Number(vExtFesDiu) + Number(vExtFesNoc);
 
                          // AUTO-REVISORES: Sumatorias crudas del Registro Diario (Columnas O - V)
@@ -989,7 +989,7 @@ export default function TabLiquidacion({
                                                   {renderAutoRevisor(valExtFesDiu, rawU_extFesDiu)}
                                                </div>
                                             </td>
-                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">100%</span></td>
+                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">115%</span></td>
                                             <td className="py-2 px-2 text-right">
                                                <div className="flex justify-end items-center gap-1">
                                                   <span className="text-emerald-400">$</span>
@@ -1005,7 +1005,7 @@ export default function TabLiquidacion({
                                                   {renderAutoRevisor(valExtFesNoc, rawV_extFesNoc)}
                                                </div>
                                             </td>
-                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">150%</span></td>
+                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">165%</span></td>
                                             <td className="py-2 px-2 text-right">
                                                <div className="flex justify-end items-center gap-1">
                                                   <span className="text-emerald-400">$</span>
