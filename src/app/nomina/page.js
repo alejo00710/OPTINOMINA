@@ -412,6 +412,9 @@ export default function NominaPage() {
           tipo_cobro_deuda: emp.tipo_cobro_deuda || 'diurnas',
           horas_descontadas_deuda: emp.horas_descontadas_deuda || 0,
           mensaje_cobro_deuda: emp.mensaje_cobro_deuda || null,
+          descuento_actual_horas: emp.descuento_actual_horas || 0,
+          descuento_actual_tipo: emp.descuento_actual_tipo || 'diurnas',
+          mensaje_descuento_actual: emp.mensaje_descuento_actual || null,
           intereses_cesantias,
           devoluciones,
           motivo_devoluciones,
@@ -611,6 +614,10 @@ export default function NominaPage() {
           area: emp.area || "Administrativo",
           banco: emp.banco || "",
           tipo_vinculacion: emp.tipo_vinculacion || "",
+          fecha_ingreso_temporal: emp.fecha_ingreso_temporal || null,
+          fecha_retiro_temporal: emp.fecha_retiro_temporal || null,
+          fecha_ingreso_empresa: emp.fecha_ingreso_empresa || null,
+          fecha_retiro_empresa: emp.fecha_retiro_empresa || null,
           salario: Number(emp.salario_base || emp.salario || 0),
           horas_debe_acumuladas: Number(emp.horas_debe_acumuladas || 0),
           rodamiento: Number(emp.rodamiento || emp.valor_rodamiento || emp.aux_rodamiento || 0),
@@ -1183,6 +1190,23 @@ processedLogs.forEach(day => {
       }
       const cobrarDeuda = horasDescontadasDeuda > 0;
 
+      // =========================================================================
+      // DESCUENTO EN QUINCENA ACTUAL (Deducción directa por novedades en el periodo en curso, ej. DEBE)
+      // Totalmente independiente de la amortización de deuda antigua. NO toca nuevaDeudaAcumulada ni Banco de Horas.
+      // =========================================================================
+      const descuentoActualHoras = Math.max(0, Number(overrides[`${cedula}_descuento_actual_horas`] || 0));
+      const descuentoActualTipo = overrides[`${cedula}_descuento_actual_tipo`] || 'diurnas';
+      let mensajeDescuentoActual = null;
+
+      if (descuentoActualHoras > 0) {
+          if (descuentoActualTipo === 'nocturnas') {
+              finalNocturnas = Math.max(0, finalNocturnas - descuentoActualHoras);
+          } else {
+              finalDiurnas = Math.max(0, finalDiurnas - descuentoActualHoras);
+          }
+          mensajeDescuentoActual = `Descuento Quincena Actual: Se descontaron ${descuentoActualHoras} hrs por novedades (Ordinarias ${descuentoActualTipo === 'diurnas' ? 'Diurnas' : 'Nocturnas'}).`;
+      }
+
       // CRUCE AUTOMÁTICO DESHABILITADO:
       // Las horas extras se liquidan al 100% brutas trabajadas sin descontar deuda previa.
       const balanceExtrasST = finalExtDiu + finalExtNoc;
@@ -1312,6 +1336,10 @@ processedLogs.forEach(day => {
       if (cobrarDeuda && horasDescontadasDeuda > 0 && tipoCobroDeuda === 'diurnas') {
           const valorHoraOrdinaria = salarioBase / 210;
           sueldoCalc = Math.max(0, sueldoCalc - Math.round(valorHoraOrdinaria * horasDescontadasDeuda));
+      }
+      if (descuentoActualHoras > 0) {
+          const valorHoraOrdinaria = salarioBase / 210;
+          sueldoCalc = Math.max(0, sueldoCalc - Math.round(valorHoraOrdinaria * descuentoActualHoras));
       }
       const ganaAuxilio = salarioBase <= (globalSmmlv * 2);
       const transporteCalc = ganaAuxilio ? Math.round((globalAuxTransporte / 30) * diasPagados) : 0;
@@ -1608,8 +1636,13 @@ processedLogs.forEach(day => {
         tipo_cobro_deuda: tipoCobroDeuda,
         horas_descontadas_deuda: horasDescontadasDeuda,
         mensaje_cobro_deuda: mensajeCobroDeuda,
+        descuento_actual_horas: descuentoActualHoras,
+        descuento_actual_tipo: descuentoActualTipo,
+        mensaje_descuento_actual: mensajeDescuentoActual,
         horas_pendientes: horasPendientes,
         horas_diurnas: finalDiurnas,
+        t_diurnas: finalDiurnas,
+        diurnas: finalDiurnas,
         horas_nocturnas: finalNocturnas,
         festivas_diurnas: finalFesDiu,
         festivas_nocturnas: finalFesNoc,

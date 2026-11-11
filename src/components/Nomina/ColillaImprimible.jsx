@@ -123,6 +123,11 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
             <span>ℹ️ AMORTIZACIÓN BANCO DE HORAS: {empleado.mensaje_cobro_deuda}</span>
           </div>
         )}
+        {empleado.mensaje_descuento_actual && (
+          <div className="mb-2 p-1.5 bg-sky-50 border border-sky-300 rounded text-sky-900 text-[10px] font-bold flex items-center gap-1.5">
+            <span>✂️ DESCUENTO QUINCENA ACTUAL: {empleado.mensaje_descuento_actual}</span>
+          </div>
+        )}
 
         {/* 4. TABLA DE CONCEPTOS */}
         <table className="w-full border-collapse border border-[#9ca3af] mb-2 uppercase text-[10px]">
@@ -261,6 +266,17 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
                 <td className="border-r border-[#9ca3af] px-2 text-right"></td>
                 <td className="px-2 text-right text-amber-800 font-black">
                   -{Number(empleado.horas_descontadas_deuda || 0).toFixed(1)} hrs
+                </td>
+              </tr>
+            )}
+            {empleado.mensaje_descuento_actual && (
+              <tr className="bg-sky-50/60 font-bold border-b border-[#9ca3af]">
+                <td className="border-r border-[#9ca3af] px-2 text-left text-sky-900">
+                  ✂️ DESCUENTO QUINCENA ACTUAL ({empleado.mensaje_descuento_actual})
+                </td>
+                <td className="border-r border-[#9ca3af] px-2 text-right"></td>
+                <td className="px-2 text-right text-sky-800 font-black">
+                  -{Number(empleado.descuento_actual_horas || 0).toFixed(1)} hrs
                 </td>
               </tr>
             )}

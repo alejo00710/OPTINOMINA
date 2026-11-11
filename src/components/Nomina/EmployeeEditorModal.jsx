@@ -29,7 +29,11 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
     optica_total: 0,
     cuota_optica: 0,
     banco: '',
-    tipo_vinculacion: 'Empresa'
+    tipo_vinculacion: 'Empresa',
+    fecha_ingreso_temporal: '',
+    fecha_retiro_temporal: '',
+    fecha_ingreso_empresa: '',
+    fecha_retiro_empresa: ''
   });
   const [saveStatus, setSaveStatus] = useState('idle');
 
@@ -57,7 +61,11 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         optica_total: employee.optica_total || 0,
         cuota_optica: employee.cuota_optica || 0,
         banco: employee.banco || '',
-        tipo_vinculacion: employee.tipo_vinculacion || 'Empresa'
+        tipo_vinculacion: employee.tipo_vinculacion || 'Empresa',
+        fecha_ingreso_temporal: employee.fecha_ingreso_temporal || '',
+        fecha_retiro_temporal: employee.fecha_retiro_temporal || '',
+        fecha_ingreso_empresa: employee.fecha_ingreso_empresa || '',
+        fecha_retiro_empresa: employee.fecha_retiro_empresa || ''
       });
     } else {
       setFormData({
@@ -82,7 +90,11 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         optica_total: 0,
         cuota_optica: 0,
         banco: '',
-        tipo_vinculacion: 'Empresa'
+        tipo_vinculacion: 'Empresa',
+        fecha_ingreso_temporal: '',
+        fecha_retiro_temporal: '',
+        fecha_ingreso_empresa: '',
+        fecha_retiro_empresa: ''
       });
     }
     if (isOpen) {
@@ -103,6 +115,12 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
       console.log("🚀 INTENTANDO GUARDAR PAYLOAD:", formData);
       setSaveStatus('saving');
       
+      const sanitizeDate = (val) => {
+        if (!val) return null;
+        const str = String(val).trim();
+        return str === '' ? null : str;
+      };
+
       const empData = {
         cedula: formData.cedula,
         biometric_id: formData.biometric_id,
@@ -126,6 +144,10 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
         cuota_optica: parseLocalNumber(formData.cuota_optica),
         banco: formData.banco ? formData.banco.toUpperCase() : '',
         tipo_vinculacion: formData.tipo_vinculacion,
+        fecha_ingreso_temporal: sanitizeDate(formData.fecha_ingreso_temporal),
+        fecha_retiro_temporal: sanitizeDate(formData.fecha_retiro_temporal),
+        fecha_ingreso_empresa: sanitizeDate(formData.fecha_ingreso_empresa),
+        fecha_retiro_empresa: sanitizeDate(formData.fecha_retiro_empresa),
         is_active: true
       };
       
@@ -140,10 +162,14 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
           .eq('cedula', employee.cedula);
         errorSupabase = updateError;
       } else {
-        // Insert new record
+        // Insert new record with bank of hours starting at 0
+        const insertPayload = {
+          ...empData,
+          horas_debe_acumuladas: 0
+        };
         const { error: insertError } = await supabase
           .from('optimoldes_employees')
-          .insert([empData]);
+          .insert([insertPayload]);
         errorSupabase = insertError;
       }
       
@@ -301,6 +327,72 @@ export default function EmployeeEditorModal({ isOpen, onClose, employee, refresh
                 <option value="Empresa">Empresa</option>
                 <option value="Temporal">Temporal</option>
               </select>
+            </div>
+
+            {/* Sección Fechas de Vinculación */}
+            <div className="col-span-1 md:col-span-2 bg-slate-50/70 border border-slate-200/90 p-5 rounded-2xl shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  📅 Fechas de Vinculación
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium">
+                  (Historial de ingreso y retiro en misión o empresa)
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                {/* Ingreso Temporal */}
+                <div className="bg-white border border-amber-200/80 p-3.5 rounded-xl flex flex-col shadow-sm focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 transition-all">
+                  <span className="text-[9px] font-black text-amber-700 uppercase tracking-widest mb-1.5">
+                    Ingreso (Misión/Temporal)
+                  </span>
+                  <input
+                    type="date"
+                    value={formData.fecha_ingreso_temporal}
+                    onChange={(e) => setFormData({ ...formData, fecha_ingreso_temporal: e.target.value })}
+                    className="w-full text-xs font-semibold text-slate-800 bg-transparent focus:ring-0 outline-none cursor-pointer"
+                  />
+                </div>
+
+                {/* Retiro Temporal */}
+                <div className="bg-white border border-amber-200/80 p-3.5 rounded-xl flex flex-col shadow-sm focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 transition-all">
+                  <span className="text-[9px] font-black text-amber-800 uppercase tracking-widest mb-1.5">
+                    Retiro (Misión/Temporal)
+                  </span>
+                  <input
+                    type="date"
+                    value={formData.fecha_retiro_temporal}
+                    onChange={(e) => setFormData({ ...formData, fecha_retiro_temporal: e.target.value })}
+                    className="w-full text-xs font-semibold text-slate-800 bg-transparent focus:ring-0 outline-none cursor-pointer"
+                  />
+                </div>
+
+                {/* Ingreso Empresa */}
+                <div className="bg-white border border-indigo-200/80 p-3.5 rounded-xl flex flex-col shadow-sm focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-400/20 transition-all">
+                  <span className="text-[9px] font-black text-indigo-700 uppercase tracking-widest mb-1.5">
+                    Ingreso (Vinculado/Empresa)
+                  </span>
+                  <input
+                    type="date"
+                    value={formData.fecha_ingreso_empresa}
+                    onChange={(e) => setFormData({ ...formData, fecha_ingreso_empresa: e.target.value })}
+                    className="w-full text-xs font-semibold text-slate-800 bg-transparent focus:ring-0 outline-none cursor-pointer"
+                  />
+                </div>
+
+                {/* Retiro Empresa */}
+                <div className="bg-white border border-rose-200/80 p-3.5 rounded-xl flex flex-col shadow-sm focus-within:border-rose-400 focus-within:ring-2 focus-within:ring-rose-400/20 transition-all">
+                  <span className="text-[9px] font-black text-rose-700 uppercase tracking-widest mb-1.5">
+                    Retiro (Vinculado/Empresa)
+                  </span>
+                  <input
+                    type="date"
+                    value={formData.fecha_retiro_empresa}
+                    onChange={(e) => setFormData({ ...formData, fecha_retiro_empresa: e.target.value })}
+                    className="w-full text-xs font-semibold text-slate-800 bg-transparent focus:ring-0 outline-none cursor-pointer"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">

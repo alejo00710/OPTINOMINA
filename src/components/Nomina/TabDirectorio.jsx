@@ -119,6 +119,7 @@ export default function TabDirectorio({ employees, refreshEmployees }) {
               <th className="py-4 px-6 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('categoria')}>Categoría{getSortIcon('categoria')}</th>
               <th className="py-4 px-6 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('banco')}>Banco{getSortIcon('banco')}</th>
               <th className="py-4 px-6 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('tipo_vinculacion')}>Vinculación{getSortIcon('tipo_vinculacion')}</th>
+              <th className="py-4 px-6 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('fecha_ingreso_empresa')}>Fechas Vinculación{getSortIcon('fecha_ingreso_empresa')}</th>
               <th className="py-4 px-6 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('salario_base')}>Salario Base{getSortIcon('salario_base')}</th>
               <th className="py-4 px-6 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('rodamiento')}>Rodamiento{getSortIcon('rodamiento')}</th>
               <th className="py-4 px-6 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleSort('prestamo_total')}>Total Préstamo{getSortIcon('prestamo_total')}</th>
@@ -151,6 +152,29 @@ export default function TabDirectorio({ employees, refreshEmployees }) {
                   <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${emp.tipo_vinculacion === 'Temporal' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
                     {emp.tipo_vinculacion || 'Empresa'}
                   </span>
+                </td>
+                <td className="py-3 px-6 text-xs text-slate-600 whitespace-nowrap">
+                  <div className="flex flex-col gap-1 min-w-[200px]">
+                    {(emp.fecha_ingreso_temporal || emp.fecha_retiro_temporal) && (
+                      <div className="flex items-center justify-between gap-2 bg-amber-50/90 px-2 py-0.5 rounded-lg border border-amber-200 text-amber-900 text-[10px]">
+                        <span className="font-bold uppercase tracking-wider text-amber-700">Misión:</span>
+                        <span className="font-mono">
+                          {emp.fecha_ingreso_temporal || '—'} {emp.fecha_retiro_temporal ? `➜ ${emp.fecha_retiro_temporal}` : ''}
+                        </span>
+                      </div>
+                    )}
+                    {(emp.fecha_ingreso_empresa || emp.fecha_retiro_empresa) && (
+                      <div className="flex items-center justify-between gap-2 bg-indigo-50/90 px-2 py-0.5 rounded-lg border border-indigo-200 text-indigo-900 text-[10px]">
+                        <span className="font-bold uppercase tracking-wider text-indigo-700">Empresa:</span>
+                        <span className="font-mono">
+                          {emp.fecha_ingreso_empresa || '—'} {emp.fecha_retiro_empresa ? `➜ ${emp.fecha_retiro_empresa}` : ''}
+                        </span>
+                      </div>
+                    )}
+                    {!emp.fecha_ingreso_temporal && !emp.fecha_retiro_temporal && !emp.fecha_ingreso_empresa && !emp.fecha_retiro_empresa && (
+                      <span className="text-slate-400 italic text-[11px]">—</span>
+                    )}
+                  </div>
                 </td>
                 <td className="py-3 px-6 text-sm text-slate-900 font-bold">{fmtCOP(emp.salario_base || emp.salario)}</td>
                 <td className="py-3 px-6 text-sm text-slate-600">{fmtCOP(emp.rodamiento)}</td>
@@ -199,7 +223,7 @@ export default function TabDirectorio({ employees, refreshEmployees }) {
             ))}
             {employees.length === 0 && (
               <tr>
-                <td colSpan="13" className="py-12 text-center text-slate-500">No hay empleados registrados.</td>
+                <td colSpan="17" className="py-12 text-center text-slate-500">No hay empleados registrados.</td>
               </tr>
             )}
           </tbody>

@@ -881,6 +881,47 @@ export default function TabLiquidacion({
                                        </div>
                                     </div>
                                  </div>
+                                 {/* DESCUENTO POR NOVEDADES (QUINCENA ACTUAL) */}
+                                 <div className="p-4 bg-slate-800/90 border border-sky-500/40 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg backdrop-blur-sm">
+                                    <div className="flex items-center gap-3">
+                                       <div className="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center font-black text-lg border border-sky-500/30 shrink-0">
+                                          ✂️
+                                       </div>
+                                       <div>
+                                          <h4 className="text-xs font-black uppercase tracking-wider text-sky-300">DESCUENTO POR NOVEDADES (QUINCENA ACTUAL)</h4>
+                                          <p className="text-[11px] text-slate-300 font-medium">
+                                             Deducción directa de horas no laboradas en el periodo en curso (ej. DEBE). Liquidación inmediata sobre ordinarias sin afectar el Banco de Horas.
+                                          </p>
+                                       </div>
+                                    </div>
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                       <div className="flex items-center gap-2 bg-slate-900/60 px-3 py-1.5 rounded-xl border border-slate-700/60">
+                                          <label className="text-xs font-bold text-slate-200 select-none">
+                                             Horas a descontar en el acto:
+                                          </label>
+                                          <input
+                                             type="number"
+                                             min="0"
+                                             step="0.5"
+                                             placeholder="0.0"
+                                             value={descuentoActualHorasVal}
+                                             onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_descuento_actual_horas`, e.target.value)}
+                                             className="w-20 bg-slate-800 text-sky-300 font-black text-xs rounded-lg px-2.5 py-1 border border-sky-500/40 outline-none focus:ring-1 focus:ring-sky-400 text-center"
+                                          />
+                                       </div>
+                                       <div className="flex items-center gap-2 bg-slate-900/60 px-3 py-1.5 rounded-xl border border-slate-700/60">
+                                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tipo:</span>
+                                          <select
+                                             value={descuentoActualTipoVal}
+                                             onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_descuento_actual_tipo`, e.target.value)}
+                                             className="text-xs font-bold rounded-lg px-2.5 py-1 border transition-all bg-slate-800 text-sky-300 border-sky-500/40 focus:border-sky-400 cursor-pointer"
+                                          >
+                                             <option value="diurnas">diurnas</option>
+                                             <option value="nocturnas">nocturnas</option>
+                                          </select>
+                                       </div>
+                                    </div>
+                                 </div>
 
 
                                 <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">

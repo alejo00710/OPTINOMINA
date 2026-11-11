@@ -220,6 +220,7 @@ export default function ColillaPDF({ empleados = [], tituloReporte = "SÁBANA CO
                 </View>
                 <DetailRow label="Salario Base" value={emp.salario} forceShow={true} />
                 <DetailRow label="Días Pagados" value={`${emp.dias_pagados || 0} días`} isMoney={false} forceShow={true} />
+                <DetailRow label="Horas Ordinarias Diurnas" value={`${emp.horas_diurnas ?? emp.t_diurnas ?? emp.diurnas ?? 0} hrs`} isMoney={false} forceShow={true} />
                 <DetailRow label="Sueldo" value={emp.sueldo} forceShow={true} />
                 <DetailRow label="Comisiones" value={emp.comisiones} />
                 <DetailRow label="Auxilio de Transporte" value={emp.transporte} />
@@ -295,6 +296,16 @@ export default function ColillaPDF({ empleados = [], tituloReporte = "SÁBANA CO
                     </Text>
                     <Text style={[styles.detailValue, { color: '#92400e', fontWeight: 'bold' }]}>
                       {`-${Number(emp.horas_descontadas_deuda || 0).toFixed(1)} hrs`}
+                    </Text>
+                  </View>
+                )}
+                {emp.mensaje_descuento_actual && (
+                  <View style={[styles.detailRow, { backgroundColor: '#e0f2fe' }]}>
+                    <Text style={[styles.detailConcept, { color: '#0369a1', fontWeight: 'bold' }]}>
+                      {`✂️ Descuento Quincena Actual (${emp.mensaje_descuento_actual})`}
+                    </Text>
+                    <Text style={[styles.detailValue, { color: '#0369a1', fontWeight: 'bold' }]}>
+                      {`-${Number(emp.descuento_actual_horas || 0).toFixed(1)} hrs`}
                     </Text>
                   </View>
                 )}

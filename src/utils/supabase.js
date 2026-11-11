@@ -107,7 +107,16 @@ export const uploadEmployeesBulk = async (employees) => {
 
 export const upsertEmployeeRecord = async (empData) => {
   try {
-    const { error } = await supabase.from('optimoldes_employees').upsert([empData], { onConflict: 'cedula' });
+    const sanitizeDate = (val) => (val && String(val).trim() !== '' ? String(val).trim() : null);
+    const cleanedData = {
+      ...empData,
+      fecha_ingreso_temporal: sanitizeDate(empData.fecha_ingreso_temporal),
+      fecha_retiro_temporal: sanitizeDate(empData.fecha_retiro_temporal),
+      fecha_ingreso_empresa: sanitizeDate(empData.fecha_ingreso_empresa),
+      fecha_retiro_empresa: sanitizeDate(empData.fecha_retiro_empresa),
+      horas_debe_acumuladas: empData.horas_debe_acumuladas !== undefined ? Number(empData.horas_debe_acumuladas) : 0
+    };
+    const { error } = await supabase.from('optimoldes_employees').upsert([cleanedData], { onConflict: 'cedula' });
     if (error) {
       alert("❌ ERROR SUPABASE: " + error.message);
       throw error;
