@@ -1191,20 +1191,15 @@ processedLogs.forEach(day => {
       const cobrarDeuda = horasDescontadasDeuda > 0;
 
       // =========================================================================
-      // DESCUENTO EN QUINCENA ACTUAL (Deducción directa por novedades en el periodo en curso, ej. DEBE)
-      // Totalmente independiente de la amortización de deuda antigua. NO toca nuevaDeudaAcumulada ni Banco de Horas.
+      // DESCUENTO EN QUINCENA ACTUAL (100% INFORMATIVO PARA COLILLA Y REPORTES)
+      // La novedad (ej. DEBE) ya descuenta el tiempo automáticamente en la liquidación diaria.
+      // Por ende, NO resta horas (finalDiurnas / finalNocturnas) ni deduce dinero de sueldoCalc.
       // =========================================================================
       const descuentoActualHoras = Math.max(0, Number(overrides[`${cedula}_descuento_actual_horas`] || 0));
-      const descuentoActualTipo = overrides[`${cedula}_descuento_actual_tipo`] || 'diurnas';
       let mensajeDescuentoActual = null;
 
       if (descuentoActualHoras > 0) {
-          if (descuentoActualTipo === 'nocturnas') {
-              finalNocturnas = Math.max(0, finalNocturnas - descuentoActualHoras);
-          } else {
-              finalDiurnas = Math.max(0, finalDiurnas - descuentoActualHoras);
-          }
-          mensajeDescuentoActual = `Descuento Quincena Actual: Se descontaron ${descuentoActualHoras} hrs por novedades (Ordinarias ${descuentoActualTipo === 'diurnas' ? 'Diurnas' : 'Nocturnas'}).`;
+          mensajeDescuentoActual = `Descuento Quincena Actual: Se descontaron ${descuentoActualHoras} hrs por novedades.`;
       }
 
       // CRUCE AUTOMÁTICO DESHABILITADO:
@@ -1336,10 +1331,6 @@ processedLogs.forEach(day => {
       if (cobrarDeuda && horasDescontadasDeuda > 0 && tipoCobroDeuda === 'diurnas') {
           const valorHoraOrdinaria = salarioBase / 210;
           sueldoCalc = Math.max(0, sueldoCalc - Math.round(valorHoraOrdinaria * horasDescontadasDeuda));
-      }
-      if (descuentoActualHoras > 0) {
-          const valorHoraOrdinaria = salarioBase / 210;
-          sueldoCalc = Math.max(0, sueldoCalc - Math.round(valorHoraOrdinaria * descuentoActualHoras));
       }
       const ganaAuxilio = salarioBase <= (globalSmmlv * 2);
       const transporteCalc = ganaAuxilio ? Math.round((globalAuxTransporte / 30) * diasPagados) : 0;
@@ -1637,7 +1628,6 @@ processedLogs.forEach(day => {
         horas_descontadas_deuda: horasDescontadasDeuda,
         mensaje_cobro_deuda: mensajeCobroDeuda,
         descuento_actual_horas: descuentoActualHoras,
-        descuento_actual_tipo: descuentoActualTipo,
         mensaje_descuento_actual: mensajeDescuentoActual,
         horas_pendientes: horasPendientes,
         horas_diurnas: finalDiurnas,

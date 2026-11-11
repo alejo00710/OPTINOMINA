@@ -804,6 +804,8 @@ export default function TabLiquidacion({
 
                           const saldoDeudaActual = Math.abs(Number(selectedWorkerData.horas_debe_acumuladas !== undefined ? selectedWorkerData.horas_debe_acumuladas : (selectedWorkerData.nueva_deuda_acumulada || 0)));
 
+                          const descuentoActualHorasVal = selectedWorkerData ? (overrides[`${selectedWorkerData.cedula}_descuento_actual_horas`] !== undefined ? overrides[`${selectedWorkerData.cedula}_descuento_actual_horas`] : (selectedWorkerData.descuento_actual_horas > 0 ? selectedWorkerData.descuento_actual_horas : '')) : '';
+
                           return (
                               <>
                                  {deudaAnteriorQuincena < 0 && (
@@ -890,7 +892,7 @@ export default function TabLiquidacion({
                                        <div>
                                           <h4 className="text-xs font-black uppercase tracking-wider text-sky-300">DESCUENTO POR NOVEDADES (QUINCENA ACTUAL)</h4>
                                           <p className="text-[11px] text-slate-300 font-medium">
-                                             Deducción directa de horas no laboradas en el periodo en curso (ej. DEBE). Liquidación inmediata sobre ordinarias sin afectar el Banco de Horas.
+                                             Uso estrictamente informativo. Genera el aviso en la colilla para novedades (ej. DEBE) que ya dedujeron tiempo automáticamente.
                                           </p>
                                        </div>
                                     </div>
@@ -908,17 +910,6 @@ export default function TabLiquidacion({
                                              onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_descuento_actual_horas`, e.target.value)}
                                              className="w-20 bg-slate-800 text-sky-300 font-black text-xs rounded-lg px-2.5 py-1 border border-sky-500/40 outline-none focus:ring-1 focus:ring-sky-400 text-center"
                                           />
-                                       </div>
-                                       <div className="flex items-center gap-2 bg-slate-900/60 px-3 py-1.5 rounded-xl border border-slate-700/60">
-                                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tipo:</span>
-                                          <select
-                                             value={descuentoActualTipoVal}
-                                             onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_descuento_actual_tipo`, e.target.value)}
-                                             className="text-xs font-bold rounded-lg px-2.5 py-1 border transition-all bg-slate-800 text-sky-300 border-sky-500/40 focus:border-sky-400 cursor-pointer"
-                                          >
-                                             <option value="diurnas">diurnas</option>
-                                             <option value="nocturnas">nocturnas</option>
-                                          </select>
                                        </div>
                                     </div>
                                  </div>
