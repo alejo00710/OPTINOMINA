@@ -752,10 +752,8 @@ export default function TabLiquidacion({
                          const valExtFesDiu = overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`]) : totalExtFesDiu;
                          const valExtFesNoc = overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`]) : totalExtFesNoc;
 
-                         const renderAutoRevisor = (currentVal, rawVal, overrideKey) => {
+                         const renderAutoRevisor = (currentVal, rawVal) => {
                             const isSynced = Math.abs((Number(currentVal) || 0) - (Number(rawVal) || 0)) < 0.05;
-                            const isAccepted = overrideKey && acceptedOverrides && acceptedOverrides[overrideKey] === true;
-
                             if (isSynced) {
                                return (
                                   <span 
@@ -766,32 +764,13 @@ export default function TabLiquidacion({
                                   </span>
                                );
                             }
-
-                            if (isAccepted) {
-                               return (
-                                  <span 
-                                     className="text-emerald-400 font-bold ml-1.5 cursor-default select-none text-xs" 
-                                     title="Ajuste manual validado"
-                                  >
-                                     ✔️
-                                  </span>
-                               );
-                            }
-
                             return (
-                               <button 
-                                  type="button"
-                                  onClick={(e) => {
-                                     e.stopPropagation();
-                                     if (overrideKey && typeof handleAcceptOverride === 'function') {
-                                        handleAcceptOverride(overrideKey);
-                                     }
-                                  }}
-                                  className="text-amber-400 font-bold ml-1.5 cursor-pointer select-none text-xs hover:scale-125 transition-transform p-0 bg-transparent border-none inline-flex items-center" 
-                                  title={`Aceptar este cambio manual (Registro Diario: ${(Number(rawVal) || 0).toFixed(1)}h)`}
+                               <span 
+                                  className="text-emerald-400 font-bold ml-1.5 cursor-default select-none text-xs" 
+                                  title={`Ajuste manual activo: ${(Number(currentVal) || 0).toFixed(1)}h (Biométrico: ${(Number(rawVal) || 0).toFixed(1)}h)`}
                                >
-                                  ⚠️
-                               </button>
+                                  ✔️
+                               </span>
                             );
                          };
 

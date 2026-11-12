@@ -1137,31 +1137,42 @@ processedLogs.forEach(day => {
       
       const salarioBase = resolveValue(overrides, `${cedula}_salario_base`, () => Number(emp.salario_base || emp.salario || 0));
 
-      // Allow global overrides for the summed hours
-      let finalDiurnas = resolveValue(overrides, `${cedula}_horas_diurnas`, () => sumDiurnas);
-      let finalNocturnas = resolveValue(overrides, `${cedula}_horas_nocturnas`, () => sumNocturnas);
-      let finalFesDiu = resolveValue(overrides, `${cedula}_festivas_diurnas`, () => sumFesDiu);
-      let finalFesNoc = resolveValue(overrides, `${cedula}_festivas_nocturnas`, () => sumFesNoc);
+      // CENTRALIZACIÓN DE LA VERDAD (Overrides > Biométrico)
+      // Prioridad absoluta a los valores editados en TabLiquidacion (tot_hr_*) o en overrides globales
+      const getOverrideHour = (key1, key2, fallbackFn) => {
+          if (overrides[`${cedula}_${key1}`] !== undefined && overrides[`${cedula}_${key1}`] !== "") {
+              const v = typeof overrides[`${cedula}_${key1}`] === "string" ? parseLocalNumber(overrides[`${cedula}_${key1}`]) : overrides[`${cedula}_${key1}`];
+              return isNaN(v) ? 0 : Number(v);
+          }
+          if (key2 && overrides[`${cedula}_${key2}`] !== undefined && overrides[`${cedula}_${key2}`] !== "") {
+              const v = typeof overrides[`${cedula}_${key2}`] === "string" ? parseLocalNumber(overrides[`${cedula}_${key2}`]) : overrides[`${cedula}_${key2}`];
+              return isNaN(v) ? 0 : Number(v);
+          }
+          return fallbackFn();
+      };
+
+      let finalDiurnas = getOverrideHour('tot_hr_diurnas', 'horas_diurnas', () => sumDiurnas);
+      let finalNocturnas = getOverrideHour('horas_nocturnas', 'tot_hr_nocturnas', () => sumNocturnas);
+      let finalFesDiu = getOverrideHour('tot_hr_fes_diu', 'festivas_diurnas', () => sumFesDiu);
+      let finalFesNoc = getOverrideHour('tot_hr_fes_noc', 'festivas_nocturnas', () => sumFesNoc);
       
-      // Reactividad Quincenal (El Balanceador Maestro de Excel):
-      let finalExtNoc = resolveValue(overrides, `${cedula}_extras_nocturnas`, () => {
-          return overrides[`${cedula}_horas_nocturnas`] !== undefined 
-              ? (sumNetNoc - Number(overrides[`${cedula}_horas_nocturnas`])) 
+      let finalExtNoc = getOverrideHour('tot_hr_ext_noc', 'extras_nocturnas', () => {
+          return (overrides[`${cedula}_horas_nocturnas`] !== undefined || overrides[`${cedula}_tot_hr_nocturnas`] !== undefined)
+              ? Math.max(0, sumNetNoc - Number(finalNocturnas))
               : sumExtNoc;
       });
       
-      let finalExtDiu = resolveValue(overrides, `${cedula}_extras_diurnas`, () => {
-          // Si el usuario overrideó extras_diurnas globalmente, manda eso.
-          // Si no, la extra diurna balancea TODO contra el total pagado (sumHrPag)
+      let finalExtDiu = getOverrideHour('tot_hr_ext_diu', 'extras_diurnas', () => {
           const baseCalculada = sumHrPag - (finalDiurnas + finalNocturnas + finalFesDiu + finalFesNoc + finalExtNoc + sumExtFesDiu + sumExtFesNoc);
-          // Usamos la calculada si hay modificaciones en los ordinarios, sino caemos al default sumado
-          return (overrides[`${cedula}_horas_diurnas`] !== undefined || overrides[`${cedula}_horas_nocturnas`] !== undefined) 
-              ? baseCalculada 
+          return (overrides[`${cedula}_horas_diurnas`] !== undefined || overrides[`${cedula}_tot_hr_diurnas`] !== undefined || overrides[`${cedula}_horas_nocturnas`] !== undefined || overrides[`${cedula}_tot_hr_nocturnas`] !== undefined)
+              ? Math.max(0, baseCalculada)
               : sumExtDiu;
       });
       
-      let finalExtFesDiu = resolveValue(overrides, `${cedula}_extras_festivas`, () => sumExtFesDiu);
-      let finalExtFesNoc = resolveValue(overrides, `${cedula}_extras_festivas_nocturnas`, () => sumExtFesNoc);
+      let finalExtFesDiu = getOverrideHour('tot_hr_ext_fes_diu', 'extras_festivas', () => sumExtFesDiu);
+      let finalExtFesNoc = getOverrideHour('tot_hr_ext_fes_noc', 'extras_festivas_nocturnas', () => 
+          getOverrideHour('ext_fes_noc', null, () => sumExtFesNoc)
+      );
 
       const esPersonalAdministrativo = emp.categoria === 'Administrativo' || emp.area === 'Administrativo';
       if (esPersonalAdministrativo) {
@@ -1280,19 +1291,13 @@ processedLogs.forEach(day => {
       const motivoOtros = overrides[`${cedula}_motivo_otros`] !== undefined ? overrides[`${cedula}_motivo_otros`] : (emp.motivo_otros || '');
       const bonificacion = resolveValue(overrides, `${cedula}_bonificacion`, () => 0);
       
-      // Extracción estricta del valor visual que renderiza el <input>
-      const getValExactoInput = (key, finalCalc) => {
-         const cKey = `${cedula}_${key}`;
-         let val = overrides[cKey] !== undefined ? overrides[cKey] : (finalCalc !== undefined ? finalCalc : "");
-         return Number(val) || 0;
-      };
-
-      const hrsDiurnasParaCalculo = getValExactoInput('horas_diurnas', finalDiurnas);
-      const hrsNocturnasParaCalculo = getValExactoInput('horas_nocturnas', finalNocturnas);
-      const extDiurnasParaCalculo = getValExactoInput('extras_diurnas', extraDiurnaNeto);
-      const extNocturnasParaCalculo = getValExactoInput('extras_nocturnas', finalExtNoc);
-      const extFestivasParaCalculo = getValExactoInput('extras_festivas', finalExtFesDiu);
-      const extFestivasNocturnasParaCalculo = getValExactoInput('extras_festivas_nocturnas', finalExtFesNoc);
+      // Asignación directa y unificada de los valores de tiempo ya resueltos con override
+      const hrsDiurnasParaCalculo = finalDiurnas;
+      const hrsNocturnasParaCalculo = finalNocturnas;
+      const extDiurnasParaCalculo = finalExtDiu;
+      const extNocturnasParaCalculo = finalExtNoc;
+      const extFestivasParaCalculo = finalExtFesDiu;
+      const extFestivasNocturnasParaCalculo = finalExtFesNoc;
 
       // Mapeo Estricto de Novedades (Auditoría de Liquidación)
       // Conteo directo de novedades desde el horario / turnos de los días procesados
@@ -1478,19 +1483,43 @@ processedLogs.forEach(day => {
       const valorDebe = resolveValue(overrides, `${cedula}_val_debe`, () => 
           resolveValue(overrides, `${cedula}_valor_debe`, () => valorDebeCalc)
       );
-      // Valores monetarios de extras con cruce de cuentas estricto
-      const valorExtDiuCalc = Math.round((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_DIURNA * extDiuLiquidar);
-      const valorExtDiu = resolveValue(overrides, `${cedula}_val_extras_diurnas`, () => 
-          resolveValue(overrides, `${cedula}_valor_extras_diurnas`, () => valorExtDiuCalc)
+      // Valores monetarios de recargos y extras (priorizando vr_* de TabLiquidacion)
+      const recargoNocturnoCalc = Math.round((salarioBase / DIVISOR_RECARGOS_NOCTURNOS) * FACTOR_RECARGO_NOCTURNO * hrsNocturnasParaCalculo);
+      const recargoNocturno = resolveValue(overrides, `${cedula}_recargo_nocturno`, () => 
+          resolveValue(overrides, `${cedula}_val_recargo_nocturno`, () => 
+          resolveValue(overrides, `${cedula}_vr_nocturnas`, () => recargoNocturnoCalc))
       );
-      const valorExtNocCalc = Math.round((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_NOCTURNA * extNocLiquidar);
-      const valorExtNoc = resolveValue(overrides, `${cedula}_val_extras_nocturnas`, () => 
-          resolveValue(overrides, `${cedula}_valor_extras_nocturnas`, () => valorExtNocCalc)
+
+      const valorExtDiuCalc = Math.round((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_DIURNA * extDiurnasParaCalculo);
+      const valorExtDiu = resolveValue(overrides, `${cedula}_vr_ext_diu`, () => 
+          resolveValue(overrides, `${cedula}_val_extras_diurnas`, () => 
+          resolveValue(overrides, `${cedula}_valor_extras_diurnas`, () => valorExtDiuCalc))
+      );
+      const valorExtNocCalc = Math.round((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_NOCTURNA * extNocturnasParaCalculo);
+      const valorExtNoc = resolveValue(overrides, `${cedula}_vr_ext_noc`, () => 
+          resolveValue(overrides, `${cedula}_val_extras_nocturnas`, () => 
+          resolveValue(overrides, `${cedula}_valor_extras_nocturnas`, () => valorExtNocCalc))
+      );
+      const valorExtFesDiuCalc = Math.round((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_FESTIVA * extFestivasParaCalculo);
+      const valorExtFesDiu = resolveValue(overrides, `${cedula}_vr_ext_fes_diu`, () => 
+          resolveValue(overrides, `${cedula}_val_extras_festivas`, () => 
+          resolveValue(overrides, `${cedula}_valor_extras_festivas`, () => valorExtFesDiuCalc))
       );
       const valorExtFesNocCalc = Math.round((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_FESTIVA_NOCTURNA * extFestivasNocturnasParaCalculo);
-      const valorExtFesNoc = resolveValue(overrides, `${cedula}_val_extras_festivas_nocturnas`, () => 
+      const valorExtFesNoc = resolveValue(overrides, `${cedula}_vr_ext_fes_noc`, () => 
+          resolveValue(overrides, `${cedula}_val_extras_festivas_nocturnas`, () => 
           resolveValue(overrides, `${cedula}_valor_extras_festivas_nocturnas`, () => 
-          resolveValue(overrides, `${cedula}_val_ext_fes_noc`, () => valorExtFesNocCalc))
+          resolveValue(overrides, `${cedula}_val_ext_fes_noc`, () => valorExtFesNocCalc)))
+      );
+      const valorFesDiuCalc = Math.round((salarioBase / DIVISOR_HORAS_EXTRAS) * 0.90 * finalFesDiu);
+      const valorFesDiu = resolveValue(overrides, `${cedula}_vr_fes_diu`, () => 
+          resolveValue(overrides, `${cedula}_val_festivas_diurnas`, () => 
+          resolveValue(overrides, `${cedula}_valor_festivas_diurnas`, () => valorFesDiuCalc))
+      );
+      const valorFesNocCalc = Math.round((salarioBase / DIVISOR_HORAS_EXTRAS) * 1.25 * finalFesNoc);
+      const valorFesNoc = resolveValue(overrides, `${cedula}_vr_fes_noc`, () => 
+          resolveValue(overrides, `${cedula}_val_festivas_nocturnas`, () => 
+          resolveValue(overrides, `${cedula}_valor_festivas_nocturnas`, () => valorFesNocCalc))
       );
 
       // MOTOR MATEMÁTICO EN CASCADA
@@ -1564,19 +1593,41 @@ processedLogs.forEach(day => {
         valor_debe: valorDebe,
         debe: valorDebe,
         horas_diurnas: hrsDiurnasParaCalculo,
+        tot_hr_diurnas: hrsDiurnasParaCalculo,
         horas_nocturnas: hrsNocturnasParaCalculo,
-        extras_diurnas: extDiuLiquidar,
-        extras_nocturnas: extNocLiquidar,
+        tot_hr_nocturnas: hrsNocturnasParaCalculo,
+        recargo_nocturno: recargoNocturno,
+        val_recargo_nocturno: recargoNocturno,
+        vr_nocturnas: recargoNocturno,
+        festivas_diurnas: finalFesDiu,
+        tot_hr_fes_diu: finalFesDiu,
+        val_festivas_diurnas: valorFesDiu,
+        vr_fes_diu: valorFesDiu,
+        festivas_nocturnas: finalFesNoc,
+        tot_hr_fes_noc: finalFesNoc,
+        val_festivas_nocturnas: valorFesNoc,
+        vr_fes_noc: valorFesNoc,
+        extras_diurnas: extDiurnasParaCalculo,
+        tot_hr_ext_diu: extDiurnasParaCalculo,
         val_extras_diurnas: valorExtDiu,
+        vr_ext_diu: valorExtDiu,
+        extras_nocturnas: extNocturnasParaCalculo,
+        tot_hr_ext_noc: extNocturnasParaCalculo,
         val_extras_nocturnas: valorExtNoc,
+        vr_ext_noc: valorExtNoc,
         extras_festivas: extFestivasParaCalculo,
+        tot_hr_ext_fes_diu: extFestivasParaCalculo,
+        val_extras_festivas: valorExtFesDiu,
+        vr_ext_fes_diu: valorExtFesDiu,
         extras_festivas_nocturnas: extFestivasNocturnasParaCalculo,
+        tot_hr_ext_fes_noc: extFestivasNocturnasParaCalculo,
         ext_fes_noc: extFestivasNocturnasParaCalculo,
         horas_ext_fest_noc: extFestivasNocturnasParaCalculo,
         val_extras_festivas_nocturnas: valorExtFesNoc,
         extras_festivas_nocturnas_val: valorExtFesNoc,
         val_ext_fes_noc: valorExtFesNoc,
         valor_ext_fes_noc: valorExtFesNoc,
+        vr_ext_fes_noc: valorExtFesNoc,
         comisiones: comisiones,
         rodamiento: rodamiento,
         intereses_cesantias: interesesCesantias,
@@ -1623,8 +1674,17 @@ processedLogs.forEach(day => {
           'val_sancion': ['valor_sancion', 'sancion'],
           'val_debe': ['valor_debe', 'debe'],
           'val_lnr_empresa': ['valor_lnr_empresa'],
-          'val_extras_festivas_nocturnas': ['extras_festivas_nocturnas_val', 'val_ext_fes_noc', 'valor_ext_fes_noc'],
-          'extras_festivas_nocturnas': ['ext_fes_noc', 'horas_ext_fest_noc']
+          'recargo_nocturno': ['val_recargo_nocturno', 'vr_nocturnas'],
+          'val_extras_diurnas': ['valor_extras_diurnas', 'vr_ext_diu'],
+          'val_extras_nocturnas': ['valor_extras_nocturnas', 'vr_ext_noc'],
+          'val_extras_festivas': ['valor_extras_festivas', 'vr_ext_fes_diu'],
+          'val_extras_festivas_nocturnas': ['extras_festivas_nocturnas_val', 'val_ext_fes_noc', 'valor_ext_fes_noc', 'vr_ext_fes_noc'],
+          'horas_diurnas': ['tot_hr_diurnas'],
+          'horas_nocturnas': ['tot_hr_nocturnas'],
+          'extras_diurnas': ['tot_hr_ext_diu'],
+          'extras_nocturnas': ['tot_hr_ext_noc'],
+          'extras_festivas': ['tot_hr_ext_fes_diu'],
+          'extras_festivas_nocturnas': ['ext_fes_noc', 'horas_ext_fest_noc', 'tot_hr_ext_fes_noc']
         };
 
         // 1. REVISAR OVERRIDES PRIMERO
@@ -1783,10 +1843,10 @@ processedLogs.forEach(day => {
         festivas_nocturnas: finalFesNoc,
         extras_diurnas: finalExtDiu,
         extras_nocturnas: finalExtNoc,
-        extras_diurnas_liquidadas: extDiuLiquidar,
-        extras_nocturnas_liquidadas: extNocLiquidar,
-        balance_extras_st: balanceExtrasST,
-        suma_total_tiempo_extras: sumaTotalTiempoExtras,
+        extras_diurnas_liquidadas: finalExtDiu,
+        extras_nocturnas_liquidadas: finalExtNoc,
+        balance_extras_st: finalExtDiu + finalExtNoc,
+        suma_total_tiempo_extras: finalExtDiu + finalExtNoc,
         extras_festivas: finalExtFesDiu,
         extras_festivas_nocturnas: finalExtFesNoc,
         ext_fes_noc: finalExtFesNoc,
@@ -1798,10 +1858,10 @@ processedLogs.forEach(day => {
         raw_sum_ext_fes: sumExtFesDiu,
         raw_sum_ext_fes_noc: sumExtFesNoc,
         sueldo: variables['sueldo'] || 0,
-        recargo_nocturno: variables['recargo_nocturno'] || 0,
+        recargo_nocturno: variables['recargo_nocturno'] !== undefined ? variables['recargo_nocturno'] : recargoNocturno,
         val_extras_diurnas: variables['val_extras_diurnas'] !== undefined ? variables['val_extras_diurnas'] : valorExtDiu,
         val_extras_nocturnas: variables['val_extras_nocturnas'] !== undefined ? variables['val_extras_nocturnas'] : valorExtNoc,
-        val_extras_festivas: variables['val_extras_festivas'] || 0,
+        val_extras_festivas: variables['val_extras_festivas'] !== undefined ? variables['val_extras_festivas'] : valorExtFesDiu,
         val_extras_festivas_nocturnas: variables['val_extras_festivas_nocturnas'] || valorExtFesNoc || 0,
         extras_festivas_nocturnas_val: variables['val_extras_festivas_nocturnas'] || valorExtFesNoc || 0,
         val_ext_fes_noc: variables['val_extras_festivas_nocturnas'] || valorExtFesNoc || 0,
@@ -2152,13 +2212,21 @@ processedLogs.forEach(day => {
 
       const devengadosBase = [
         'sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 
-        'transporte', 'incapacidad', 'val_incapacidad', 'comisiones', 'rodamiento', 'intereses_cesantias', 'devoluciones',
+        'val_extras_festivas_nocturnas', 'transporte', 'incapacidad', 'val_incapacidad', 'comisiones', 'rodamiento', 'intereses_cesantias', 'devoluciones',
         'dias_vacaciones', 'val_vacaciones', 'valor_vacaciones', 
         'dias_incapacidad', 'dias_lic_rem', 'val_lic_rem', 'dias_lic_norem', 'val_lic_norem', 
         'dias_incap_at', 'val_incap_at', 'dias_calamidad', 'val_calamidad', 'dias_sancion', 'val_sancion',
         'dias_debe', 'val_debe',
         'dias_festivo', 'dias_lnr_empresa', 'dias_terminacion',
-        'fecha_inicio_vacaciones', 'fecha_fin_vacaciones'
+        'fecha_inicio_vacaciones', 'fecha_fin_vacaciones',
+        'tot_hr_diurnas', 'horas_diurnas', 'vr_diurnas',
+        'tot_hr_nocturnas', 'horas_nocturnas', 'vr_nocturnas',
+        'tot_hr_fes_diu', 'festivas_diurnas', 'vr_fes_diu',
+        'tot_hr_fes_noc', 'festivas_nocturnas', 'vr_fes_noc',
+        'tot_hr_ext_diu', 'extras_diurnas', 'vr_ext_diu',
+        'tot_hr_ext_noc', 'extras_nocturnas', 'vr_ext_noc',
+        'tot_hr_ext_fes_diu', 'extras_festivas', 'vr_ext_fes_diu',
+        'tot_hr_ext_fes_noc', 'extras_festivas_nocturnas', 'vr_ext_fes_noc'
       ];
       const deduccionesBase = ['salud', 'pension', 'solidaridad', 'prestamos', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'comfama', 'poliza_sura', 'optica', 'celular', 'retencion', 'otros_descuentos'];
       const totalesIntermedios = ['total_devengados', 'total_devengado', 'total_deducciones', 'total_deducido'];
