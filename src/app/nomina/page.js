@@ -64,7 +64,7 @@ const NOVEDADES_MANUALES_MAP = {
   },
   dias_incap_at: {
     fechasKey: 'fechas_incap_at',
-    titulo: 'INCAPACIDAD AT',
+    titulo: 'INCAPACIDAD ACCIDENTE LABORAL',
     diasKey: 'dias_incap_at'
   },
   dias_calamidad: {
@@ -1089,6 +1089,7 @@ processedLogs.forEach(day => {
         }
     }
     const estado = estadoRaw === "" ? "NORMAL" : estadoRaw;
+    day.estado = estado;
 
     // 1. Solo NORMAL, NOVEDAD y DESCANSO cuentan como día ordinario pagado.
     const paganNormal = ["NORMAL", "NOVEDAD", "DESCANSO"];
@@ -1290,19 +1291,65 @@ processedLogs.forEach(day => {
 
       // Mapeo Estricto de Novedades (Auditoría de Liquidación)
       // Conteo directo de novedades desde el horario / turnos de los días procesados
-      let autoDiasFestivo = 0;
-      let autoDiasLnrEmpresa = 0;
-      let autoDiasTerminacion = 0;
       let autoDiasDebe = 0;
+      let autoDiasLnrEmpresa = 0;
       let autoDiasLicNoRem = 0;
+      let autoDiasLicRem = 0;
+      let autoDiasIncap = 0;
+      let autoDiasIncapAt = 0;
+      let autoDiasSancion = 0;
+      let autoDiasCalamidad = 0;
+      let autoDiasFestivo = 0;
+      let autoDiasTerminacion = 0;
+      let autoDiasVacaciones = 0;
 
       processedLogs.forEach(day => {
-          const t = String(day.turno || day.estado || "").toUpperCase().trim();
-          if (t.includes("FESTIVO")) autoDiasFestivo++;
-          if (t === "LNR EMPRESA" || (t.includes("LNR EMPRESA") && !t.includes("LICENCIA NO REMUNERADA"))) autoDiasLnrEmpresa++;
-          if (t.includes("TERMINACION DE CONTRATO") || t.includes("TERMINACIÓN DE CONTRATO") || t.includes("TERMINACION")) autoDiasTerminacion++;
-          if (t === "DEBE" || t.includes("DEBE")) autoDiasDebe++;
-          if (t === "LICENCIA NO REMUNERADA" || (t.includes("LICENCIA NO REMUNERADA") && !t.includes("LNR EMPRESA"))) autoDiasLicNoRem++;
+          const manualStatus = overrides[`${cedula}_${day.dia}_novedad_status`];
+          const rawVal = manualStatus || day.estado || day.turno || "";
+          const t = String(rawVal).toUpperCase().trim();
+
+          // 1. 'DEBE' ➜ autoDiasDebe
+          if (t === "DEBE" || t.includes("DEBE")) {
+              autoDiasDebe++;
+          }
+          // 2. 'LNR EMPRESA' ➜ autoDiasLnrEmpresa
+          else if (t === "LNR EMPRESA" || (t.includes("LNR EMPRESA") && !t.includes("LICENCIA NO REMUNERADA"))) {
+              autoDiasLnrEmpresa++;
+          }
+          // 3. 'LICENCIA NO REMUNERADA' ➜ autoDiasLicNoRem
+          else if (t === "LICENCIA NO REMUNERADA" || (t.includes("LICENCIA NO REMUNERADA") && !t.includes("LNR EMPRESA"))) {
+              autoDiasLicNoRem++;
+          }
+          // 4. 'LICENCIA REMUNERADA' ➜ autoDiasLicRem
+          else if (t === "LICENCIA REMUNERADA" || (t.includes("LICENCIA REMUNERADA") && !t.includes("NO REMUNERADA"))) {
+              autoDiasLicRem++;
+          }
+          // 5. 'INCAPACIDAD GENERAL' ➜ autoDiasIncap
+          else if (t === "INCAPACIDAD GENERAL" || t === "INCAPACIDAD EG" || (t.includes("INCAPACIDAD") && !t.includes("ACCIDENTE") && !t.includes("LABORAL") && !t.includes("AT"))) {
+              autoDiasIncap++;
+          }
+          // 6. 'INCAPACIDAD ACCIDENTE LABORAL' ➜ autoDiasIncapAt (Asegura que alimente la caja AT)
+          else if (t === "INCAPACIDAD ACCIDENTE LABORAL" || t === "INCAPACIDAD AT" || t.includes("ACCIDENTE LABORAL") || (t.includes("INCAPACIDAD") && t.includes("AT"))) {
+              autoDiasIncapAt++;
+          }
+          // 7. 'SANCIONADO' ➜ autoDiasSancion
+          else if (t === "SANCIONADO" || t === "SANCION" || t.includes("SANCION")) {
+              autoDiasSancion++;
+          }
+          // 8. 'CALAMIDAD' ➜ autoDiasCalamidad
+          else if (t === "CALAMIDAD" || t.includes("CALAMIDAD")) {
+              autoDiasCalamidad++;
+          }
+          // Otras novedades
+          else if (t.includes("FESTIVO")) {
+              autoDiasFestivo++;
+          }
+          else if (t.includes("VACACIONES") || t.includes("VACACION")) {
+              autoDiasVacaciones++;
+          }
+          else if (t.includes("TERMINACION DE CONTRATO") || t.includes("TERMINACIÓN DE CONTRATO") || t.includes("TERMINACION")) {
+              autoDiasTerminacion++;
+          }
       });
 
       const getNoveltyCount = (conditionFn) => {
@@ -1328,13 +1375,13 @@ processedLogs.forEach(day => {
           return parseLocalNumber(Number(emp[fieldKey] || 0));
       };
 
-      const dias_vacaciones = getAbsenceDays('dias_vacaciones', k => k === 'VACACIONES');
-      const diasIncapacidad = getAbsenceDays('dias_incapacidad', k => k === 'INCAPACIDAD GENERAL');
-      const dias_lic_rem = getAbsenceDays('dias_lic_rem', k => k === 'LICENCIA REMUNERADA');
+      const dias_vacaciones = getAbsenceDays('dias_vacaciones', k => k === 'VACACIONES', autoDiasVacaciones);
+      const diasIncapacidad = getAbsenceDays('dias_incapacidad', k => k === 'INCAPACIDAD GENERAL' || k === 'INCAPACIDAD EG' || (k.includes('INCAPACIDAD') && !k.includes('ACCIDENTE') && !k.includes('LABORAL') && !k.includes('AT')), autoDiasIncap);
+      const dias_lic_rem = getAbsenceDays('dias_lic_rem', k => k === 'LICENCIA REMUNERADA' || (k.includes('LICENCIA REMUNERADA') && !k.includes('NO REMUNERADA')), autoDiasLicRem);
       const dias_lic_norem = getAbsenceDays('dias_lic_norem', k => (k === 'LICENCIA NO REMUNERADA' || k.includes('LICENCIA NO REMUNERADA')) && !k.includes('LNR EMPRESA'), autoDiasLicNoRem);
-      const dias_incap_at = getAbsenceDays('dias_incap_at', k => k === 'INCAPACIDAD AT' || k === 'INCAPACIDAD ACCIDENTE LABORAL');
-      const dias_calamidad = getAbsenceDays('dias_calamidad', k => k === 'CALAMIDAD');
-      const dias_sancion = getAbsenceDays('dias_sancion', k => k === 'SANCION' || k === 'SANCIONADO');
+      const dias_incap_at = getAbsenceDays('dias_incap_at', k => k === 'INCAPACIDAD AT' || k === 'INCAPACIDAD ACCIDENTE LABORAL' || k.includes('ACCIDENTE LABORAL') || (k.includes('INCAPACIDAD') && k.includes('AT')), autoDiasIncapAt);
+      const dias_calamidad = getAbsenceDays('dias_calamidad', k => k === 'CALAMIDAD' || k.includes('CALAMIDAD'), autoDiasCalamidad);
+      const dias_sancion = getAbsenceDays('dias_sancion', k => k === 'SANCION' || k === 'SANCIONADO' || k.includes('SANCION'), autoDiasSancion);
       const dias_festivo = getAbsenceDays('dias_festivo', k => k.includes('FESTIVO'), autoDiasFestivo);
       const dias_lnr_empresa = getAbsenceDays('dias_lnr_empresa', k => (k === 'LNR EMPRESA' || k.includes('LNR EMPRESA')) && !k.includes('LICENCIA NO REMUNERADA'), autoDiasLnrEmpresa);
       const dias_terminacion = getAbsenceDays('dias_terminacion', k => k.includes('TERMINACION DE CONTRATO') || k.includes('TERMINACIÓN DE CONTRATO') || k.includes('TERMINACION'), autoDiasTerminacion);
@@ -2950,9 +2997,13 @@ const handleSaveToCloud = async () => {
                     if (isAdministrativo && tipo.toUpperCase().includes('INCOMPLETO')) {
                         return;
                     }
+                    let normTipo = tipo;
+                    if (tipo.toUpperCase() === 'INCAPACIDAD ACCIDENTE LABORAL' || tipo.toUpperCase() === 'INCAPACIDAD AT' || tipo.toUpperCase().includes('ACCIDENTE LABORAL')) {
+                        normTipo = 'INCAPACIDAD ACCIDENTE LABORAL';
+                    }
                     cards.push({
-                        id: tipo,
-                        titulo: tipo,
+                        id: normTipo,
+                        titulo: normTipo,
                         dias: fechas.length,
                         fechas: fechas,
                         isManual: false
@@ -2989,7 +3040,15 @@ const handleSaveToCloud = async () => {
                         })
                         : ['Sin asignar'];
 
-                    const existingIdx = cards.findIndex(c => c.titulo.toUpperCase().trim() === conf.titulo.toUpperCase().trim());
+                    const existingIdx = cards.findIndex(c => {
+                        const t1 = c.titulo.toUpperCase().trim();
+                        const t2 = conf.titulo.toUpperCase().trim();
+                        if (t1 === t2) return true;
+                        if (conf.diasKey === 'dias_incap_at') {
+                            return t1.includes('ACCIDENTE LABORAL') || t1.includes('INCAPACIDAD AT') || t1 === 'INCAPACIDAD AT';
+                        }
+                        return false;
+                    });
                     if (existingIdx >= 0) {
                         cards[existingIdx] = {
                             id: conf.titulo,

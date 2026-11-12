@@ -41,7 +41,7 @@ export default function ConsolidadoSaitemp({ empleadosLiquidados }) {
     return {
       cedula: emp.cedula || '',
       nombre: emp.nombre || '',
-      diasNovedad: formatNovedad(emp.dias_incapacidad),
+      diasNovedad: formatNovedad(emp.dias_incapacidad || emp.dias_incap_at),
       textoNovedad: novedadesText || emp.novedad || '',
       recargoNocturno: formatHour(emp.horas_nocturnas),
       extrasDiurnas: formatHour(emp.extras_diurnas),

@@ -110,7 +110,7 @@ export default function SaitempModal({ isOpen, onClose, employee, onSave, onSave
   const novedadesOptions = [
     'INGRESO', 'INCAPACIDAD EG', 'RENUNCIA/TERM. CONTRATO', 'AUSENCIA', 'CALAMIDAD', 
     'PERMISO REMUNERADO', 'PERMISO NO REMUNERADO', 'ABANDONO', 'LICENCIA MATERNIDAD', 'SANCIONADO',
-    'FALLECIMIENTO', 'TRABAJO EN CASA', 'INCAPACIDAD AT', 'OTRO NO ESPECIFICADO'
+    'FALLECIMIENTO', 'TRABAJO EN CASA', 'INCAPACIDAD ACCIDENTE LABORAL (AT)', 'DEBE', 'LNR EMPRESA', 'OTRO NO ESPECIFICADO'
   ];
 
   const modalContent = (
@@ -177,19 +177,24 @@ export default function SaitempModal({ isOpen, onClose, employee, onSave, onSave
                 <div className="mb-6">
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-3">2. Tipo de Novedad</label>
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    {novedadesOptions.map(opt => (
-                      <label key={opt} className={`flex items-center gap-2 p-3 border rounded-xl cursor-pointer transition-colors ${nov.novedad === opt ? 'bg-amber-50 border-amber-500 text-amber-700' : 'border-slate-200 text-slate-600 hover:bg-white hover:shadow-sm'}`}>
-                        <input 
-                          type="radio" 
-                          name={`novedad-${nov.id}`} 
-                          value={opt}
-                          checked={nov.novedad === opt}
-                          onChange={(e) => handleNovedadChange(nov.id, 'novedad', e.target.value)}
-                          className="text-amber-500 focus:ring-amber-500"
-                        />
-                        <span className="text-xs font-bold">{opt}</span>
-                      </label>
-                    ))}
+                    {novedadesOptions.map(opt => {
+                      const isChecked = nov.novedad === opt || 
+                        (opt === 'INCAPACIDAD ACCIDENTE LABORAL (AT)' && (nov.novedad === 'INCAPACIDAD AT' || nov.novedad === 'INCAPACIDAD ACCIDENTE LABORAL')) ||
+                        (opt === 'DEBE' && (nov.novedad === 'AUSENCIA INJUSTIFICADA (DEBE)' || nov.novedad === 'DEBE (AUSENCIA INJUSTIFICADA)'));
+                      return (
+                        <label key={opt} className={`flex items-center gap-2 p-3 border rounded-xl cursor-pointer transition-colors ${isChecked ? 'bg-amber-50 border-amber-500 text-amber-700' : 'border-slate-200 text-slate-600 hover:bg-white hover:shadow-sm'}`}>
+                          <input 
+                            type="radio" 
+                            name={`novedad-${nov.id}`} 
+                            value={opt}
+                            checked={isChecked}
+                            onChange={(e) => handleNovedadChange(nov.id, 'novedad', e.target.value)}
+                            className="text-amber-500 focus:ring-amber-500"
+                          />
+                          <span className="text-xs font-bold">{opt}</span>
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
 
