@@ -77,6 +77,11 @@ const NOVEDADES_MANUALES_MAP = {
     titulo: 'SANCIÓN',
     diasKey: 'dias_sancion'
   },
+  dias_debe: {
+    fechasKey: 'fechas_debe',
+    titulo: 'DEBE',
+    diasKey: 'dias_debe'
+  },
   dias_festivo: {
     fechasKey: 'fechas_festivo',
     titulo: 'FESTIVO',
@@ -264,14 +269,34 @@ export default function NominaPage() {
         let updated = { ...DEFAULT_FORMULAS, ...parsed };
         let modified = false;
 
-        // Inyección segura: si tiene guardado un "0" estricto en estas fórmulas,
+        // Inyección segura: si tiene guardado un "0" estricto o la fórmula errónea con dias_lnr_empresa,
         // actualiza el estado en la configuración sin alterar attendanceLogs ni base de datos
-        if (String(parsed.val_lic_norem || '').trim() === '0') {
+        if (!parsed.val_lic_norem || parsed.val_lic_norem.includes('dias_lnr_empresa') || String(parsed.val_lic_norem || '').trim() === '0') {
           updated.val_lic_norem = DEFAULT_FORMULAS.val_lic_norem;
           modified = true;
         }
-        if (String(parsed.val_sancion || '').trim() === '0') {
+        if (!parsed.val_sancion || String(parsed.val_sancion || '').trim() === '0') {
           updated.val_sancion = DEFAULT_FORMULAS.val_sancion;
+          modified = true;
+        }
+        if (!parsed.val_lic_rem || String(parsed.val_lic_rem || '').trim() === '0') {
+          updated.val_lic_rem = DEFAULT_FORMULAS.val_lic_rem;
+          modified = true;
+        }
+        if (!parsed.val_calamidad || String(parsed.val_calamidad || '').trim() === '0') {
+          updated.val_calamidad = DEFAULT_FORMULAS.val_calamidad;
+          modified = true;
+        }
+        if (!parsed.val_incap_at || String(parsed.val_incap_at || '').trim() === '0') {
+          updated.val_incap_at = DEFAULT_FORMULAS.val_incap_at;
+          modified = true;
+        }
+        if (!parsed.val_vacaciones || String(parsed.val_vacaciones || '').trim() === '0') {
+          updated.val_vacaciones = DEFAULT_FORMULAS.val_vacaciones;
+          modified = true;
+        }
+        if (!parsed.val_debe || String(parsed.val_debe || '').trim() === '0') {
+          updated.val_debe = DEFAULT_FORMULAS.val_debe;
           modified = true;
         }
 
@@ -288,7 +313,7 @@ export default function NominaPage() {
   const [formulaConfig, setFormulaConfig] = useState({ isOpen: false, fieldId: null, currentFormula: '' });
 
   const handleOpenFormulaEditor = (campoId) => {
-    const formulaBase = activeFormulas[campoId] || '';
+    const formulaBase = activeFormulas[campoId] || DEFAULT_FORMULAS[campoId] || '';
     setFormulaConfig({ isOpen: true, fieldId: campoId, currentFormula: formulaBase });
   };
 
@@ -415,6 +440,8 @@ export default function NominaPage() {
           descuento_actual_horas: emp.descuento_actual_horas || 0,
           descuento_actual_tipo: emp.descuento_actual_tipo || 'diurnas',
           mensaje_descuento_actual: emp.mensaje_descuento_actual || null,
+          dias_debe: Number(emp.dias_debe || 0),
+          val_debe: Number(emp.val_debe || emp.valor_debe || 0),
           intereses_cesantias,
           devoluciones,
           motivo_devoluciones,
@@ -1266,12 +1293,14 @@ processedLogs.forEach(day => {
       let autoDiasFestivo = 0;
       let autoDiasLnrEmpresa = 0;
       let autoDiasTerminacion = 0;
+      let autoDiasDebe = 0;
 
       processedLogs.forEach(day => {
           const t = String(day.turno || day.estado || "").toUpperCase().trim();
           if (t.includes("FESTIVO")) autoDiasFestivo++;
           if (t.includes("LNR EMPRESA")) autoDiasLnrEmpresa++;
           if (t.includes("TERMINACION DE CONTRATO") || t.includes("TERMINACIÓN DE CONTRATO") || t.includes("TERMINACION")) autoDiasTerminacion++;
+          if (t === "DEBE" || t.includes("DEBE")) autoDiasDebe++;
       });
 
       const getNoveltyCount = (conditionFn) => {
@@ -1307,6 +1336,7 @@ processedLogs.forEach(day => {
       const dias_festivo = getAbsenceDays('dias_festivo', k => k.includes('FESTIVO'), autoDiasFestivo);
       const dias_lnr_empresa = getAbsenceDays('dias_lnr_empresa', k => k.includes('LNR EMPRESA'), autoDiasLnrEmpresa);
       const dias_terminacion = getAbsenceDays('dias_terminacion', k => k.includes('TERMINACION DE CONTRATO') || k.includes('TERMINACIÓN DE CONTRATO') || k.includes('TERMINACION'), autoDiasTerminacion);
+      const dias_debe = getAbsenceDays('dias_debe', k => k === 'DEBE' || k.includes('DEBE'), autoDiasDebe);
 
       // Paso B (Descuento de Días): Suma todas estas ausencias (totalAusencias) y calcula los días pagados reales
       const totalAusencias = (dias_vacaciones || 0) + 
@@ -1315,7 +1345,8 @@ processedLogs.forEach(day => {
                              (diasIncapacidad || 0) + 
                              (dias_incap_at || 0) + 
                              (dias_calamidad || 0) + 
-                             (dias_sancion || 0);
+                             (dias_sancion || 0) + 
+                             (dias_debe || 0);
 
       const diasPagadosCalc = Math.max(0, 15 - totalAusencias);
       const diasPagados = (overrides[`${cedula}_dias_pagados`] !== undefined && overrides[`${cedula}_dias_pagados`] !== "" && overrides[`${cedula}_dias_pagados`] !== null)
@@ -1385,6 +1416,10 @@ processedLogs.forEach(day => {
       const valorSancion = resolveValue(overrides, `${cedula}_val_sancion`, () => 
           resolveValue(overrides, `${cedula}_sancion`, () => valorSancionCalc)
       );
+      const valorDebeCalc = Math.round(valorDiaBase * (dias_debe || 0));
+      const valorDebe = resolveValue(overrides, `${cedula}_val_debe`, () => 
+          resolveValue(overrides, `${cedula}_valor_debe`, () => valorDebeCalc)
+      );
       // Valores monetarios de extras con cruce de cuentas estricto
       const valorExtDiuCalc = Math.round((salarioBase / DIVISOR_HORAS_EXTRAS) * FACTOR_EXTRA_DIURNA * extDiuLiquidar);
       const valorExtDiu = resolveValue(overrides, `${cedula}_val_extras_diurnas`, () => 
@@ -1403,32 +1438,71 @@ processedLogs.forEach(day => {
       // MOTOR MATEMÁTICO EN CASCADA
       let variables = {
         salario_base: salarioBase,
+        salario: salarioBase,
+        sueldo_base: salarioBase,
+        sueldo_basico: salarioBase,
+        valor_dia: valorDiaBase,
+        valor_diario: valorDiaBase,
+        valor_dia_base: valorDiaBase,
         smlv_base: globalSmmlv,
+        smlv: globalSmmlv,
+        smmlv: globalSmmlv,
         aux_transporte_base: globalAuxTransporte,
+        aux_transporte: globalAuxTransporte,
+        transporte_base: globalAuxTransporte,
         valor_diario_base: MINIMO_DIARIO_INCAPACIDAD,
+        minimo_diario_incapacidad: MINIMO_DIARIO_INCAPACIDAD,
         dias_pagados: diasPagados,
         dias_ausentes_total: totalAusencias,
+
+        // Variables de días de novedades y ausencias (con mapeo exhaustivo de alias)
         dias_vacaciones: dias_vacaciones,
+        dias_vacacion: dias_vacaciones,
         dias_lic_rem: dias_lic_rem,
+        dias_lic_remunerada: dias_lic_rem,
         dias_lic_norem: dias_lic_norem,
+        dias_lic_no_rem: dias_lic_norem,
+        dias_lnr: dias_lic_norem || dias_lnr_empresa || 0,
+        dias_lnr_empresa: dias_lnr_empresa > 0 ? dias_lnr_empresa : dias_lic_norem,
         dias_incap_at: dias_incap_at,
+        dias_at: dias_incap_at,
+        dias_accidente_laboral: dias_incap_at,
         dias_calamidad: dias_calamidad,
         dias_sancion: dias_sancion,
+        dias_sancionado: dias_sancion,
         dias_incapacidad: diasIncapacidad,
+        dias_incap: diasIncapacidad,
         dias_festivo: dias_festivo,
-        dias_lnr_empresa: dias_lnr_empresa,
         dias_terminacion: dias_terminacion,
+        dias_debe: dias_debe,
+        dias_debe_auto: autoDiasDebe,
+
         sueldo: sueldo,
         transporte: transporte,
         val_vacaciones: valorVacaciones,
         valor_vacaciones: valorVacaciones,
         incapacidad: valorIncapacidad,
         val_incapacidad: valorIncapacidad,
+        valor_incapacidad: valorIncapacidad,
+        val_incap: valorIncapacidad,
+        valor_incap: valorIncapacidad,
         val_lic_rem: valorLicRem,
+        valor_lic_rem: valorLicRem,
         val_lic_norem: valorLicNoRem,
+        valor_lic_norem: valorLicNoRem,
+        val_lic_no_rem: valorLicNoRem,
+        valor_lic_no_rem: valorLicNoRem,
+        lic_norem: valorLicNoRem,
+        lic_no_rem: valorLicNoRem,
         val_incap_at: valorIncapAt,
+        valor_incap_at: valorIncapAt,
         val_calamidad: valorCalamidad,
+        valor_calamidad: valorCalamidad,
         val_sancion: valorSancion,
+        valor_sancion: valorSancion,
+        val_debe: valorDebe,
+        valor_debe: valorDebe,
+        debe: valorDebe,
         horas_diurnas: hrsDiurnasParaCalculo,
         horas_nocturnas: hrsNocturnasParaCalculo,
         extras_diurnas: extDiuLiquidar,
@@ -1481,12 +1555,13 @@ processedLogs.forEach(day => {
           'neto_pagar': ['neto_a_pagar', 'neto'],
           'total_pagar': ['total_pagar', 'total_a_pagar'],
           'val_vacaciones': ['valor_vacaciones', 'vacaciones'],
-          'incapacidad': ['val_incapacidad', 'valor_incapacidad'],
+          'incapacidad': ['val_incapacidad', 'valor_incapacidad', 'valor_incap', 'val_incap'],
           'val_lic_rem': ['valor_lic_rem', 'lic_rem'],
-          'val_lic_norem': ['valor_lic_norem', 'lic_norem'],
+          'val_lic_norem': ['valor_lic_norem', 'valor_lic_no_rem', 'val_lic_no_rem', 'lic_norem', 'lic_no_rem'],
           'val_incap_at': ['valor_incap_at', 'incap_at'],
           'val_calamidad': ['valor_calamidad', 'calamidad'],
           'val_sancion': ['valor_sancion', 'sancion'],
+          'val_debe': ['valor_debe', 'debe'],
           'val_extras_festivas_nocturnas': ['extras_festivas_nocturnas_val', 'val_ext_fes_noc', 'valor_ext_fes_noc'],
           'extras_festivas_nocturnas': ['ext_fes_noc', 'horas_ext_fest_noc']
         };
@@ -1520,7 +1595,16 @@ processedLogs.forEach(day => {
         }
 
         // 3. SI NO HAY OVERRIDE, EVALUAR MATEMÁTICAMENTE
-        const formulaStr = activeFormulas[fieldId] || formulaFallback;
+        let formulaStr = activeFormulas[fieldId];
+        if (!formulaStr && aliasMap[fieldId]) {
+            for (const alias of aliasMap[fieldId]) {
+                if (activeFormulas[alias]) {
+                    formulaStr = activeFormulas[alias];
+                    break;
+                }
+            }
+        }
+        if (!formulaStr) formulaStr = formulaFallback || DEFAULT_FORMULAS[fieldId];
         // Si no hay fórmula explícita, preservamos el valor que ya exista en variables (cargado de emp)
         const calcVal = formulaStr ? evaluateFormula(formulaStr, variables) : (variables[fieldId] || 0);
         const finalVal = parseLocalNumber(calcVal);
@@ -1542,7 +1626,7 @@ processedLogs.forEach(day => {
       };
 
       // FASE 1: Devengados Base
-      const fase1 = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'val_extras_festivas_nocturnas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento', 'intereses_cesantias', 'devoluciones', 'val_vacaciones', 'val_lic_rem', 'val_lic_norem', 'val_incap_at', 'val_calamidad', 'val_sancion'];
+      const fase1 = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'val_extras_festivas_nocturnas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento', 'intereses_cesantias', 'devoluciones', 'val_vacaciones', 'val_lic_rem', 'val_lic_norem', 'val_incap_at', 'val_calamidad', 'val_sancion', 'val_debe', 'val_debe'];
       // FASE 2: Suma de Devengados (SOLO LLAVES OFICIALES)
       const fase2 = ['total_devengados', 'ibc_seguridad_social', 'ibc_fsp'];
       // FASE 3: Deducciones Base
@@ -1676,16 +1760,32 @@ processedLogs.forEach(day => {
         dias_incap_at: variables['dias_incap_at'] || 0,
         dias_calamidad: variables['dias_calamidad'] || 0,
         dias_sancion: variables['dias_sancion'] || 0,
+        dias_debe: variables['dias_debe'] !== undefined ? variables['dias_debe'] : dias_debe,
+        dias_debe_auto: autoDiasDebe,
         dias_festivo: variables['dias_festivo'] || 0,
         dias_lnr_empresa: variables['dias_lnr_empresa'] || 0,
         dias_terminacion: variables['dias_terminacion'] || 0,
         incapacidad: variables['incapacidad'] || 0,
+        val_incapacidad: variables['incapacidad'] || 0,
+        valor_incapacidad: variables['incapacidad'] || 0,
+        val_incap: variables['incapacidad'] || 0,
+        valor_incap: variables['incapacidad'] || 0,
         val_vacaciones: variables['val_vacaciones'] || 0,
+        valor_vacaciones: variables['val_vacaciones'] || 0,
         val_lic_rem: variables['val_lic_rem'] || 0,
+        valor_lic_rem: variables['val_lic_rem'] || 0,
         val_lic_norem: variables['val_lic_norem'] || 0,
+        valor_lic_norem: variables['val_lic_norem'] || 0,
+        valor_lic_no_rem: variables['val_lic_norem'] || 0,
+        val_lic_no_rem: variables['val_lic_norem'] || 0,
         val_incap_at: variables['val_incap_at'] || 0,
+        valor_incap_at: variables['val_incap_at'] || 0,
         val_calamidad: variables['val_calamidad'] || 0,
+        valor_calamidad: variables['val_calamidad'] || 0,
         val_sancion: variables['val_sancion'] || 0,
+        valor_sancion: variables['val_sancion'] || 0,
+        val_debe: variables['val_debe'] !== undefined ? variables['val_debe'] : valorDebe,
+        valor_debe: variables['val_debe'] !== undefined ? variables['val_debe'] : valorDebe,
         total_devengados: variables['total_devengados'] || 0,
         total_devengado: variables['total_devengados'] || 0, // Alias para UI
         ibc_seguridad_social: variables['ibc_seguridad_social'] || 0,
@@ -1991,6 +2091,7 @@ processedLogs.forEach(day => {
         'dias_vacaciones', 'val_vacaciones', 'valor_vacaciones', 
         'dias_incapacidad', 'dias_lic_rem', 'val_lic_rem', 'dias_lic_norem', 'val_lic_norem', 
         'dias_incap_at', 'val_incap_at', 'dias_calamidad', 'val_calamidad', 'dias_sancion', 'val_sancion',
+        'dias_debe', 'val_debe',
         'dias_festivo', 'dias_lnr_empresa', 'dias_terminacion',
         'fecha_inicio_vacaciones', 'fecha_fin_vacaciones'
       ];
@@ -2006,6 +2107,10 @@ processedLogs.forEach(day => {
           if (campoEditado === 'dias_vacaciones') {
               delete newOverrides[`${cedula}_val_vacaciones`];
               delete newOverrides[`${cedula}_valor_vacaciones`];
+          }
+          if (campoEditado === 'dias_debe') {
+              delete newOverrides[`${cedula}_val_debe`];
+              delete newOverrides[`${cedula}_valor_debe`];
           }
           if (campoEditado === 'dias_incapacidad') {
               delete newOverrides[`${cedula}_incapacidad`];
@@ -2969,7 +3074,7 @@ const handleSaveToCloud = async () => {
              
              // 1. Campos que vienen de la pestaña Liquidación (Horas y Días)
              const camposLiquidacion = [
-               'horas_diurnas', 'horas_nocturnas', 'extras_diurnas', 'extras_nocturnas', 'extras_festivas'
+               'horas_diurnas', 'horas_nocturnas', 'extras_diurnas', 'extras_nocturnas', 'extras_festivas', 'dias_debe'
              ];
 
              // 2. Campos con fórmulas matemáticas en la nómina (Dinero y Totales)
@@ -3147,7 +3252,7 @@ const handleSaveToCloud = async () => {
              };
 
              const devengosBasicos = ['salario', 'dias_pagados', 'sueldo', 'transporte', 'rodamiento', 'comisiones', 'intereses_cesantias', 'devoluciones', 'bonificacion_no_salarial', 'bonificacion', 'total_devengados'];
-             const novedadesFinancieras = ['dias_lic_rem', 'val_lic_rem', 'dias_lic_norem', 'val_lic_norem', 'dias_incapacidad', 'incapacidad', 'dias_incap_at', 'val_incap_at', 'dias_calamidad', 'val_calamidad', 'dias_sancion', 'val_sancion', 'dias_festivo', 'dias_lnr_empresa', 'dias_terminacion'];
+             const novedadesFinancieras = ['dias_lic_rem', 'val_lic_rem', 'dias_lic_norem', 'val_lic_norem', 'dias_incapacidad', 'incapacidad', 'dias_incap_at', 'val_incap_at', 'dias_calamidad', 'val_calamidad', 'dias_sancion', 'val_sancion', 'dias_debe', 'val_debe', 'dias_festivo', 'dias_lnr_empresa', 'dias_terminacion'];
              const suplementario = ['horas_diurnas', 'horas_nocturnas', 'extras_diurnas', 'extras_nocturnas', 'extras_festivas', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas'];
              const deducciones = ['salud', 'pension', 'solidaridad', 'prestamos', 'saldo_prestamo', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'poliza_sura', 'optica', 'celular', 'retencion', 'otros_descuentos', 'total_deducciones'];
              const resultados = ['total_pagar', 'neto_pagar', 'verificacion'];

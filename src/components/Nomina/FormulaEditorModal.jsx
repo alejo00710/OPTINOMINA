@@ -12,9 +12,10 @@ export default function FormulaEditorModal({ isOpen, onClose, campoId, currentFo
   if (!isOpen) return null;
 
   const variables = [
-    'sueldo', 'dias_pagados', 'horas_diurnas', 'horas_nocturnas', 
-    'extras_diurnas', 'extras_nocturnas', 'extras_festivas',
-    'salario_base', 'aux_transporte'
+    'salario_base', 'dias_pagados', 'sueldo', 'aux_transporte',
+    'horas_diurnas', 'horas_nocturnas', 'extras_diurnas', 'extras_nocturnas', 'extras_festivas',
+    'dias_lic_norem', 'dias_lic_rem', 'dias_sancion', 'dias_incapacidad',
+    'dias_calamidad', 'dias_vacaciones', 'dias_incap_at', 'dias_festivo', 'dias_debe'
   ];
 
   const handleSave = () => {

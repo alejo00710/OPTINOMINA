@@ -248,6 +248,9 @@ export default function ColillaPDF({ empleados = [], tituloReporte = "SÁBANA CO
                 <DetailRowCombined label="Incap. AT" qty={emp.dias_incap_at} qtyLabel="días" money={emp.val_incap_at} />
                 <DetailRowCombined label="Calamidad" qty={emp.dias_calamidad} qtyLabel="días" money={emp.val_calamidad} />
                 <DetailRowCombined label="Sanción" qty={emp.dias_sancion} qtyLabel="días" money={emp.val_sancion} />
+                {Number(emp.dias_debe || 0) > 0 && (
+                  <DetailRowCombined label="Días Debe" qty={emp.dias_debe} qtyLabel="días" money={emp.val_debe} />
+                )}
                 <DetailRow label="Vacaciones" value={emp.val_vacaciones} />
 
                 {/* Trabajo Suplementario */}

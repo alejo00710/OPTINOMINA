@@ -152,6 +152,8 @@ export const PLANILLA_COLUMNS = [
   { key: "val_calamidad", label: "VALOR CALAMIDAD (V)", letter: "V", type: "number", isCurrency: true, editable: true, isCalculated: true },
   { key: "dias_sancion", label: "DÍAS SANCION (U)", letter: "U", type: "number", center: true, editable: true, isCalculated: true },
   { key: "val_sancion", label: "VALOR SANCION (V)", letter: "V", type: "number", isCurrency: true, editable: true, isCalculated: true },
+  { key: "dias_debe", label: "DÍAS DEBE (U)", letter: "U", type: "number", center: true, editable: true, isCalculated: true },
+  { key: "val_debe", label: "VALOR DEBE (V)", letter: "V", type: "number", isCurrency: true, editable: true, isCalculated: true },
   { key: "dias_festivo", label: "DÍAS FESTIVO (U)", letter: "U", type: "number", center: true, editable: true },
   { key: "dias_lnr_empresa", label: "DÍAS LNR EMPRESA (U)", letter: "U", type: "number", center: true, editable: true },
   { key: "dias_terminacion", label: "DÍAS TERMINACIÓN (U)", letter: "U", type: "number", center: true, editable: true },
@@ -226,10 +228,23 @@ export const DEFAULT_FORMULAS = {
   incapacidad: '((salario_base / 30) * (2/3)) < (smlv_base / 30) ? (smlv_base / 30) * dias_incapacidad : ((salario_base / 30) * (2/3)) * dias_incapacidad',
   val_vacaciones: '(salario_base / 30) * dias_vacaciones',
   val_lic_rem: '(salario_base / 30) * dias_lic_rem',
-  val_lic_norem: '(salario_base / 30) * dias_lnr_empresa',
+  val_lic_norem: '(salario_base / 30) * dias_lic_norem',
+  valor_lic_no_rem: '(salario_base / 30) * dias_lic_norem',
+  valor_lic_norem: '(salario_base / 30) * dias_lic_norem',
+  val_lic_no_rem: '(salario_base / 30) * dias_lic_norem',
   val_incap_at: '(salario_base / 30) * dias_incap_at',
   val_calamidad: '(salario_base / 30) * dias_calamidad',
   val_sancion: '(salario_base / 30) * dias_sancion',
+  valor_sancion: '(salario_base / 30) * dias_sancion',
+  val_debe: '(salario_base / 30) * dias_debe',
+  valor_debe: '(salario_base / 30) * dias_debe',
+  valor_incap: '((salario_base / 30) * (2/3)) < (smlv_base / 30) ? (smlv_base / 30) * dias_incapacidad : ((salario_base / 30) * (2/3)) * dias_incapacidad',
+  val_incapacidad: '((salario_base / 30) * (2/3)) < (smlv_base / 30) ? (smlv_base / 30) * dias_incapacidad : ((salario_base / 30) * (2/3)) * dias_incapacidad',
+  valor_incapacidad: '((salario_base / 30) * (2/3)) < (smlv_base / 30) ? (smlv_base / 30) * dias_incapacidad : ((salario_base / 30) * (2/3)) * dias_incapacidad',
+  valor_calamidad: '(salario_base / 30) * dias_calamidad',
+  valor_vacaciones: '(salario_base / 30) * dias_vacaciones',
+  valor_lic_rem: '(salario_base / 30) * dias_lic_rem',
+  valor_incap_at: '(salario_base / 30) * dias_incap_at',
   ibc_seguridad_social: 'sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + val_extras_festivas_nocturnas + comisiones + incapacidad',
   ibc_fsp: 'sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + val_extras_festivas_nocturnas + incapacidad',
   total_devengados: 'sueldo + recargo_nocturno + val_extras_diurnas + val_extras_nocturnas + val_extras_festivas + val_extras_festivas_nocturnas + comisiones + transporte + rodamiento + (intereses_cesantias || 0) + (devoluciones || 0) + incapacidad + val_lic_rem + val_incap_at + val_calamidad',
@@ -251,7 +266,24 @@ export const evaluateFormula = (formulaStr, variables) => {
     const result = func(...values);
     return isNaN(result) ? 0 : result;
   } catch (e) {
-    console.error("Error evaluando fórmula:", formulaStr, e);
-    return 0;
+    try {
+      const proxyVars = new Proxy(variables, {
+        has: () => true,
+        get: (target, prop) => {
+          if (prop in target) return target[prop];
+          const lower = String(prop).toLowerCase();
+          for (const k of Object.keys(target)) {
+            if (k.toLowerCase() === lower) return target[k];
+          }
+          return 0;
+        }
+      });
+      const sandboxFunc = new Function('scope', `with (scope) { return ${formulaStr}; }`);
+      const res = sandboxFunc(proxyVars);
+      return isNaN(res) ? 0 : res;
+    } catch (e2) {
+      console.error("Error evaluando fórmula:", formulaStr, e, e2);
+      return 0;
+    }
   }
 };

@@ -806,6 +806,18 @@ export default function TabLiquidacion({
 
                           const descuentoActualHorasVal = selectedWorkerData ? (overrides[`${selectedWorkerData.cedula}_descuento_actual_horas`] !== undefined ? overrides[`${selectedWorkerData.cedula}_descuento_actual_horas`] : (selectedWorkerData.descuento_actual_horas > 0 ? selectedWorkerData.descuento_actual_horas : '')) : '';
 
+                           const diasDebeVal = overrides[`${selectedWorkerData.cedula}_dias_debe`] !== undefined
+                              ? overrides[`${selectedWorkerData.cedula}_dias_debe`]
+                              : (selectedWorkerData.dias_debe !== undefined ? selectedWorkerData.dias_debe : 0);
+
+                           const salarioBaseWorker = overrides[`${selectedWorkerData.cedula}_salario_base`] !== undefined 
+                              ? Number(overrides[`${selectedWorkerData.cedula}_salario_base`]) 
+                              : Number(selectedWorkerData.masterRow?.salario_base || selectedWorkerData.salario_base || selectedWorkerData.salario || 0);
+
+                           const valDebeVal = overrides[`${selectedWorkerData.cedula}_val_debe`] !== undefined
+                              ? Number(overrides[`${selectedWorkerData.cedula}_val_debe`])
+                              : (selectedWorkerData.val_debe !== undefined ? Number(selectedWorkerData.val_debe) : Math.round((salarioBaseWorker / 30) * Number(diasDebeVal || 0)));
+
                           return (
                               <>
                                  {deudaAnteriorQuincena < 0 && (
@@ -883,6 +895,47 @@ export default function TabLiquidacion({
                                        </div>
                                     </div>
                                  </div>
+                                 {/* LIQUIDACIÓN DE NOVEDADES (DEBE) */}
+                                 <div className="p-4 bg-slate-800/90 border border-amber-500/40 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg backdrop-blur-sm">
+                                    <div className="flex items-center gap-3">
+                                       <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-black text-lg border border-amber-500/30 shrink-0">
+                                          📋
+                                       </div>
+                                       <div>
+                                          <h4 className="text-xs font-black uppercase tracking-wider text-amber-300">LIQUIDACIÓN DE NOVEDADES</h4>
+                                          <p className="text-[11px] text-slate-300 font-medium">
+                                             Novedad DEBE sincronizada con el turno y descontada de los días pagados.
+                                          </p>
+                                       </div>
+                                    </div>
+                                    <div className="flex items-center gap-4 flex-wrap">
+                                       {/* Caja 1: DÍAS DEBE (U) */}
+                                       <div className="flex items-center gap-2 bg-slate-900/60 px-3 py-1.5 rounded-xl border border-slate-700/60">
+                                          <label className="text-xs font-bold text-amber-300 select-none">
+                                             DÍAS DEBE (U):
+                                          </label>
+                                          <input
+                                             type="number"
+                                             min="0"
+                                             step="1"
+                                             placeholder="0"
+                                             value={diasDebeVal}
+                                             onChange={(e) => handleCellEdit(`${selectedWorkerData.cedula}_dias_debe`, e.target.value)}
+                                             className="w-16 bg-slate-800 text-amber-300 font-black text-xs rounded-lg px-2.5 py-1 border border-amber-500/40 outline-none focus:ring-1 focus:ring-amber-400 text-center"
+                                          />
+                                       </div>
+                                       {/* Caja 2: VALOR DEBE (V) */}
+                                       <div className="flex items-center gap-2 bg-slate-900/60 px-3 py-1.5 rounded-xl border border-slate-700/60">
+                                          <label className="text-xs font-bold text-rose-300 select-none">
+                                             VALOR DEBE (V):
+                                          </label>
+                                          <div className="min-w-[5rem] px-2.5 py-1 bg-slate-800 text-rose-300 font-black text-xs rounded-lg border border-rose-500/40 text-right select-none">
+                                             ${fmtCOP(valDebeVal)}
+                                          </div>
+                                       </div>
+                                    </div>
+                                 </div>
+
                                  {/* DESCUENTO POR NOVEDADES (QUINCENA ACTUAL) */}
                                  <div className="p-4 bg-slate-800/90 border border-sky-500/40 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg backdrop-blur-sm">
                                     <div className="flex items-center gap-3">
