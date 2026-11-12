@@ -251,6 +251,11 @@ export default function NominaPage() {
   const [attendanceLogs, setAttendanceLogs] = useState({});
   const [ratesMap] = useState({});
   const [overrides, setOverrides] = useState({});
+  const [acceptedOverrides, setAcceptedOverrides] = useState({});
+
+  const handleAcceptOverride = (key) => {
+    setAcceptedOverrides(prev => ({ ...prev, [key]: true }));
+  };
   const overridesRef = useRef(overrides);
   useEffect(() => { overridesRef.current = overrides; }, [overrides]);
   const [hiddenColumns, setHiddenColumns] = useState({});
@@ -1876,6 +1881,8 @@ processedLogs.forEach(day => {
         totalComidasVeces: sumComidasVeces,
         totalComidasMin: sumComidasMin,
         novedadesResumen: novedadesResumen,
+        raw_prestamos_saitemp: rawDescuentosSaitemp,
+        novedades_saitemp_json: overrides[`${cedula}_novedades_saitemp_json`] || null,
         liquidation: {
             total_extra_val: (variables['recargo_nocturno']||0) + (variables['val_extras_diurnas']||0) + (variables['val_extras_nocturnas']||0) + (variables['val_extras_festivas']||0) + (variables['val_extras_festivas_nocturnas']||0)
         }
@@ -2844,6 +2851,8 @@ const handleSaveToCloud = async () => {
          <TabLiquidacion
             selectedWorkerData={filteredPayrollData.find(d => d.masterRow.nombre === selectedWorkerName) || null}
             overrides={overrides}
+            acceptedOverrides={acceptedOverrides}
+            handleAcceptOverride={handleAcceptOverride}
             handleCellEdit={(key, value) => {
                handleCellEdit(key, value === "" ? undefined : (isNaN(Number(value)) ? value : Number(value)));
             }}

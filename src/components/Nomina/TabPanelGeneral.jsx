@@ -339,8 +339,19 @@ export default function TabPanelGeneral({
         (Number(emp.optica) || 0) + 
         (Number(emp.celular) || 0);
 
+      const rawDescuentos = overrides[`${emp.cedula}_prestamos`] !== undefined 
+          ? String(overrides[`${emp.cedula}_prestamos`]) 
+          : (emp.raw_prestamos_saitemp || (emp.prestamos ? String(emp.prestamos) : ''));
+
       const obsArray = [];
-      if (Number(emp.prestamos) > 0) obsArray.push("Abono a Préstamo");
+      if (rawDescuentos) {
+          rawDescuentos.split('\n').forEach(line => {
+              if (line.trim()) obsArray.push(line.trim());
+          });
+      } else if (Number(emp.prestamos) > 0) {
+          obsArray.push("Abono a Préstamo");
+      }
+      
       // if (Number(emp.poliza_bolivar) > 0) obsArray.push("Póliza Bolívar");
       if (Number(emp.poliza_plenitud) > 0) obsArray.push("Póliza Plenitud");
       if (Number(emp.libranza_comfama) > 0) obsArray.push("Libranza Comfama");
@@ -348,24 +359,57 @@ export default function TabPanelGeneral({
       if (Number(emp.optica) > 0) obsArray.push("Óptica");
       if (Number(emp.celular) > 0) obsArray.push("Celular");
 
-      worksheet.addRow({
-        no: index + 1,
-        area: (emp.cargo || '').toUpperCase(),
-        id: emp.cedula,
-        nombres: emp.nombre,
-        novedad: emp.novedad || emp.incapacidad || "",
-        inicio: "",
-        fin: "",
-        dias: formatNovedad(emp.dias_incapacidad),
-        rn: formatHour(emp.horas_nocturnas),
-        hed: formatHour(emp.extras_diurnas),
-        hen: formatHour(emp.extras_nocturnas),
-        hefd: formatHour(emp.extras_festivas),
-        rodamiento: formatValue(emp.rodamiento),
-        comisiones: formatValue(emp.comisiones),
-        descuentos: formatValue(deduccionesSaitemp),
-        obs: obsArray.join(", ")
-      });
+      let savedNovedades = [];
+      const jsonNovs = overrides[`${emp.cedula}_novedades_saitemp_json`] || emp.novedades_saitemp_json;
+      if (jsonNovs) {
+          try {
+              savedNovedades = typeof jsonNovs === 'string' ? JSON.parse(jsonNovs) : jsonNovs;
+          } catch (e) {}
+      }
+
+      if (savedNovedades && savedNovedades.length > 0) {
+          savedNovedades.forEach((nov, i) => {
+              worksheet.addRow({
+                  no: i === 0 ? index + 1 : "",
+                  area: i === 0 ? (emp.cargo || '').toUpperCase() : "",
+                  id: i === 0 ? emp.cedula : "",
+                  nombres: i === 0 ? emp.nombre : "",
+                  novedad: nov.novedad || "",
+                  inicio: nov.fechaInicio ? nov.fechaInicio.split('-').reverse().join('-') : "",
+                  fin: nov.fechaFinal ? nov.fechaFinal.split('-').reverse().join('-') : "",
+                  dias: formatNovedad(nov.totalDias),
+                  rn: i === 0 ? formatHour(emp.horas_nocturnas) : "",
+                  hed: i === 0 ? formatHour(emp.extras_diurnas) : "",
+                  hen: i === 0 ? formatHour(emp.extras_nocturnas) : "",
+                  hefd: i === 0 ? formatHour(emp.extras_festivas) : "",
+                  rodamiento: i === 0 ? formatValue(emp.rodamiento) : "",
+                  comisiones: i === 0 ? formatValue(emp.comisiones) : "",
+                  descuentos: i === 0 ? formatValue(deduccionesSaitemp) : "",
+                  obs: i === 0 ? obsArray.join(", ") : ""
+              });
+          });
+      } else {
+          const novedadesText = emp.novedadesResumen ? Object.keys(emp.novedadesResumen).join(', ') : '';
+          const diasNovedadAuto = emp.dias_incapacidad || emp.dias_incap_at || emp.dias_debe || emp.dias_lnr_empresa || emp.dias_lic_norem || emp.dias_lic_rem || emp.dias_sancion || emp.dias_calamidad || '';
+          worksheet.addRow({
+              no: index + 1,
+              area: (emp.cargo || '').toUpperCase(),
+              id: emp.cedula,
+              nombres: emp.nombre,
+              novedad: novedadesText || emp.novedad || "",
+              inicio: "",
+              fin: "",
+              dias: formatNovedad(diasNovedadAuto),
+              rn: formatHour(emp.horas_nocturnas),
+              hed: formatHour(emp.extras_diurnas),
+              hen: formatHour(emp.extras_nocturnas),
+              hefd: formatHour(emp.extras_festivas),
+              rodamiento: formatValue(emp.rodamiento),
+              comisiones: formatValue(emp.comisiones),
+              descuentos: formatValue(deduccionesSaitemp),
+              obs: obsArray.join(", ")
+          });
+      }
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -455,10 +499,10 @@ export default function TabPanelGeneral({
       const deducString = deducArray.join('\n');
 
       let savedNovedades = [];
-      const jsonNovs = overrides[`${emp.cedula}_novedades_saitemp_json`];
+      const jsonNovs = overrides[`${emp.cedula}_novedades_saitemp_json`] || emp.novedades_saitemp_json;
       if (jsonNovs) {
           try {
-              savedNovedades = JSON.parse(jsonNovs);
+              savedNovedades = typeof jsonNovs === 'string' ? JSON.parse(jsonNovs) : jsonNovs;
           } catch (e) {}
       }
 
@@ -486,6 +530,7 @@ export default function TabPanelGeneral({
       } else {
           // Fallback nativo
           const novedadesText = emp.novedadesResumen ? Object.keys(emp.novedadesResumen).join(', ') : '';
+          const diasNovedadAuto = emp.dias_incapacidad || emp.dias_incap_at || emp.dias_debe || emp.dias_lnr_empresa || emp.dias_lic_norem || emp.dias_lic_rem || emp.dias_sancion || emp.dias_calamidad || '';
           bodyData.push([
             index + 1,
             (emp.cargo || '').toUpperCase(),
@@ -494,7 +539,7 @@ export default function TabPanelGeneral({
             novedadesText || emp.novedad || "",
             "", // Inicio
             "", // Fin
-            formatNovedad(emp.dias_incapacidad),
+            formatNovedad(diasNovedadAuto),
             formatHour(emp.horas_nocturnas),
             formatHour(emp.extras_diurnas),
             formatHour(emp.extras_nocturnas),

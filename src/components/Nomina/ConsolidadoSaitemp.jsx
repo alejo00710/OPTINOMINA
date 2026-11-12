@@ -36,12 +36,29 @@ export default function ConsolidadoSaitemp({ empleadosLiquidados }) {
     if (Number(emp.optica) > 0) obsArray.push("Óptica");
     if (Number(emp.celular) > 0) obsArray.push("Celular");
 
-    const novedadesText = emp.novedadesResumen ? Object.keys(emp.novedadesResumen).join(', ') : '';
+    let modalNovText = '';
+    let modalNovDias = 0;
+    if (emp.novedades_saitemp_json) {
+      try {
+        const parsed = typeof emp.novedades_saitemp_json === 'string' ? JSON.parse(emp.novedades_saitemp_json) : emp.novedades_saitemp_json;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          modalNovText = parsed.map(n => n.novedad).filter(Boolean).join(', ');
+          modalNovDias = parsed.reduce((acc, n) => acc + (Number(n.totalDias) || 0), 0);
+        }
+      } catch (e) {}
+    }
+
+    const novedadesText = modalNovText || (emp.novedadesResumen ? Object.keys(emp.novedadesResumen).join(', ') : '');
+    const diasNovTotal = modalNovDias || emp.dias_incapacidad || emp.dias_incap_at || emp.dias_debe || emp.dias_lnr_empresa || emp.dias_lic_norem || emp.dias_lic_rem || emp.dias_sancion || emp.dias_calamidad;
+
+    if (novedadesText && !obsArray.includes(novedadesText)) {
+      obsArray.unshift(novedadesText);
+    }
 
     return {
       cedula: emp.cedula || '',
       nombre: emp.nombre || '',
-      diasNovedad: formatNovedad(emp.dias_incapacidad || emp.dias_incap_at),
+      diasNovedad: formatNovedad(diasNovTotal),
       textoNovedad: novedadesText || emp.novedad || '',
       recargoNocturno: formatHour(emp.horas_nocturnas),
       extrasDiurnas: formatHour(emp.extras_diurnas),

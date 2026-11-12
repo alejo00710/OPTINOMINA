@@ -251,6 +251,9 @@ export default function ColillaPDF({ empleados = [], tituloReporte = "SÁBANA CO
                 {Number(emp.dias_debe || 0) > 0 && (
                   <DetailRowCombined label="Días Debe" qty={emp.dias_debe} qtyLabel="días" money={emp.val_debe} />
                 )}
+                {Number(emp.dias_lnr_empresa || 0) > 0 && (
+                  <DetailRowCombined label="LNR Empresa" qty={emp.dias_lnr_empresa} qtyLabel="días" money={emp.val_lnr_empresa} />
+                )}
                 <DetailRow label="Vacaciones" value={emp.val_vacaciones} />
 
                 {/* Trabajo Suplementario */}
