@@ -142,7 +142,9 @@ export default function TabLiquidacion({
   selectedWorkerName,
   setSelectedWorkerName,
   nominaRows,
-  handleSaveDraft
+  handleSaveDraft,
+  onOpenFormulaEditor,
+  openEditor = onOpenFormulaEditor
 }) {
   const [deudaAnterior, setDeudaAnterior] = useState(0);
   const [saveStatus, setSaveStatus] = useState('idle');
@@ -926,6 +928,20 @@ export default function TabLiquidacion({
                                        </div>
                                        {/* Caja 2: VALOR DEBE (V) */}
                                        <div className="flex items-center gap-2 bg-slate-900/60 px-3 py-1.5 rounded-xl border border-slate-700/60">
+                                          <div className="flex items-center gap-1.5 mr-1 text-[10px] text-indigo-400 font-semibold select-none">
+                                             <span>✨ Formulado</span>
+                                             <button
+                                                type="button"
+                                                onClick={() => {
+                                                   if (typeof openEditor === 'function') openEditor('val_debe');
+                                                   else if (typeof onOpenFormulaEditor === 'function') onOpenFormulaEditor('val_debe');
+                                                }}
+                                                className="hover:text-indigo-200 transition-colors p-0.5 rounded hover:bg-slate-700/50 cursor-pointer"
+                                                title="Editar Fórmula"
+                                             >
+                                                ⚙️
+                                             </button>
+                                          </div>
                                           <label className="text-xs font-bold text-rose-300 select-none">
                                              VALOR DEBE (V):
                                           </label>

@@ -1294,13 +1294,15 @@ processedLogs.forEach(day => {
       let autoDiasLnrEmpresa = 0;
       let autoDiasTerminacion = 0;
       let autoDiasDebe = 0;
+      let autoDiasLicNoRem = 0;
 
       processedLogs.forEach(day => {
           const t = String(day.turno || day.estado || "").toUpperCase().trim();
           if (t.includes("FESTIVO")) autoDiasFestivo++;
-          if (t.includes("LNR EMPRESA")) autoDiasLnrEmpresa++;
+          if (t === "LNR EMPRESA" || (t.includes("LNR EMPRESA") && !t.includes("LICENCIA NO REMUNERADA"))) autoDiasLnrEmpresa++;
           if (t.includes("TERMINACION DE CONTRATO") || t.includes("TERMINACIÓN DE CONTRATO") || t.includes("TERMINACION")) autoDiasTerminacion++;
           if (t === "DEBE" || t.includes("DEBE")) autoDiasDebe++;
+          if (t === "LICENCIA NO REMUNERADA" || (t.includes("LICENCIA NO REMUNERADA") && !t.includes("LNR EMPRESA"))) autoDiasLicNoRem++;
       });
 
       const getNoveltyCount = (conditionFn) => {
@@ -1329,12 +1331,12 @@ processedLogs.forEach(day => {
       const dias_vacaciones = getAbsenceDays('dias_vacaciones', k => k === 'VACACIONES');
       const diasIncapacidad = getAbsenceDays('dias_incapacidad', k => k === 'INCAPACIDAD GENERAL');
       const dias_lic_rem = getAbsenceDays('dias_lic_rem', k => k === 'LICENCIA REMUNERADA');
-      const dias_lic_norem = getAbsenceDays('dias_lic_norem', k => k === 'LICENCIA NO REMUNERADA');
+      const dias_lic_norem = getAbsenceDays('dias_lic_norem', k => (k === 'LICENCIA NO REMUNERADA' || k.includes('LICENCIA NO REMUNERADA')) && !k.includes('LNR EMPRESA'), autoDiasLicNoRem);
       const dias_incap_at = getAbsenceDays('dias_incap_at', k => k === 'INCAPACIDAD AT' || k === 'INCAPACIDAD ACCIDENTE LABORAL');
       const dias_calamidad = getAbsenceDays('dias_calamidad', k => k === 'CALAMIDAD');
       const dias_sancion = getAbsenceDays('dias_sancion', k => k === 'SANCION' || k === 'SANCIONADO');
       const dias_festivo = getAbsenceDays('dias_festivo', k => k.includes('FESTIVO'), autoDiasFestivo);
-      const dias_lnr_empresa = getAbsenceDays('dias_lnr_empresa', k => k.includes('LNR EMPRESA'), autoDiasLnrEmpresa);
+      const dias_lnr_empresa = getAbsenceDays('dias_lnr_empresa', k => (k === 'LNR EMPRESA' || k.includes('LNR EMPRESA')) && !k.includes('LICENCIA NO REMUNERADA'), autoDiasLnrEmpresa);
       const dias_terminacion = getAbsenceDays('dias_terminacion', k => k.includes('TERMINACION DE CONTRATO') || k.includes('TERMINACIÓN DE CONTRATO') || k.includes('TERMINACION'), autoDiasTerminacion);
       const dias_debe = getAbsenceDays('dias_debe', k => k === 'DEBE' || k.includes('DEBE'), autoDiasDebe);
 
@@ -1408,9 +1410,13 @@ processedLogs.forEach(day => {
       );
 
       // 4. Novedades (Licencias No Remuneradas y Sanciones):
-      const valorLicNoRemCalc = Math.round(valorDiaBase * (dias_lnr_empresa || dias_lic_norem || 0));
+      const valorLicNoRemCalc = Math.round(valorDiaBase * (dias_lic_norem || 0));
       const valorLicNoRem = resolveValue(overrides, `${cedula}_val_lic_norem`, () => 
           resolveValue(overrides, `${cedula}_lic_norem`, () => valorLicNoRemCalc)
+      );
+      const valorLnrEmpresaCalc = Math.round(valorDiaBase * (dias_lnr_empresa || 0));
+      const valorLnrEmpresa = resolveValue(overrides, `${cedula}_val_lnr_empresa`, () => 
+          resolveValue(overrides, `${cedula}_valor_lnr_empresa`, () => valorLnrEmpresaCalc)
       );
       const valorSancionCalc = Math.round(valorDiaBase * (dias_sancion || 0));
       const valorSancion = resolveValue(overrides, `${cedula}_val_sancion`, () => 
@@ -1462,8 +1468,8 @@ processedLogs.forEach(day => {
         dias_lic_remunerada: dias_lic_rem,
         dias_lic_norem: dias_lic_norem,
         dias_lic_no_rem: dias_lic_norem,
-        dias_lnr: dias_lic_norem || dias_lnr_empresa || 0,
-        dias_lnr_empresa: dias_lnr_empresa > 0 ? dias_lnr_empresa : dias_lic_norem,
+        dias_lnr: dias_lic_norem,
+        dias_lnr_empresa: dias_lnr_empresa,
         dias_incap_at: dias_incap_at,
         dias_at: dias_incap_at,
         dias_accidente_laboral: dias_incap_at,
@@ -1494,6 +1500,8 @@ processedLogs.forEach(day => {
         valor_lic_no_rem: valorLicNoRem,
         lic_norem: valorLicNoRem,
         lic_no_rem: valorLicNoRem,
+        val_lnr_empresa: valorLnrEmpresa,
+        valor_lnr_empresa: valorLnrEmpresa,
         val_incap_at: valorIncapAt,
         valor_incap_at: valorIncapAt,
         val_calamidad: valorCalamidad,
@@ -1562,6 +1570,7 @@ processedLogs.forEach(day => {
           'val_calamidad': ['valor_calamidad', 'calamidad'],
           'val_sancion': ['valor_sancion', 'sancion'],
           'val_debe': ['valor_debe', 'debe'],
+          'val_lnr_empresa': ['valor_lnr_empresa'],
           'val_extras_festivas_nocturnas': ['extras_festivas_nocturnas_val', 'val_ext_fes_noc', 'valor_ext_fes_noc'],
           'extras_festivas_nocturnas': ['ext_fes_noc', 'horas_ext_fest_noc']
         };
@@ -1626,7 +1635,7 @@ processedLogs.forEach(day => {
       };
 
       // FASE 1: Devengados Base
-      const fase1 = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'val_extras_festivas_nocturnas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento', 'intereses_cesantias', 'devoluciones', 'val_vacaciones', 'val_lic_rem', 'val_lic_norem', 'val_incap_at', 'val_calamidad', 'val_sancion', 'val_debe', 'val_debe'];
+      const fase1 = ['sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 'val_extras_festivas_nocturnas', 'transporte', 'incapacidad', 'comisiones', 'rodamiento', 'intereses_cesantias', 'devoluciones', 'val_vacaciones', 'val_lic_rem', 'val_lic_norem', 'val_incap_at', 'val_calamidad', 'val_sancion', 'val_debe', 'val_lnr_empresa'];
       // FASE 2: Suma de Devengados (SOLO LLAVES OFICIALES)
       const fase2 = ['total_devengados', 'ibc_seguridad_social', 'ibc_fsp'];
       // FASE 3: Deducciones Base
@@ -1778,6 +1787,8 @@ processedLogs.forEach(day => {
         valor_lic_norem: variables['val_lic_norem'] || 0,
         valor_lic_no_rem: variables['val_lic_norem'] || 0,
         val_lic_no_rem: variables['val_lic_norem'] || 0,
+        val_lnr_empresa: variables['val_lnr_empresa'] || 0,
+        valor_lnr_empresa: variables['val_lnr_empresa'] || 0,
         val_incap_at: variables['val_incap_at'] || 0,
         valor_incap_at: variables['val_incap_at'] || 0,
         val_calamidad: variables['val_calamidad'] || 0,
@@ -2111,6 +2122,16 @@ processedLogs.forEach(day => {
           if (campoEditado === 'dias_debe') {
               delete newOverrides[`${cedula}_val_debe`];
               delete newOverrides[`${cedula}_valor_debe`];
+          }
+          if (campoEditado === 'dias_lic_norem') {
+              delete newOverrides[`${cedula}_val_lic_norem`];
+              delete newOverrides[`${cedula}_valor_lic_norem`];
+              delete newOverrides[`${cedula}_val_lic_no_rem`];
+              delete newOverrides[`${cedula}_valor_lic_no_rem`];
+          }
+          if (campoEditado === 'dias_lnr_empresa') {
+              delete newOverrides[`${cedula}_val_lnr_empresa`];
+              delete newOverrides[`${cedula}_valor_lnr_empresa`];
           }
           if (campoEditado === 'dias_incapacidad') {
               delete newOverrides[`${cedula}_incapacidad`];
@@ -2789,6 +2810,8 @@ const handleSaveToCloud = async () => {
             setSelectedWorkerName={setSelectedWorkerName}
             nominaRows={nominaRows}
             handleSaveDraft={handleSaveDraft}
+            onOpenFormulaEditor={handleOpenFormulaEditor}
+            openEditor={handleOpenFormulaEditor}
          />
       )}
 
@@ -3082,7 +3105,7 @@ const handleSaveToCloud = async () => {
                  'sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 
                  'transporte', 'incapacidad', 'total_devengados', 'salud', 'pension', 'solidaridad', 
                  'total_deducciones', 'total_pagar', 'neto_pagar', 'verificacion',
-                 'val_vacaciones', 'val_lic_rem', 'val_lic_norem', 'val_incap_at', 'val_calamidad', 'val_sancion'
+                 'val_vacaciones', 'val_lic_rem', 'val_lic_norem', 'val_incap_at', 'val_calamidad', 'val_sancion', 'val_debe', 'val_lnr_empresa'
              ];
 
              // COMPENSACIÓN CRUZADA:
@@ -3252,7 +3275,7 @@ const handleSaveToCloud = async () => {
              };
 
              const devengosBasicos = ['salario', 'dias_pagados', 'sueldo', 'transporte', 'rodamiento', 'comisiones', 'intereses_cesantias', 'devoluciones', 'bonificacion_no_salarial', 'bonificacion', 'total_devengados'];
-             const novedadesFinancieras = ['dias_lic_rem', 'val_lic_rem', 'dias_lic_norem', 'val_lic_norem', 'dias_incapacidad', 'incapacidad', 'dias_incap_at', 'val_incap_at', 'dias_calamidad', 'val_calamidad', 'dias_sancion', 'val_sancion', 'dias_debe', 'val_debe', 'dias_festivo', 'dias_lnr_empresa', 'dias_terminacion'];
+             const novedadesFinancieras = ['dias_lic_rem', 'val_lic_rem', 'dias_lic_norem', 'val_lic_norem', 'dias_incapacidad', 'incapacidad', 'dias_incap_at', 'val_incap_at', 'dias_calamidad', 'val_calamidad', 'dias_sancion', 'val_sancion', 'dias_debe', 'val_debe', 'dias_festivo', 'dias_lnr_empresa', 'val_lnr_empresa', 'dias_terminacion'];
              const suplementario = ['horas_diurnas', 'horas_nocturnas', 'extras_diurnas', 'extras_nocturnas', 'extras_festivas', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas'];
              const deducciones = ['salud', 'pension', 'solidaridad', 'prestamos', 'saldo_prestamo', 'poliza_bolivar', 'poliza_plenitud', 'libranza_comfama', 'poliza_sura', 'optica', 'celular', 'retencion', 'otros_descuentos', 'total_deducciones'];
              const resultados = ['total_pagar', 'neto_pagar', 'verificacion'];

@@ -156,6 +156,7 @@ export const PLANILLA_COLUMNS = [
   { key: "val_debe", label: "VALOR DEBE (V)", letter: "V", type: "number", isCurrency: true, editable: true, isCalculated: true },
   { key: "dias_festivo", label: "DÍAS FESTIVO (U)", letter: "U", type: "number", center: true, editable: true },
   { key: "dias_lnr_empresa", label: "DÍAS LNR EMPRESA (U)", letter: "U", type: "number", center: true, editable: true },
+  { key: "val_lnr_empresa", label: "VALOR LNR EMPRESA (V)", letter: "V", type: "number", isCurrency: true, editable: true, isCalculated: true },
   { key: "dias_terminacion", label: "DÍAS TERMINACIÓN (U)", letter: "U", type: "number", center: true, editable: true },
   { key: "total_devengados", label: "Total Devengado (W)", letter: "W", type: "number", isCurrency: true, bg: "bg-emerald-500/5 font-extrabold text-emerald-800", editable: true },
   
@@ -232,6 +233,8 @@ export const DEFAULT_FORMULAS = {
   valor_lic_no_rem: '(salario_base / 30) * dias_lic_norem',
   valor_lic_norem: '(salario_base / 30) * dias_lic_norem',
   val_lic_no_rem: '(salario_base / 30) * dias_lic_norem',
+  val_lnr_empresa: '(salario_base / 30) * dias_lnr_empresa',
+  valor_lnr_empresa: '(salario_base / 30) * dias_lnr_empresa',
   val_incap_at: '(salario_base / 30) * dias_incap_at',
   val_calamidad: '(salario_base / 30) * dias_calamidad',
   val_sancion: '(salario_base / 30) * dias_sancion',
