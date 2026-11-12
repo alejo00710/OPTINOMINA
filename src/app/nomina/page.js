@@ -22,16 +22,31 @@ import { detectShiftTemplate, emptyAttendanceDay, cleanWorkerPunches, parseBiome
 const safeParseNumber = (val) => {
   if (val === undefined || val === null || val === '') return 0;
   if (typeof val === 'number') return isNaN(val) ? 0 : val;
-  // Quitar TODO excepto números, signos menos y puntos decimales
-  const cleanStr = String(val).replace(/[^0-9.-]+/g, "");
-  const parsed = parseFloat(cleanStr);
+  let s = String(val).replace(/\$|\s/g, '').trim();
+  if (!s) return 0;
+  if (s.includes('.') && s.includes(',')) {
+    s = s.replace(/\./g, '').replace(/,/g, '.');
+  } else if (s.includes(',')) {
+    s = s.replace(/,/g, '.');
+  } else if (s.includes('.')) {
+    const parts = s.split('.');
+    if (parts.length > 2) {
+      s = s.replace(/\./g, '');
+    } else {
+      if (parts[1].length === 3 && parts[0].length >= 1 && parts[0].length <= 3 && !s.includes('-')) {
+        s = s.replace(/\./g, '');
+      }
+    }
+  }
+  const parsed = parseFloat(s);
   return isNaN(parsed) ? 0 : parsed;
 };
 
 // Helper to look up overridden state values and ensure they are parsed as numbers for math formulas
 const resolveValue = (overrides, key, formulaFn) => {
-  if (overrides[key] !== undefined && overrides[key] !== "") {
-    const val = typeof overrides[key] === "string" ? parseLocalNumber(overrides[key]) : overrides[key];
+  if (overrides[key] !== undefined && overrides[key] !== "" && overrides[key] !== null) {
+    const raw = overrides[key];
+    const val = typeof raw === "string" ? safeParseNumber(raw) : (typeof raw === "number" ? raw : (parseFloat(String(raw).replace(',', '.')) || 0));
     if (typeof val === "number" && isNaN(val)) {
       return 0;
     }
@@ -1139,16 +1154,24 @@ processedLogs.forEach(day => {
 
       // CENTRALIZACIÓN DE LA VERDAD (Overrides > Biométrico)
       // Prioridad absoluta a los valores editados en TabLiquidacion (tot_hr_*) o en overrides globales
+      const parseSafeHours = (v) => {
+          if (v === undefined || v === null || v === "") return null;
+          if (typeof v === "number") return isNaN(v) ? 0 : v;
+          const str = String(v).trim().replace(',', '.');
+          const n = parseFloat(str);
+          return isNaN(n) ? 0 : n;
+      };
+
       const getOverrideHour = (key1, key2, fallbackFn) => {
-          if (overrides[`${cedula}_${key1}`] !== undefined && overrides[`${cedula}_${key1}`] !== "") {
-              const v = typeof overrides[`${cedula}_${key1}`] === "string" ? parseLocalNumber(overrides[`${cedula}_${key1}`]) : overrides[`${cedula}_${key1}`];
-              return isNaN(v) ? 0 : Number(v);
+          const v1 = parseSafeHours(overrides[`${cedula}_${key1}`]);
+          if (v1 !== null) return v1;
+          if (key2) {
+              const v2 = parseSafeHours(overrides[`${cedula}_${key2}`]);
+              if (v2 !== null) return v2;
           }
-          if (key2 && overrides[`${cedula}_${key2}`] !== undefined && overrides[`${cedula}_${key2}`] !== "") {
-              const v = typeof overrides[`${cedula}_${key2}`] === "string" ? parseLocalNumber(overrides[`${cedula}_${key2}`]) : overrides[`${cedula}_${key2}`];
-              return isNaN(v) ? 0 : Number(v);
-          }
-          return fallbackFn();
+          const fb = fallbackFn();
+          const nFb = parseSafeHours(fb);
+          return nFb !== null ? nFb : 0;
       };
 
       let finalDiurnas = getOverrideHour('tot_hr_diurnas', 'horas_diurnas', () => sumDiurnas);
@@ -1173,6 +1196,15 @@ processedLogs.forEach(day => {
       let finalExtFesNoc = getOverrideHour('tot_hr_ext_fes_noc', 'extras_festivas_nocturnas', () => 
           getOverrideHour('ext_fes_noc', null, () => sumExtFesNoc)
       );
+
+      finalDiurnas = parseFloat(finalDiurnas) || 0;
+      finalNocturnas = parseFloat(finalNocturnas) || 0;
+      finalFesDiu = parseFloat(finalFesDiu) || 0;
+      finalFesNoc = parseFloat(finalFesNoc) || 0;
+      finalExtDiu = parseFloat(finalExtDiu) || 0;
+      finalExtNoc = parseFloat(finalExtNoc) || 0;
+      finalExtFesDiu = parseFloat(finalExtFesDiu) || 0;
+      finalExtFesNoc = parseFloat(finalExtFesNoc) || 0;
 
       const esPersonalAdministrativo = emp.categoria === 'Administrativo' || emp.area === 'Administrativo';
       if (esPersonalAdministrativo) {
@@ -1382,7 +1414,7 @@ processedLogs.forEach(day => {
           const noveltyCount = getNoveltyCount(noveltyCondition);
           if (noveltyCount > 0) return noveltyCount;
           if (directCount > 0) return directCount;
-          return parseLocalNumber(Number(emp[fieldKey] || 0));
+          return 0; // Si no hay registro biométrico, horario ni override manual, el valor DEBE ser 0 estrictamente
       };
 
       const dias_vacaciones = getAbsenceDays('dias_vacaciones', k => k === 'VACACIONES', autoDiasVacaciones);
@@ -1836,19 +1868,27 @@ processedLogs.forEach(day => {
         mensaje_descuento_actual: mensajeDescuentoActual,
         horas_pendientes: horasPendientes,
         horas_diurnas: finalDiurnas,
+        tot_hr_diurnas: finalDiurnas,
         t_diurnas: finalDiurnas,
         diurnas: finalDiurnas,
         horas_nocturnas: finalNocturnas,
+        tot_hr_nocturnas: finalNocturnas,
         festivas_diurnas: finalFesDiu,
+        tot_hr_fes_diu: finalFesDiu,
         festivas_nocturnas: finalFesNoc,
+        tot_hr_fes_noc: finalFesNoc,
         extras_diurnas: finalExtDiu,
+        tot_hr_ext_diu: finalExtDiu,
         extras_nocturnas: finalExtNoc,
+        tot_hr_ext_noc: finalExtNoc,
         extras_diurnas_liquidadas: finalExtDiu,
         extras_nocturnas_liquidadas: finalExtNoc,
         balance_extras_st: finalExtDiu + finalExtNoc,
         suma_total_tiempo_extras: finalExtDiu + finalExtNoc,
         extras_festivas: finalExtFesDiu,
+        tot_hr_ext_fes_diu: finalExtFesDiu,
         extras_festivas_nocturnas: finalExtFesNoc,
+        tot_hr_ext_fes_noc: finalExtFesNoc,
         ext_fes_noc: finalExtFesNoc,
         horas_ext_fest_noc: finalExtFesNoc,
         raw_sum_diurnas: sumDiurnas,

@@ -87,12 +87,25 @@ export const fmtDec = (n, min = 1, max = 2) => {
 
 export const parseLocalNumber = (val) => {
   if (val === null || val === undefined || val === "") return 0;
-  if (typeof val === "number") return Number(val.toFixed(1));
+  if (typeof val === "number") return isNaN(val) ? 0 : val;
   let s = String(val).replace(/\$|\s/g, '').trim();
-  s = s.replace(/\./g, '');
-  s = s.replace(/,/g, '.');
+  if (!s) return 0;
+  if (s.includes('.') && s.includes(',')) {
+    s = s.replace(/\./g, '').replace(/,/g, '.');
+  } else if (s.includes(',')) {
+    s = s.replace(/,/g, '.');
+  } else if (s.includes('.')) {
+    const parts = s.split('.');
+    if (parts.length > 2) {
+      s = s.replace(/\./g, '');
+    } else {
+      if (parts[1].length === 3 && parts[0].length >= 1 && parts[0].length <= 3 && !s.includes('-')) {
+        s = s.replace(/\./g, '');
+      }
+    }
+  }
   const n = parseFloat(s);
-  return isNaN(n) ? 0 : Number(n.toFixed(1));
+  return isNaN(n) ? 0 : n;
 };
 
 export const getTimeDifferenceHHMM = (start, end, allowMidnight = true) => {

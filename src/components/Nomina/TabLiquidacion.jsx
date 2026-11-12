@@ -691,22 +691,29 @@ export default function TabLiquidacion({
                          
                          const horasDebe = Number(overrides[`${selectedWorkerData.cedula}_horas_que_debe`] !== undefined ? overrides[`${selectedWorkerData.cedula}_horas_que_debe`] : (selectedWorkerData.horas_debe || 0));
                          
-                         const getTotHr = (field, defaultVal) => overrides[`${selectedWorkerData.cedula}_tot_hr_${field}`] !== undefined ? Number(overrides[`${selectedWorkerData.cedula}_tot_hr_${field}`]) : defaultVal;
-                         
-                         const safeHrs = (val) => parseFloat(val) || 0;
+                         const safeHrs = (val) => {
+                            if (val === undefined || val === null || val === '') return 0;
+                            const n = typeof val === 'number' ? val : parseFloat(String(val).replace(',', '.'));
+                            return isNaN(n) ? 0 : n;
+                         };
 
-                         const tDiurnas = safeHrs(getTotHr('diurnas', selectedWorkerData.horas_diurnas));
+                         const getTotHr = (field, defaultVal) => {
+                            const ov = overrides[`${selectedWorkerData.cedula}_tot_hr_${field}`];
+                            return ov !== undefined && ov !== "" ? safeHrs(ov) : safeHrs(defaultVal);
+                         };
+
+                         const tDiurnas = getTotHr('diurnas', selectedWorkerData.horas_diurnas);
                          const tNocturnas = safeHrs(overrides[`${selectedWorkerData.cedula}_horas_nocturnas`] !== undefined ? overrides[`${selectedWorkerData.cedula}_horas_nocturnas`] : selectedWorkerData.horas_nocturnas);
-                         const tFesDiu = safeHrs(getTotHr('fes_diu', selectedWorkerData.festivas_diurnas));
-                         const tFesNoc = safeHrs(getTotHr('fes_noc', selectedWorkerData.festivas_nocturnas));
+                         const tFesDiu = getTotHr('fes_diu', selectedWorkerData.festivas_diurnas);
+                         const tFesNoc = getTotHr('fes_noc', selectedWorkerData.festivas_nocturnas);
                          
                          const baseExtraDiurna = Number(selectedWorkerData.extras_diurnas || 0);
-                          const totalExtraDiu = getTotHr('ext_diu', baseExtraDiurna);
-                          const totalExtraNoc = getTotHr('ext_noc', Number(selectedWorkerData.extras_nocturnas || 0));
-                          const horasExtraDiurnaReal = totalExtraDiu;
-                          const totalExtrasST = totalExtraDiu + totalExtraNoc;
-                         const totalExtFesDiu = safeHrs(getTotHr('ext_fes_diu', selectedWorkerData.extras_festivas));
-                         const totalExtFesNoc = safeHrs(getTotHr('ext_fes_noc', selectedWorkerData.extras_festivas_nocturnas));
+                         const totalExtraDiu = getTotHr('ext_diu', baseExtraDiurna);
+                         const totalExtraNoc = getTotHr('ext_noc', Number(selectedWorkerData.extras_nocturnas || 0));
+                         const horasExtraDiurnaReal = totalExtraDiu;
+                         const totalExtrasST = totalExtraDiu + totalExtraNoc;
+                         const totalExtFesDiu = getTotHr('ext_fes_diu', selectedWorkerData.extras_festivas);
+                         const totalExtFesNoc = getTotHr('ext_fes_noc', selectedWorkerData.extras_festivas_nocturnas);
                          
                          const horasPendientes = horasExtraDiurnaReal + totalExtraNoc + totalExtFesDiu + totalExtFesNoc;
                          
@@ -752,8 +759,10 @@ export default function TabLiquidacion({
                          const valExtFesDiu = overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`]) : totalExtFesDiu;
                          const valExtFesNoc = overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`]) : totalExtFesNoc;
 
-                         const renderAutoRevisor = (currentVal, rawVal) => {
-                            const isSynced = Math.abs((Number(currentVal) || 0) - (Number(rawVal) || 0)) < 0.05;
+                         const renderAutoRevisor = (currentVal, rawVal, overrideKey) => {
+                            const curNum = parseFloat(String(currentVal).replace(",", ".")) || 0;
+                            const rawNum = parseFloat(String(rawVal).replace(",", ".")) || 0;
+                            const isSynced = Math.abs(curNum - rawNum) < 0.05;
                             if (isSynced) {
                                return (
                                   <span 
@@ -764,13 +773,31 @@ export default function TabLiquidacion({
                                   </span>
                                );
                             }
+                            const isAccepted = overrideKey && acceptedOverrides && acceptedOverrides[overrideKey] === true;
+                            if (isAccepted) {
+                               return (
+                                  <span 
+                                     className="text-emerald-400 font-bold ml-1.5 cursor-default select-none text-xs" 
+                                     title={`Ajuste manual validado: ${curNum.toFixed(1)}h (Biométrico: ${rawNum.toFixed(1)}h)`}
+                                  >
+                                     ✔️
+                                  </span>
+                               );
+                            }
                             return (
-                               <span 
-                                  className="text-emerald-400 font-bold ml-1.5 cursor-default select-none text-xs" 
-                                  title={`Ajuste manual activo: ${(Number(currentVal) || 0).toFixed(1)}h (Biométrico: ${(Number(rawVal) || 0).toFixed(1)}h)`}
+                               <button 
+                                  type="button"
+                                  onClick={(e) => {
+                                     e.stopPropagation();
+                                     if (overrideKey && typeof handleAcceptOverride === "function") {
+                                        handleAcceptOverride(overrideKey);
+                                     }
+                                  }}
+                                  className="text-amber-400 font-bold ml-1.5 cursor-pointer select-none text-xs hover:scale-125 transition-transform p-0 bg-transparent border-none inline-flex items-center" 
+                                  title={`Aceptar este cambio manual (Registro Diario: ${rawNum.toFixed(1)}h)`}
                                >
-                                  ✔️
-                               </span>
+                                  ⚠️
+                               </button>
                             );
                          };
 
@@ -1033,7 +1060,7 @@ export default function TabLiquidacion({
                                                   {renderAutoRevisor(valExtDiu, rawS_extDiu, `${selectedWorkerData.cedula}_tot_hr_ext_diu`)}
                                                </div>
                                             </td>
-                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">25%</span></td>
+                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">125%</span></td>
                                             <td className="py-2 px-2 text-right">
                                                <div className="flex justify-end items-center gap-1">
                                                   <span className="text-emerald-400">$</span>
@@ -1049,7 +1076,7 @@ export default function TabLiquidacion({
                                                   {renderAutoRevisor(valExtNoc, rawT_extNoc, `${selectedWorkerData.cedula}_tot_hr_ext_noc`)}
                                                </div>
                                             </td>
-                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">75%</span></td>
+                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">175%</span></td>
                                             <td className="py-2 px-2 text-right">
                                                <div className="flex justify-end items-center gap-1">
                                                   <span className="text-emerald-400">$</span>
@@ -1065,7 +1092,7 @@ export default function TabLiquidacion({
                                                   {renderAutoRevisor(valExtFesDiu, rawU_extFesDiu, `${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`)}
                                                </div>
                                             </td>
-                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">115%</span></td>
+                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">215%</span></td>
                                             <td className="py-2 px-2 text-right">
                                                <div className="flex justify-end items-center gap-1">
                                                   <span className="text-emerald-400">$</span>
@@ -1081,7 +1108,7 @@ export default function TabLiquidacion({
                                                   {renderAutoRevisor(valExtFesNoc, rawV_extFesNoc, `${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`)}
                                                </div>
                                             </td>
-                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">165%</span></td>
+                                            <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">265%</span></td>
                                             <td className="py-2 px-2 text-right">
                                                <div className="flex justify-end items-center gap-1">
                                                   <span className="text-emerald-400">$</span>
@@ -1094,14 +1121,14 @@ export default function TabLiquidacion({
                                         <tr>
                                            <td className="py-4 px-4 text-xs font-black uppercase tracking-widest text-slate-400 text-right whitespace-nowrap">TOTALES</td>
                                            <td className="py-4 px-4 text-center text-lg font-black text-white whitespace-nowrap">{Number(
-                                              (selectedWorkerData.horas_diurnas || 0) +
-                                              (selectedWorkerData.horas_nocturnas || 0) +
-                                              (selectedWorkerData.festivas_diurnas || 0) +
-                                              (selectedWorkerData.festivas_nocturnas || 0) +
-                                              horasExtraDiurnaReal +
-                                              totalExtraNoc +
-                                              totalExtFesDiu +
-                                              totalExtFesNoc
+                                              (valDiurnas || 0) +
+                                              (valNocturnas || 0) +
+                                              (valFesDiu || 0) +
+                                              (valFesNoc || 0) +
+                                              (valExtDiu || 0) +
+                                              (valExtNoc || 0) +
+                                              (valExtFesDiu || 0) +
+                                              (valExtFesNoc || 0)
                                            ).toFixed(1)}</td>
                                            <td className="py-4 px-4"></td>
                                            <td className="py-4 px-4 text-right text-2xl font-black text-emerald-400 tracking-tight whitespace-nowrap">${fmtCOP(vTotalExtras)}</td>
