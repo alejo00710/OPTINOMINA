@@ -859,14 +859,48 @@ export default function TabPanelGeneral({
           if (data.auxilios !== '') handleCellEdit(`${cedula}_rodamiento`, data.auxilios);
           
           if (data.novedades && data.novedades.length > 0) {
-              // Guardar la primera por retrocompatibilidad con las columnas de tabla
               const nov1 = data.novedades[0];
-              if (nov1.novedad && nov1.totalDias !== '') {
-                  handleCellEdit(`${cedula}_dias_incapacidad`, nov1.totalDias);
-                  handleCellEdit(`${cedula}_incapacidad`, nov1.novedad);
+              const novName = String(nov1?.novedad || '').toUpperCase().trim();
+              const totalDias = (nov1?.totalDias !== '' && nov1?.totalDias !== undefined) ? Number(nov1.totalDias) : '';
+
+              // Enrutador de novedades SAITEMP a variables de liquidación específicas
+              let targetKey = null;
+              if (novName === 'DEBE') {
+                  targetKey = 'dias_debe';
+              } else if (novName === 'LNR EMPRESA') {
+                  targetKey = 'dias_lnr_empresa';
+              } else if (novName === 'INCAPACIDAD EG' || novName === 'INCAPACIDAD GENERAL') {
+                  targetKey = 'dias_incapacidad';
+              } else if (novName === 'INCAPACIDAD ACCIDENTE LABORAL (AT)' || novName === 'INCAPACIDAD AT') {
+                  targetKey = 'dias_incap_at';
+              } else if (novName === 'SANCIONADO' || novName === 'SANCIÓN' || novName === 'SANCION') {
+                  targetKey = 'dias_sancion';
+              } else if (novName === 'CALAMIDAD') {
+                  targetKey = 'dias_calamidad';
+              } else if (novName === 'PERMISO NO REMUNERADO') {
+                  targetKey = 'dias_lic_norem';
+              } else if (novName === 'PERMISO REMUNERADO') {
+                  targetKey = 'dias_lic_rem';
               }
+
+              // Limpiar explícitamente cualquier residuo espurio de dias_incapacidad si la novedad no es incapacidad general
+              if (targetKey !== 'dias_incapacidad') {
+                  handleCellEdit(`${cedula}_dias_incapacidad`, 0);
+                  handleCellEdit(`${cedula}_dias_incap`, 0);
+                  handleCellEdit(`${cedula}_incapacidad`, 0);
+                  handleCellEdit(`${cedula}_val_incapacidad`, 0);
+              }
+
+              // Asignar los días a la variable correcta si hubo coincidencia válida
+              if (targetKey && totalDias !== '') {
+                  handleCellEdit(`${cedula}_${targetKey}`, totalDias);
+              }
+
               // Guardar TODO el array para el PDF (Serializado)
               handleCellEdit(`${cedula}_novedades_saitemp_json`, JSON.stringify(data.novedades));
+          } else {
+              // Si no hay novedades o se limpian, guardar array vacío y resetear incapacidad por seguridad
+              handleCellEdit(`${cedula}_novedades_saitemp_json`, JSON.stringify([]));
           }
         }}
       />

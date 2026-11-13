@@ -729,6 +729,102 @@ export default function NominaPage() {
                 delete loadedOverrides['_MASTER_SCHEDULE_JSON'];
                 console.log("✅ Horarios recuperados exitosamente del borrador.");
             }
+
+            // SANEAMIENTO AUTOMÁTICO DE OVERRIDES (Purga del "Día Fantasma" de Incapacidad General)
+            const attendanceLogsDraft = cloudDraft.attendance_logs || {};
+            const keysToSanitize = Object.keys(loadedOverrides);
+            let sanitizedCount = 0;
+
+            keysToSanitize.forEach(key => {
+                if (
+                    key.endsWith('_dias_incapacidad') || 
+                    key.endsWith('_dias_incap') || 
+                    key.endsWith('_incapacidad') || 
+                    key.endsWith('_val_incapacidad') || 
+                    key.endsWith('_valor_incapacidad') ||
+                    key.endsWith('_valor_incap')
+                ) {
+                    const cedula = key.split('_')[0];
+                    const rawVal = loadedOverrides[key];
+
+                    // 1. Verificar si tiene incapacidad general en SAITEMP JSON
+                    let tieneIncapacidadSaitemp = false;
+                    let saitempMappedTarget = null;
+                    let saitempDias = 0;
+                    const saitempRaw = loadedOverrides[`${cedula}_novedades_saitemp_json`];
+                    if (saitempRaw) {
+                        try {
+                            const parsed = typeof saitempRaw === 'string' ? JSON.parse(saitempRaw) : saitempRaw;
+                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                const nov1 = parsed[0];
+                                const novName = String(nov1?.novedad || '').toUpperCase().trim();
+                                saitempDias = Number(nov1?.totalDias || 0);
+
+                                if (novName === 'INCAPACIDAD EG' || novName === 'INCAPACIDAD GENERAL' || (novName.includes('INCAPACIDAD') && !novName.includes('ACCIDENTE') && !novName.includes('LABORAL') && !novName.includes('AT'))) {
+                                    tieneIncapacidadSaitemp = true;
+                                } else if (novName === 'DEBE') {
+                                    saitempMappedTarget = 'dias_debe';
+                                } else if (novName === 'LNR EMPRESA') {
+                                    saitempMappedTarget = 'dias_lnr_empresa';
+                                } else if (novName === 'INCAPACIDAD ACCIDENTE LABORAL (AT)' || novName === 'INCAPACIDAD AT') {
+                                    saitempMappedTarget = 'dias_incap_at';
+                                } else if (novName === 'SANCIONADO' || novName === 'SANCIÓN' || novName === 'SANCION') {
+                                    saitempMappedTarget = 'dias_sancion';
+                                } else if (novName === 'CALAMIDAD') {
+                                    saitempMappedTarget = 'dias_calamidad';
+                                } else if (novName === 'PERMISO NO REMUNERADO') {
+                                    saitempMappedTarget = 'dias_lic_norem';
+                                } else if (novName === 'PERMISO REMUNERADO') {
+                                    saitempMappedTarget = 'dias_lic_rem';
+                                }
+                            }
+                        } catch(e) {}
+                    }
+
+                    // 2. Verificar si tiene incapacidad general en logs del biométrico
+                    const logs = attendanceLogsDraft[cedula] || [];
+                    const tieneIncapacidadBiometrico = logs.some(l => {
+                        const st = String(l.estado || l.turno || l.novedad || '').toUpperCase().trim();
+                        return st === 'INCAPACIDAD GENERAL' || st === 'INCAPACIDAD EG' || (st.includes('INCAPACIDAD') && !st.includes('ACCIDENTE') && !st.includes('LABORAL') && !st.includes('AT'));
+                    });
+
+                    // 3. Verificar si tiene override explícito diario de incapacidad general
+                    const tieneIncapacidadDiaria = keysToSanitize.some(k => {
+                        if (k.startsWith(`${cedula}_`) && k.endsWith('_novedad_status')) {
+                            const st = String(loadedOverrides[k] || '').toUpperCase().trim();
+                            return st === 'INCAPACIDAD GENERAL' || st === 'INCAPACIDAD EG' || (st.includes('INCAPACIDAD') && !st.includes('ACCIDENTE') && !st.includes('LABORAL') && !st.includes('AT'));
+                        }
+                        return false;
+                    });
+
+                    const esIncapacidadValida = tieneIncapacidadSaitemp || tieneIncapacidadBiometrico || tieneIncapacidadDiaria;
+                    const esStringNovContaminado = key.endsWith('_incapacidad') && isNaN(Number(rawVal)) && typeof rawVal === 'string';
+
+                    // Si no es una incapacidad general real o contiene string de otra novedad, purgar
+                    if (!esIncapacidadValida || esStringNovContaminado) {
+                        delete loadedOverrides[key];
+                        sanitizedCount++;
+
+                        // Si venía de SAITEMP con otra novedad válida, enrutar los días a la columna correspondiente
+                        if (saitempMappedTarget && saitempDias > 0 && loadedOverrides[`${cedula}_${saitempMappedTarget}`] === undefined) {
+                            loadedOverrides[`${cedula}_${saitempMappedTarget}`] = saitempDias;
+                        }
+                    }
+                }
+            });
+
+            if (sanitizedCount > 0) {
+                console.log(`🧹 Sanitizer: Se purgaron ${sanitizedCount} registros espurios de incapacidad en el borrador.`);
+                // Actualizar inmediatamente el borrador en Supabase para persistir el saneamiento
+                supabase
+                    .from('optimoldes_payroll')
+                    .update({ overrides: loadedOverrides, updated_at: new Date().toISOString() })
+                    .eq('id', 'quincena_activa')
+                    .then(({ error }) => {
+                        if (!error) console.log("✅ Borrador en la nube saneado con éxito.");
+                    });
+            }
+
             setOverrides(loadedOverrides);
             
             console.log("✅ Datos iniciales cargados y sincronizados desde la nube.");
@@ -3177,149 +3273,202 @@ const handleSaveToCloud = async () => {
              );
         })()}
 
-        {/* SECCIÓN RESUMEN DE NOVEDADES */}
+        {/* SECCIÓN RESUMEN DE NOVEDADES - FUSIÓN Y DEDUPLICACIÓN UNIFICADA */}
         {(() => {
             const workerData = filteredPayrollData.find(d => d.masterRow.nombre === detailsWorkerName) || filteredPayrollData[0];
             if (!workerData) return null;
             const cedula = workerData.masterRow?.cedula;
             const isAdministrativo = workerData.masterRow?.categoria === 'Administrativo' || workerData.masterRow?.area === 'Administrativo' || workerData.categoria === 'Administrativo' || workerData.area === 'Administrativo';
 
-            const cards = [];
-
-            // 1. Novedades del Biométrico / Turnos
-            if (workerData.novedadesResumen) {
-                Object.entries(workerData.novedadesResumen).forEach(([tipo, fechas]) => {
-                    // VALIDACIÓN 1: Ocultar INCOMPLETO si es administrativo
-                    if (isAdministrativo && tipo.toUpperCase().includes('INCOMPLETO')) {
-                        return;
-                    }
-                    let normTipo = tipo;
-                    if (tipo.toUpperCase() === 'INCAPACIDAD ACCIDENTE LABORAL' || tipo.toUpperCase() === 'INCAPACIDAD AT' || tipo.toUpperCase().includes('ACCIDENTE LABORAL')) {
-                        normTipo = 'INCAPACIDAD ACCIDENTE LABORAL';
-                    }
-                    cards.push({
-                        id: normTipo,
-                        titulo: normTipo,
-                        dias: fechas.length,
-                        fechas: fechas,
-                        isManual: false
-                    });
-                });
-            }
-
-            // 2. Novedades Manuales vía overrides de fechas
-            Object.entries(NOVEDADES_MANUALES_MAP).forEach(([fieldKey, conf]) => {
-                const overrideDias = overrides[`${cedula}_${conf.diasKey}`] ?? overrides[`${cedula}_${conf.altDiasKey || ''}`];
-                const diasNum = overrideDias !== undefined && overrideDias !== "" 
-                    ? Number(overrideDias) 
-                    : Number(workerData[fieldKey] || 0);
-
-                const rawFechas = overrides[`${cedula}_${conf.fechasKey}`] ?? overrides[`${cedula}_${conf.altFechasKey || ''}`];
-                let fechasList = [];
-                if (Array.isArray(rawFechas)) {
-                    fechasList = rawFechas;
-                } else if (typeof rawFechas === 'string' && rawFechas.trim()) {
+            const parseFechas = (raw) => {
+                if (!raw) return [];
+                if (Array.isArray(raw)) return raw;
+                if (typeof raw === 'string' && raw.trim()) {
                     try {
-                        const p = JSON.parse(rawFechas);
-                        if (Array.isArray(p)) fechasList = p;
+                        const p = JSON.parse(raw);
+                        if (Array.isArray(p)) return p;
                     } catch(e) {
-                        if (rawFechas.includes(',')) fechasList = rawFechas.split(',').map(s => s.trim());
-                        else fechasList = [rawFechas.trim()];
+                        if (raw.includes(',')) return raw.split(',').map(s => s.trim()).filter(Boolean);
+                        return [raw.trim()];
                     }
                 }
+                return [];
+            };
 
-                if (diasNum > 0) {
-                    const fechasCortas = fechasList.length > 0
-                        ? fechasList.map(f => {
-                            const parts = String(f).split('-');
-                            return parts.length >= 3 ? `${parts[1]}-${parts[2]}` : f;
-                        })
-                        : ['Sin asignar'];
+            const formatFechasCortas = (fechasArr) => {
+                if (!fechasArr || fechasArr.length === 0) return ['Sin asignar'];
+                return fechasArr.map(f => {
+                    const parts = String(f).split('-');
+                    return parts.length >= 3 ? `${parts[1]}-${parts[2]}` : f;
+                });
+            };
 
-                    const existingIdx = cards.findIndex(c => {
-                        const t1 = c.titulo.toUpperCase().trim();
-                        const t2 = conf.titulo.toUpperCase().trim();
-                        if (t1 === t2) return true;
-                        if (conf.diasKey === 'dias_incap_at') {
-                            return t1.includes('ACCIDENTE LABORAL') || t1.includes('INCAPACIDAD AT') || t1 === 'INCAPACIDAD AT';
+            // Diccionario de Fusión que unifica biométrico y manuales bajo una sola verdad
+            const NOVEDADES_FUSION_CONFIG = [
+                {
+                    id: 'SANCIONADO',
+                    titulo: 'SANCIONADO',
+                    diasKey: 'dias_sancion',
+                    altDiasKey: 'dias_sancionado',
+                    fechasKey: 'fechas_sancion',
+                    matchBiometrico: (k) => k === 'SANCION' || k === 'SANCIONADO' || k.includes('SANCION')
+                },
+                {
+                    id: 'INCAPACIDAD_GENERAL',
+                    titulo: 'INCAPACIDAD GENERAL',
+                    diasKey: 'dias_incapacidad',
+                    altDiasKey: 'dias_incap',
+                    fechasKey: 'fechas_incapacidad',
+                    altFechasKey: 'fechas_incap',
+                    matchBiometrico: (k) => k === 'INCAPACIDAD GENERAL' || k === 'INCAPACIDAD EG' || (k.includes('INCAPACIDAD') && !k.includes('ACCIDENTE') && !k.includes('LABORAL') && !k.includes('AT'))
+                },
+                {
+                    id: 'INCAPACIDAD_AT',
+                    titulo: 'INCAPACIDAD ACCIDENTE LABORAL',
+                    diasKey: 'dias_incap_at',
+                    altDiasKey: 'dias_at',
+                    fechasKey: 'fechas_incap_at',
+                    altFechasKey: 'fechas_at',
+                    matchBiometrico: (k) => k === 'INCAPACIDAD AT' || k === 'INCAPACIDAD ACCIDENTE LABORAL' || k.includes('ACCIDENTE LABORAL') || (k.includes('INCAPACIDAD') && k.includes('AT'))
+                },
+                {
+                    id: 'LICENCIA_NO_REMUNERADA',
+                    titulo: 'LICENCIA NO REMUNERADA',
+                    diasKey: 'dias_lic_norem',
+                    altDiasKey: 'dias_lic_no_rem',
+                    fechasKey: 'fechas_lic_norem',
+                    matchBiometrico: (k) => (k === 'LICENCIA NO REMUNERADA' || k.includes('LICENCIA NO REMUNERADA')) && !k.includes('LNR EMPRESA')
+                },
+                {
+                    id: 'LNR_EMPRESA',
+                    titulo: 'LNR EMPRESA',
+                    diasKey: 'dias_lnr_empresa',
+                    fechasKey: 'fechas_lnr_empresa',
+                    matchBiometrico: (k) => (k === 'LNR EMPRESA' || k.includes('LNR EMPRESA')) && !k.includes('LICENCIA NO REMUNERADA')
+                },
+                {
+                    id: 'DEBE',
+                    titulo: 'DEBE',
+                    diasKey: 'dias_debe',
+                    fechasKey: 'fechas_debe',
+                    matchBiometrico: (k) => k === 'DEBE' || k.includes('DEBE')
+                },
+                {
+                    id: 'CALAMIDAD',
+                    titulo: 'CALAMIDAD',
+                    diasKey: 'dias_calamidad',
+                    fechasKey: 'fechas_calamidad',
+                    matchBiometrico: (k) => k === 'CALAMIDAD' || k.includes('CALAMIDAD')
+                },
+                {
+                    id: 'VACACIONES',
+                    titulo: 'VACACIONES',
+                    diasKey: 'dias_vacaciones',
+                    fechasKey: 'fechas_vacaciones',
+                    matchBiometrico: (k) => k === 'VACACIONES' || k.includes('VACACIONES')
+                },
+                {
+                    id: 'LICENCIA_REMUNERADA',
+                    titulo: 'LICENCIA REMUNERADA',
+                    diasKey: 'dias_lic_rem',
+                    fechasKey: 'fechas_lic_rem',
+                    matchBiometrico: (k) => k === 'LICENCIA REMUNERADA' || (k.includes('LICENCIA REMUNERADA') && !k.includes('NO REMUNERADA'))
+                },
+                {
+                    id: 'FESTIVO',
+                    titulo: 'FESTIVO',
+                    diasKey: 'dias_festivo',
+                    fechasKey: 'fechas_festivo',
+                    matchBiometrico: (k) => k === 'FESTIVO' || k.includes('FESTIVO')
+                },
+                {
+                    id: 'TERMINACION_CONTRATO',
+                    titulo: 'TERMINACION DE CONTRATO',
+                    diasKey: 'dias_terminacion',
+                    fechasKey: 'fechas_terminacion',
+                    matchBiometrico: (k) => k.includes('TERMINACION DE CONTRATO') || k.includes('TERMINACIÓN DE CONTRATO') || k.includes('TERMINACION')
+                }
+            ];
+
+            const cards = [];
+            const claimedBiometricKeys = new Set();
+            const resumen = workerData.novedadesResumen || {};
+
+            // 1. Evaluar cada novedad como un TODO unificado
+            NOVEDADES_FUSION_CONFIG.forEach(conf => {
+                // Fechas registradas por el biométrico para esta novedad
+                const biometricFechas = [];
+                Object.entries(resumen).forEach(([estadoKey, fechasArr]) => {
+                    const normEstado = String(estadoKey).toUpperCase().trim();
+                    if (conf.matchBiometrico(normEstado)) {
+                        claimedBiometricKeys.add(estadoKey);
+                        if (Array.isArray(fechasArr)) {
+                            fechasArr.forEach(f => {
+                                if (!biometricFechas.includes(f)) biometricFechas.push(f);
+                            });
                         }
-                        return false;
-                    });
-                    if (existingIdx >= 0) {
-                        cards[existingIdx] = {
-                            id: conf.titulo,
-                            titulo: conf.titulo,
-                            dias: diasNum,
-                            fechas: fechasCortas,
-                            isManual: true
-                        };
-                    } else {
-                        cards.push({
-                            id: conf.titulo,
-                            titulo: conf.titulo,
-                            dias: diasNum,
-                            fechas: fechasCortas,
-                            isManual: true
-                        });
                     }
+                });
+
+                // Overrides manuales de días
+                const overrideDiasVal = overrides[`${cedula}_${conf.diasKey}`] !== undefined && overrides[`${cedula}_${conf.diasKey}`] !== "" && overrides[`${cedula}_${conf.diasKey}`] !== null
+                    ? overrides[`${cedula}_${conf.diasKey}`]
+                    : (conf.altDiasKey && overrides[`${cedula}_${conf.altDiasKey}`] !== undefined && overrides[`${cedula}_${conf.altDiasKey}`] !== "" && overrides[`${cedula}_${conf.altDiasKey}`] !== null
+                        ? overrides[`${cedula}_${conf.altDiasKey}`]
+                        : undefined);
+                const hasDiasOverride = overrideDiasVal !== undefined;
+
+                // Overrides manuales de fechas
+                const rawManualFechas = overrides[`${cedula}_${conf.fechasKey}`] ?? (conf.altFechasKey ? overrides[`${cedula}_${conf.altFechasKey}`] : undefined);
+                const manualFechasList = parseFechas(rawManualFechas);
+                const hasFechasOverride = manualFechasList.length > 0;
+
+                // Badge Manual: SOLO si existe un override activo
+                const isManual = hasDiasOverride || hasFechasOverride;
+
+                // Días: Verdad absoluta de la variable en workerData (integra override o biométrico)
+                const finalDias = Number(
+                    workerData[conf.diasKey] !== undefined && workerData[conf.diasKey] !== null
+                        ? workerData[conf.diasKey]
+                        : (conf.altDiasKey && workerData[conf.altDiasKey] !== undefined ? workerData[conf.altDiasKey] : (hasDiasOverride ? overrideDiasVal : biometricFechas.length))
+                ) || 0;
+
+                // Fechas: Trae las fechas manuales si existen, o las automáticas del biométrico
+                let fechasFinales = [];
+                if (hasFechasOverride) {
+                    fechasFinales = formatFechasCortas(manualFechasList);
+                } else if (biometricFechas.length > 0) {
+                    fechasFinales = biometricFechas;
                 } else {
-                    const existingIdx = cards.findIndex(c => {
-                        const t1 = c.titulo.toUpperCase().trim();
-                        const t2 = conf.titulo.toUpperCase().trim();
-                        if (t1 === t2) return true;
-                        if (conf.diasKey === 'dias_incap_at') {
-                            return t1.includes('ACCIDENTE LABORAL') || t1.includes('INCAPACIDAD AT') || t1 === 'INCAPACIDAD AT';
-                        }
-                        return false;
+                    fechasFinales = ['Sin asignar'];
+                }
+
+                // Renderiza UNA SOLA tarjeta por categoría
+                if (finalDias > 0) {
+                    cards.push({
+                        id: conf.id,
+                        titulo: conf.titulo,
+                        dias: finalDias,
+                        fechas: fechasFinales,
+                        isManual: isManual
                     });
-                    if (existingIdx >= 0) {
-                        cards.splice(existingIdx, 1);
-                    }
                 }
             });
 
-            // 3. Vacaciones manuales (si tiene fechas_vacaciones y dias_vacaciones > 0)
-            const diasVac = Number(overrides[`${cedula}_dias_vacaciones`] ?? workerData.dias_vacaciones ?? 0);
-            const rawFechasVac = overrides[`${cedula}_fechas_vacaciones`];
-            let fechasVacList = [];
-            if (Array.isArray(rawFechasVac)) fechasVacList = rawFechasVac;
-            else if (typeof rawFechasVac === 'string' && rawFechasVac.trim()) {
-                try {
-                    const p = JSON.parse(rawFechasVac);
-                    if (Array.isArray(p)) fechasVacList = p;
-                } catch(e) {}
-            }
-            if (diasVac > 0) {
-                const fechasCortas = fechasVacList.length > 0
-                    ? fechasVacList.map(f => {
-                        const parts = String(f).split('-');
-                        return parts.length >= 3 ? `${parts[1]}-${parts[2]}` : f;
-                    })
-                    : ['Sin asignar'];
-                const existingIdx = cards.findIndex(c => c.titulo.toUpperCase().trim() === 'VACACIONES');
-                if (existingIdx >= 0) {
-                    cards[existingIdx] = {
-                        id: 'VACACIONES',
-                        titulo: 'VACACIONES',
-                        dias: diasVac,
-                        fechas: fechasCortas,
-                        isManual: true
-                    };
-                } else {
-                    cards.push({
-                        id: 'VACACIONES',
-                        titulo: 'VACACIONES',
-                        dias: diasVac,
-                        fechas: fechasCortas,
-                        isManual: true
-                    });
-                }
-            } else {
-                const existingIdx = cards.findIndex(c => c.titulo.toUpperCase().trim() === 'VACACIONES');
-                if (existingIdx >= 0) {
-                    cards.splice(existingIdx, 1);
-                }
-            }
+            // 2. Novedades del Biométrico adicionales no contempladas en el diccionario (ej. FALTA, PERMISO)
+            Object.entries(resumen).forEach(([tipo, fechas]) => {
+                if (claimedBiometricKeys.has(tipo)) return;
+                if (isAdministrativo && tipo.toUpperCase().includes('INCOMPLETO')) return;
+                if (!fechas || fechas.length === 0) return;
+
+                cards.push({
+                    id: tipo,
+                    titulo: tipo,
+                    dias: fechas.length,
+                    fechas: fechas,
+                    isManual: false
+                });
+            });
 
             if (cards.length === 0) return null;
 
