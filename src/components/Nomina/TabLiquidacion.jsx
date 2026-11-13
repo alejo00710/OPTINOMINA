@@ -739,67 +739,15 @@ export default function TabLiquidacion({
                          const vExtFesNoc = getVr('ext_fes_noc', calcValor(totalExtFesNoc, 265), totalExtFesNoc);
                          const vTotalExtras = Number(vNocturnas) + Number(vFesDiu) + Number(vFesNoc) + Number(vExtDiu) + Number(vExtNoc) + Number(vExtFesDiu) + Number(vExtFesNoc);
 
-                         // AUTO-REVISORES: Sumatorias crudas del Registro Diario (Columnas O - V)
-                         const rawO_diurnas = parseFloat(getTotal('diurnas')) || 0;
-                         const rawP_nocturnas = parseFloat(getTotal('nocturnas')) || 0;
-                         const rawQ_fesDiu = parseFloat(getTotal('fes_diu')) || 0;
-                         const rawR_fesNoc = parseFloat(getTotal('fes_noc')) || 0;
-                         const rawS_extDiu = parseFloat(getTotal('ext_diu')) || 0;
-                         const rawT_extNoc = parseFloat(getTotal('ext_noc')) || 0;
-                         const rawU_extFesDiu = parseFloat(getTotal('ext_fes_diu')) || 0;
-                         const rawV_extFesNoc = parseFloat(getTotal('ext_fes_noc')) || 0;
-
-                         // Valores finales a liquidar renderizados en cada fila
-                         const valDiurnas = overrides[`${selectedWorkerData.cedula}_tot_hr_diurnas`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_diurnas`]) : tDiurnas;
-                         const valNocturnas = overrides[`${selectedWorkerData.cedula}_horas_nocturnas`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_horas_nocturnas`]) : tNocturnas;
-                         const valFesDiu = overrides[`${selectedWorkerData.cedula}_tot_hr_fes_diu`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_fes_diu`]) : tFesDiu;
-                         const valFesNoc = overrides[`${selectedWorkerData.cedula}_tot_hr_fes_noc`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_fes_noc`]) : tFesNoc;
-                         const valExtDiu = overrides[`${selectedWorkerData.cedula}_tot_hr_ext_diu`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_ext_diu`]) : extDiuLiquidar;
-                         const valExtNoc = overrides[`${selectedWorkerData.cedula}_tot_hr_ext_noc`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_ext_noc`]) : extNocLiquidar;
-                         const valExtFesDiu = overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`]) : totalExtFesDiu;
-                         const valExtFesNoc = overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`]) : totalExtFesNoc;
-
-                         const renderAutoRevisor = (currentVal, rawVal, overrideKey) => {
-                            const curNum = parseFloat(String(currentVal).replace(",", ".")) || 0;
-                            const rawNum = parseFloat(String(rawVal).replace(",", ".")) || 0;
-                            const isSynced = Math.abs(curNum - rawNum) < 0.05;
-                            if (isSynced) {
-                               return (
-                                  <span 
-                                     className="text-emerald-400 font-bold ml-1.5 cursor-default select-none text-xs" 
-                                     title="Sincronizado con Registro Diario"
-                                  >
-                                     ✓
-                                  </span>
-                               );
-                            }
-                            const isAccepted = overrideKey && acceptedOverrides && acceptedOverrides[overrideKey] === true;
-                            if (isAccepted) {
-                               return (
-                                  <span 
-                                     className="text-emerald-400 font-bold ml-1.5 cursor-default select-none text-xs" 
-                                     title={`Ajuste manual validado: ${curNum.toFixed(1)}h (Biométrico: ${rawNum.toFixed(1)}h)`}
-                                  >
-                                     ✔️
-                                  </span>
-                               );
-                            }
-                            return (
-                               <button 
-                                  type="button"
-                                  onClick={(e) => {
-                                     e.stopPropagation();
-                                     if (overrideKey && typeof handleAcceptOverride === "function") {
-                                        handleAcceptOverride(overrideKey);
-                                     }
-                                  }}
-                                  className="text-amber-400 font-bold ml-1.5 cursor-pointer select-none text-xs hover:scale-125 transition-transform p-0 bg-transparent border-none inline-flex items-center" 
-                                  title={`Aceptar este cambio manual (Registro Diario: ${rawNum.toFixed(1)}h)`}
-                               >
-                                  ⚠️
-                               </button>
-                            );
-                         };
+                          // Valores finales a liquidar renderizados en cada fila
+                          const valDiurnas = overrides[`${selectedWorkerData.cedula}_tot_hr_diurnas`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_diurnas`]) : tDiurnas;
+                          const valNocturnas = overrides[`${selectedWorkerData.cedula}_horas_nocturnas`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_horas_nocturnas`]) : tNocturnas;
+                          const valFesDiu = overrides[`${selectedWorkerData.cedula}_tot_hr_fes_diu`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_fes_diu`]) : tFesDiu;
+                          const valFesNoc = overrides[`${selectedWorkerData.cedula}_tot_hr_fes_noc`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_fes_noc`]) : tFesNoc;
+                          const valExtDiu = overrides[`${selectedWorkerData.cedula}_tot_hr_ext_diu`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_ext_diu`]) : extDiuLiquidar;
+                          const valExtNoc = overrides[`${selectedWorkerData.cedula}_tot_hr_ext_noc`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_ext_noc`]) : extNocLiquidar;
+                          const valExtFesDiu = overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`]) : totalExtFesDiu;
+                          const valExtFesNoc = overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`] !== undefined ? safeHrs(overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`]) : totalExtFesNoc;
 
                           const deudaAnteriorQuincena = selectedWorkerData.deuda_anterior_quincena !== undefined
                              ? Number(selectedWorkerData.deuda_anterior_quincena)
@@ -993,7 +941,6 @@ export default function TabLiquidacion({
                                             <td className="py-2 px-2 text-center text-slate-400">
                                                <div className="flex items-center justify-center">
                                                   <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_diurnas`]} fallback={tDiurnas} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_diurnas`, val)} className="w-16 bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded" />
-                                                  {renderAutoRevisor(valDiurnas, rawO_diurnas, `${selectedWorkerData.cedula}_tot_hr_diurnas`)}
                                                </div>
                                             </td>
                                             <td className="py-3 px-4 text-center"><span className="bg-slate-800 text-slate-400 text-[9px] px-2 py-0.5 rounded-full border border-slate-700 whitespace-nowrap">0%</span></td>
@@ -1009,7 +956,6 @@ export default function TabLiquidacion({
                                             <td className="py-2 px-2 text-center text-indigo-300">
                                                <div className="flex items-center justify-center">
                                                   <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_horas_nocturnas`]} fallback={tNocturnas} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_horas_nocturnas`, val)} className="w-16 bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
-                                                  {renderAutoRevisor(valNocturnas, rawP_nocturnas, `${selectedWorkerData.cedula}_horas_nocturnas`)}
                                                </div>
                                             </td>
                                             <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">35%</span></td>
@@ -1025,7 +971,6 @@ export default function TabLiquidacion({
                                             <td className="py-2 px-2 text-center text-indigo-300">
                                                <div className="flex items-center justify-center">
                                                   <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_fes_diu`]} fallback={tFesDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_fes_diu`, val)} className="w-16 bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
-                                                  {renderAutoRevisor(valFesDiu, rawQ_fesDiu, `${selectedWorkerData.cedula}_tot_hr_fes_diu`)}
                                                </div>
                                             </td>
                                             <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">90%</span></td>
@@ -1041,7 +986,6 @@ export default function TabLiquidacion({
                                             <td className="py-2 px-2 text-center text-indigo-300">
                                                <div className="flex items-center justify-center">
                                                   <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_fes_noc`]} fallback={tFesNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_fes_noc`, val)} className="w-16 bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-indigo-300" />
-                                                  {renderAutoRevisor(valFesNoc, rawR_fesNoc, `${selectedWorkerData.cedula}_tot_hr_fes_noc`)}
                                                </div>
                                             </td>
                                             <td className="py-3 px-4 text-center"><span className="bg-indigo-900/50 text-indigo-400 text-[9px] px-2 py-0.5 rounded-full border border-indigo-800 whitespace-nowrap">125%</span></td>
@@ -1057,7 +1001,6 @@ export default function TabLiquidacion({
                                             <td className="py-2 px-2 text-center text-emerald-300">
                                                <div className="flex items-center justify-center">
                                                   <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_diu`]} fallback={extDiuLiquidar} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_diu`, val)} className="w-16 bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
-                                                  {renderAutoRevisor(valExtDiu, rawS_extDiu, `${selectedWorkerData.cedula}_tot_hr_ext_diu`)}
                                                </div>
                                             </td>
                                             <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">125%</span></td>
@@ -1073,7 +1016,6 @@ export default function TabLiquidacion({
                                             <td className="py-2 px-2 text-center text-emerald-300">
                                                <div className="flex items-center justify-center">
                                                   <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_noc`]} fallback={extNocLiquidar} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_noc`, val)} className="w-16 bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
-                                                  {renderAutoRevisor(valExtNoc, rawT_extNoc, `${selectedWorkerData.cedula}_tot_hr_ext_noc`)}
                                                </div>
                                             </td>
                                             <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">175%</span></td>
@@ -1089,7 +1031,6 @@ export default function TabLiquidacion({
                                             <td className="py-2 px-2 text-center text-emerald-300">
                                                <div className="flex items-center justify-center">
                                                   <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`]} fallback={totalExtFesDiu} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`, val)} className="w-16 bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
-                                                  {renderAutoRevisor(valExtFesDiu, rawU_extFesDiu, `${selectedWorkerData.cedula}_tot_hr_ext_fes_diu`)}
                                                </div>
                                             </td>
                                             <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">215%</span></td>
@@ -1105,7 +1046,6 @@ export default function TabLiquidacion({
                                             <td className="py-2 px-2 text-center text-emerald-300">
                                                <div className="flex items-center justify-center">
                                                   <GridInput globalValue={overrides[`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`]} fallback={totalExtFesNoc} onSave={(val) => handleCellEdit(`${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`, val)} className="w-16 bg-transparent text-center outline-none focus:ring-1 focus:bg-slate-800 rounded text-emerald-300" />
-                                                  {renderAutoRevisor(valExtFesNoc, rawV_extFesNoc, `${selectedWorkerData.cedula}_tot_hr_ext_fes_noc`)}
                                                </div>
                                             </td>
                                             <td className="py-3 px-4 text-center"><span className="bg-emerald-900/50 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-800 whitespace-nowrap">265%</span></td>

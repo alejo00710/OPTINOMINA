@@ -1405,8 +1405,10 @@ processedLogs.forEach(day => {
       };
 
       // Paso A (Lectura Reactiva): Lee los días de ausencias obligando al sistema a mirar primero el override manual
-      const getAbsenceDays = (fieldKey, noveltyCondition, directCount = 0) => {
-          const overrideVal = overrides[`${cedula}_${fieldKey}`];
+      const getAbsenceDays = (fieldKey, noveltyCondition, directCount = 0, altFieldKey = null) => {
+          const overrideVal = overrides[`${cedula}_${fieldKey}`] !== undefined 
+              ? overrides[`${cedula}_${fieldKey}`] 
+              : (altFieldKey && overrides[`${cedula}_${altFieldKey}`] !== undefined ? overrides[`${cedula}_${altFieldKey}`] : undefined);
           if (overrideVal !== undefined && overrideVal !== '' && overrideVal !== null) {
               const num = Number(overrideVal);
               return isNaN(num) ? 0 : num;
@@ -1418,10 +1420,10 @@ processedLogs.forEach(day => {
       };
 
       const dias_vacaciones = getAbsenceDays('dias_vacaciones', k => k === 'VACACIONES', autoDiasVacaciones);
-      const diasIncapacidad = getAbsenceDays('dias_incapacidad', k => k === 'INCAPACIDAD GENERAL' || k === 'INCAPACIDAD EG' || (k.includes('INCAPACIDAD') && !k.includes('ACCIDENTE') && !k.includes('LABORAL') && !k.includes('AT')), autoDiasIncap);
+      const diasIncapacidad = getAbsenceDays('dias_incapacidad', k => k === 'INCAPACIDAD GENERAL' || k === 'INCAPACIDAD EG' || (k.includes('INCAPACIDAD') && !k.includes('ACCIDENTE') && !k.includes('LABORAL') && !k.includes('AT')), autoDiasIncap, 'dias_incap');
       const dias_lic_rem = getAbsenceDays('dias_lic_rem', k => k === 'LICENCIA REMUNERADA' || (k.includes('LICENCIA REMUNERADA') && !k.includes('NO REMUNERADA')), autoDiasLicRem);
       const dias_lic_norem = getAbsenceDays('dias_lic_norem', k => (k === 'LICENCIA NO REMUNERADA' || k.includes('LICENCIA NO REMUNERADA')) && !k.includes('LNR EMPRESA'), autoDiasLicNoRem);
-      const dias_incap_at = getAbsenceDays('dias_incap_at', k => k === 'INCAPACIDAD AT' || k === 'INCAPACIDAD ACCIDENTE LABORAL' || k.includes('ACCIDENTE LABORAL') || (k.includes('INCAPACIDAD') && k.includes('AT')), autoDiasIncapAt);
+      const dias_incap_at = getAbsenceDays('dias_incap_at', k => k === 'INCAPACIDAD AT' || k === 'INCAPACIDAD ACCIDENTE LABORAL' || k.includes('ACCIDENTE LABORAL') || (k.includes('INCAPACIDAD') && k.includes('AT')), autoDiasIncapAt, 'dias_at');
       const dias_calamidad = getAbsenceDays('dias_calamidad', k => k === 'CALAMIDAD' || k.includes('CALAMIDAD'), autoDiasCalamidad);
       const dias_sancion = getAbsenceDays('dias_sancion', k => k === 'SANCION' || k === 'SANCIONADO' || k.includes('SANCION'), autoDiasSancion);
       const dias_festivo = getAbsenceDays('dias_festivo', k => k.includes('FESTIVO'), autoDiasFestivo);
@@ -2237,18 +2239,93 @@ processedLogs.forEach(day => {
     setOverrides(prev => {
       const newOverrides = { ...prev };
 
-      // Si el usuario borró el contenido del input ('', null o undefined), ELIMINA el override
-      const isCleared = val === '' || val === null || val === undefined;
-      if (isCleared) {
-        delete newOverrides[cellKey];
-      } else {
-        newOverrides[cellKey] = val;
-      }
-      
       // Limpieza de Overrides en Cascada (Cache Invalidation)
       const parts = cellKey.split('_');
       const cedula = parts[0];
       const campoEditado = parts.slice(1).join('_');
+
+      // Si el usuario borró el contenido del input ('', null o undefined), o escribió 0 / '0'
+      const isCleared = val === '' || val === null || val === undefined;
+      const isZero = val === 0 || val === '0' || Number(val) === 0;
+
+      const isNoveltyField = campoEditado.startsWith('dias_') || 
+                             campoEditado === 'incapacidad' || 
+                             campoEditado === 'val_incapacidad' ||
+                             Object.keys(NOVEDADES_MANUALES_MAP).includes(campoEditado);
+
+      if (isNoveltyField && (isCleared || isZero)) {
+        // En novedades, si el usuario pone 0 o borra, fijar explícitamente a 0 para que no reviva por fallback
+        newOverrides[cellKey] = 0;
+
+        if (campoEditado === 'dias_incapacidad' || campoEditado === 'dias_incap') {
+          newOverrides[`${cedula}_dias_incapacidad`] = 0;
+          newOverrides[`${cedula}_dias_incap`] = 0;
+          delete newOverrides[`${cedula}_fechas_incap`];
+          delete newOverrides[`${cedula}_fechas_incapacidad`];
+          newOverrides[`${cedula}_incapacidad`] = 0;
+          newOverrides[`${cedula}_val_incapacidad`] = 0;
+          newOverrides[`${cedula}_valor_incapacidad`] = 0;
+          newOverrides[`${cedula}_valor_incap`] = 0;
+        } else if (campoEditado === 'incapacidad' || campoEditado === 'val_incapacidad') {
+          newOverrides[`${cedula}_incapacidad`] = 0;
+          newOverrides[`${cedula}_val_incapacidad`] = 0;
+          newOverrides[`${cedula}_valor_incapacidad`] = 0;
+          newOverrides[`${cedula}_valor_incap`] = 0;
+        } else if (campoEditado === 'dias_debe') {
+          newOverrides[`${cedula}_dias_debe`] = 0;
+          delete newOverrides[`${cedula}_fechas_debe`];
+          newOverrides[`${cedula}_val_debe`] = 0;
+          newOverrides[`${cedula}_valor_debe`] = 0;
+        } else if (campoEditado === 'dias_sancion') {
+          newOverrides[`${cedula}_dias_sancion`] = 0;
+          delete newOverrides[`${cedula}_fechas_sancion`];
+          newOverrides[`${cedula}_val_sancion`] = 0;
+          newOverrides[`${cedula}_valor_sancion`] = 0;
+        } else if (campoEditado === 'dias_calamidad') {
+          newOverrides[`${cedula}_dias_calamidad`] = 0;
+          delete newOverrides[`${cedula}_fechas_calamidad`];
+          newOverrides[`${cedula}_val_calamidad`] = 0;
+          newOverrides[`${cedula}_valor_calamidad`] = 0;
+        } else if (campoEditado === 'dias_lic_rem') {
+          newOverrides[`${cedula}_dias_lic_rem`] = 0;
+          delete newOverrides[`${cedula}_fechas_lic_rem`];
+          newOverrides[`${cedula}_val_lic_rem`] = 0;
+          newOverrides[`${cedula}_valor_lic_rem`] = 0;
+        } else if (campoEditado === 'dias_lic_norem') {
+          newOverrides[`${cedula}_dias_lic_norem`] = 0;
+          delete newOverrides[`${cedula}_fechas_lic_norem`];
+          newOverrides[`${cedula}_val_lic_norem`] = 0;
+          newOverrides[`${cedula}_valor_lic_norem`] = 0;
+          newOverrides[`${cedula}_val_lic_no_rem`] = 0;
+          newOverrides[`${cedula}_valor_lic_no_rem`] = 0;
+        } else if (campoEditado === 'dias_lnr_empresa') {
+          newOverrides[`${cedula}_dias_lnr_empresa`] = 0;
+          delete newOverrides[`${cedula}_fechas_lnr_empresa`];
+          newOverrides[`${cedula}_val_lnr_empresa`] = 0;
+          newOverrides[`${cedula}_valor_lnr_empresa`] = 0;
+        } else if (campoEditado === 'dias_incap_at' || campoEditado === 'dias_at') {
+          newOverrides[`${cedula}_dias_incap_at`] = 0;
+          newOverrides[`${cedula}_dias_at`] = 0;
+          delete newOverrides[`${cedula}_fechas_incap_at`];
+          newOverrides[`${cedula}_val_incap_at`] = 0;
+          newOverrides[`${cedula}_valor_incap_at`] = 0;
+        } else if (campoEditado === 'dias_vacaciones') {
+          newOverrides[`${cedula}_dias_vacaciones`] = 0;
+          delete newOverrides[`${cedula}_fechas_vacaciones`];
+          newOverrides[`${cedula}_val_vacaciones`] = 0;
+          newOverrides[`${cedula}_valor_vacaciones`] = 0;
+        } else if (campoEditado === 'dias_festivo') {
+          newOverrides[`${cedula}_dias_festivo`] = 0;
+          delete newOverrides[`${cedula}_fechas_festivo`];
+        } else if (campoEditado === 'dias_terminacion') {
+          newOverrides[`${cedula}_dias_terminacion`] = 0;
+          delete newOverrides[`${cedula}_fechas_terminacion`];
+        }
+      } else if (isCleared) {
+        delete newOverrides[cellKey];
+      } else {
+        newOverrides[cellKey] = val;
+      }
 
       const devengadosBase = [
         'sueldo', 'recargo_nocturno', 'val_extras_diurnas', 'val_extras_nocturnas', 'val_extras_festivas', 
@@ -2277,36 +2354,38 @@ processedLogs.forEach(day => {
           delete newOverrides[`${cedula}_sueldo`];
           delete newOverrides[`${cedula}_sueldo_calculado`];
           delete newOverrides[`${cedula}_transporte`];
-          if (campoEditado === 'dias_vacaciones') {
-              delete newOverrides[`${cedula}_val_vacaciones`];
-              delete newOverrides[`${cedula}_valor_vacaciones`];
-          }
-          if (campoEditado === 'dias_debe') {
-              delete newOverrides[`${cedula}_val_debe`];
-              delete newOverrides[`${cedula}_valor_debe`];
-          }
-          if (campoEditado === 'dias_lic_norem') {
-              delete newOverrides[`${cedula}_val_lic_norem`];
-              delete newOverrides[`${cedula}_valor_lic_norem`];
-              delete newOverrides[`${cedula}_val_lic_no_rem`];
-              delete newOverrides[`${cedula}_valor_lic_no_rem`];
-          }
-          if (campoEditado === 'dias_lnr_empresa') {
-              delete newOverrides[`${cedula}_val_lnr_empresa`];
-              delete newOverrides[`${cedula}_valor_lnr_empresa`];
-          }
-          if (campoEditado === 'dias_incapacidad') {
-              delete newOverrides[`${cedula}_incapacidad`];
-              delete newOverrides[`${cedula}_val_incapacidad`];
-          }
-          if (campoEditado === 'dias_lic_rem') {
-              delete newOverrides[`${cedula}_val_lic_rem`];
-          }
-          if (campoEditado === 'dias_incap_at') {
-              delete newOverrides[`${cedula}_val_incap_at`];
-          }
-          if (campoEditado === 'dias_calamidad') {
-              delete newOverrides[`${cedula}_val_calamidad`];
+          if (!isCleared && !isZero) {
+              if (campoEditado === 'dias_vacaciones') {
+                  delete newOverrides[`${cedula}_val_vacaciones`];
+                  delete newOverrides[`${cedula}_valor_vacaciones`];
+              }
+              if (campoEditado === 'dias_debe') {
+                  delete newOverrides[`${cedula}_val_debe`];
+                  delete newOverrides[`${cedula}_valor_debe`];
+              }
+              if (campoEditado === 'dias_lic_norem') {
+                  delete newOverrides[`${cedula}_val_lic_norem`];
+                  delete newOverrides[`${cedula}_valor_lic_norem`];
+                  delete newOverrides[`${cedula}_val_lic_no_rem`];
+                  delete newOverrides[`${cedula}_valor_lic_no_rem`];
+              }
+              if (campoEditado === 'dias_lnr_empresa') {
+                  delete newOverrides[`${cedula}_val_lnr_empresa`];
+                  delete newOverrides[`${cedula}_valor_lnr_empresa`];
+              }
+              if (campoEditado === 'dias_incapacidad') {
+                  delete newOverrides[`${cedula}_incapacidad`];
+                  delete newOverrides[`${cedula}_val_incapacidad`];
+              }
+              if (campoEditado === 'dias_lic_rem') {
+                  delete newOverrides[`${cedula}_val_lic_rem`];
+              }
+              if (campoEditado === 'dias_incap_at') {
+                  delete newOverrides[`${cedula}_val_incap_at`];
+              }
+              if (campoEditado === 'dias_calamidad') {
+                  delete newOverrides[`${cedula}_val_calamidad`];
+              }
           }
       }
 
@@ -3183,6 +3262,19 @@ const handleSaveToCloud = async () => {
                             isManual: true
                         });
                     }
+                } else {
+                    const existingIdx = cards.findIndex(c => {
+                        const t1 = c.titulo.toUpperCase().trim();
+                        const t2 = conf.titulo.toUpperCase().trim();
+                        if (t1 === t2) return true;
+                        if (conf.diasKey === 'dias_incap_at') {
+                            return t1.includes('ACCIDENTE LABORAL') || t1.includes('INCAPACIDAD AT') || t1 === 'INCAPACIDAD AT';
+                        }
+                        return false;
+                    });
+                    if (existingIdx >= 0) {
+                        cards.splice(existingIdx, 1);
+                    }
                 }
             });
 
@@ -3221,6 +3313,11 @@ const handleSaveToCloud = async () => {
                         fechas: fechasCortas,
                         isManual: true
                     });
+                }
+            } else {
+                const existingIdx = cards.findIndex(c => c.titulo.toUpperCase().trim() === 'VACACIONES');
+                if (existingIdx >= 0) {
+                    cards.splice(existingIdx, 1);
                 }
             }
 
@@ -3284,131 +3381,42 @@ const handleSaveToCloud = async () => {
                  'val_vacaciones', 'val_lic_rem', 'val_lic_norem', 'val_incap_at', 'val_calamidad', 'val_sancion', 'val_debe', 'val_lnr_empresa'
              ];
 
-             // COMPENSACIÓN CRUZADA:
-             const cKeyExtDiu = `${workerData.masterRow.cedula}_extras_diurnas`;
-             const cKeyExtNoc = `${workerData.masterRow.cedula}_extras_nocturnas`;
-             
-             let extraDiurnaOriginal = Number(overrides[cKeyExtDiu] !== undefined ? overrides[cKeyExtDiu] : (workerData['extras_diurnas'] || 0));
-             let extraNocturnaOriginal = Number(overrides[cKeyExtNoc] !== undefined ? overrides[cKeyExtNoc] : (workerData['extras_nocturnas'] || 0));
-             
-             let finalExtraDiurna = extraDiurnaOriginal;
-             let finalExtraNocturna = extraNocturnaOriginal;
-             let requiresWarning = false;
+              const renderCard = (col) => {
+                 const cKey = `${workerData.masterRow.cedula}_${col.key}`;
+                 let val = workerData[col.key] !== undefined ? workerData[col.key] : (overrides[cKey] !== undefined ? overrides[cKey] : "");
 
-             if (extraDiurnaOriginal < 0 && extraNocturnaOriginal > 0) {
-                 const balance = extraDiurnaOriginal + extraNocturnaOriginal;
+                 if (col.isCurrency && val !== "") val = Math.round(Number(val));
                  
-                 if (balance > 0) {
-                     finalExtraNocturna = parseFloat(balance.toFixed(2));
-                     finalExtraDiurna = 0;
-                 } else {
-                     finalExtraNocturna = 0;
-                     finalExtraDiurna = 0;
-                     requiresWarning = true; // Activa la alerta visual
-                 }
-             }
+                 const isLiquidacion = camposLiquidacion.includes(col.key);
+                 const isFormulated = camposFormulados.includes(col.key);
+                 const hasBadge = isLiquidacion || isFormulated;
 
-             const getRawMotorSum = (colKey) => {
-                if (colKey === 'horas_diurnas') {
-                   if (workerData.raw_sum_diurnas !== undefined) return Number(workerData.raw_sum_diurnas) || 0;
-                   return (workerData.workerDays || []).reduce((acc, d) => acc + (Number(d.diurnas) || 0), 0);
-                }
-                if (colKey === 'horas_nocturnas') {
-                   if (workerData.raw_sum_nocturnas !== undefined) return Number(workerData.raw_sum_nocturnas) || 0;
-                   return (workerData.workerDays || []).reduce((acc, d) => acc + (Number(d.nocturnas) || 0), 0);
-                }
-                if (colKey === 'extras_diurnas') {
-                   if (workerData.raw_sum_ext_diu !== undefined) return Number(workerData.raw_sum_ext_diu) || 0;
-                   return (workerData.workerDays || []).reduce((acc, d) => acc + (Number(d.ext_diu) || 0), 0);
-                }
-                if (colKey === 'extras_nocturnas') {
-                   if (workerData.raw_sum_ext_noc !== undefined) return Number(workerData.raw_sum_ext_noc) || 0;
-                   return (workerData.workerDays || []).reduce((acc, d) => acc + (Number(d.ext_noc) || 0), 0);
-                }
-                if (colKey === 'extras_festivas') {
-                   if (workerData.raw_sum_ext_fes !== undefined) return Number(workerData.raw_sum_ext_fes) || 0;
-                   return (workerData.workerDays || []).reduce((acc, d) => acc + (Number(d.ext_fes_diu) || 0), 0);
-                }
-                return null;
-             };
-
-             const renderCardRevisor = (colKey, currentVal) => {
-                const rawVal = getRawMotorSum(colKey);
-                if (rawVal === null) return null;
-
-                const numCurrent = parseFloat(currentVal) || 0;
-                const isSynced = Math.abs(numCurrent - rawVal) < 0.05;
-
-                if (isSynced) {
-                   return (
-                      <span 
-                         className="text-emerald-500 font-bold ml-2 shrink-0 cursor-default select-none text-xs" 
-                         title="Sincronizado con el reloj"
-                      >
-                         ✓
+                 return (
+                   <div key={col.key} className="relative bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
+                      {isLiquidacion && (
+                        <div className="absolute top-2 right-2 text-[10px] text-amber-600 flex items-center gap-1 mb-1 justify-end font-semibold" title="Viene de Liquidación">
+                          <span>⏱️ Liquidación</span>
+                        </div>
+                      )}
+                      {isFormulated && (
+                        <div className="absolute top-2 right-2 text-[10px] text-indigo-500 flex items-center gap-1 mb-1 justify-end font-semibold">
+                           <span>✨ Formulado</span>
+                           <button onClick={() => handleOpenFormulaEditor(col.key)} className="hover:text-indigo-700 transition-colors p-1 rounded hover:bg-indigo-50" title="Editar Fórmula">⚙️</button>
+                         </div>
+                      )}
+                      <span className={`text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-emerald-600 transition-colors flex items-center ${hasBadge ? 'pr-24' : ''}`} title={col.label}>
+                        <span className="truncate">{col.label}</span>
                       </span>
-                   );
-                }
-                return (
-                   <span 
-                      className="text-red-500 font-bold ml-2 shrink-0 cursor-default select-none text-xs" 
-                      title={`Valor editado manualmente (Difiere del reloj: ${rawVal.toFixed(1)}h)`}
-                   >
-                      ❌
-                   </span>
-                );
-             };
-
-             const renderCard = (col) => {
-                const cKey = `${workerData.masterRow.cedula}_${col.key}`;
-                let val = overrides[cKey] !== undefined ? overrides[cKey] : (workerData[col.key] !== undefined ? workerData[col.key] : "");
-                
-                if (col.key === 'extras_diurnas') val = finalExtraDiurna;
-                if (col.key === 'extras_nocturnas') val = finalExtraNocturna;
-
-                // Cruce automático deshabilitado: Las tarjetas de VR. PAGAR de extras reflejan su valor calculado directamente
-
-                if (col.isCurrency && val !== "") val = Math.round(Number(val));
-                
-                const isLiquidacion = camposLiquidacion.includes(col.key);
-                const isFormulated = camposFormulados.includes(col.key);
-                const hasBadge = isLiquidacion || isFormulated;
-                
-                const isWarningField = requiresWarning && (col.key === 'extras_diurnas' || col.key === 'extras_nocturnas');
-                const cellWarningClass = isWarningField ? "text-red-600 font-bold bg-red-50 !text-red-600 rounded" : "";
-                const containerWarningClass = isWarningField ? "border-red-300 bg-red-50/20" : "";
-
-                return (
-                  <div key={col.key} className={`relative bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group ${containerWarningClass}`}>
-                     {isWarningField && (
-                        <div className="absolute top-2 left-2 text-[10px] text-red-600 flex items-center gap-1 mb-1 font-bold">
-                          <span>⚠️ Alerta</span>
-                        </div>
-                     )}
-                     {isLiquidacion && (
-                       <div className="absolute top-2 right-2 text-[10px] text-amber-600 flex items-center gap-1 mb-1 justify-end font-semibold" title="Viene de Liquidación">
-                         <span>⏱️ Liquidación</span>
-                       </div>
-                     )}
-                     {isFormulated && (
-                       <div className="absolute top-2 right-2 text-[10px] text-indigo-500 flex items-center gap-1 mb-1 justify-end font-semibold">
-                          <span>✨ Formulado</span>
-                          <button onClick={() => handleOpenFormulaEditor(col.key)} className="hover:text-indigo-700 transition-colors p-1 rounded hover:bg-indigo-50" title="Editar Fórmula">⚙️</button>
-                        </div>
-                     )}
-                     <span className={`text-[9px] font-black text-slate-400 uppercase tracking-widest truncate mb-2 group-hover:text-emerald-600 transition-colors flex items-center ${hasBadge ? 'pr-24' : ''} ${isWarningField ? 'text-red-500' : ''}`} title={col.label}>
-                       <span className="truncate">{col.label}</span>
-                       {renderCardRevisor(col.key, val)}
-                     </span>
-                     <EditableCell
-                        value={val}
-                        onChange={(newVal) => handleCellEdit(cKey, newVal)}
-                        isOverridden={overrides[cKey] !== undefined}
-                        isCalculated={col.isCalculated}
-                        isCurrency={col.isCurrency}
-                        isDecimal={col.isDecimal}
-                        extraClasses={cellWarningClass}
-                     />
+                      <EditableCell
+                         value={val}
+                         onChange={(newVal) => handleCellEdit(cKey, newVal)}
+                         isOverridden={overrides[cKey] !== undefined}
+                         isCalculated={col.isCalculated}
+                         isCurrency={col.isCurrency}
+                         isDecimal={col.isDecimal}
+                         extraClasses=""
+                      />
+                     
                      {(() => {
                        const noveltyConfig = NOVEDADES_MANUALES_MAP[col.key];
                        if (!noveltyConfig || Number(val) <= 0) return null;
