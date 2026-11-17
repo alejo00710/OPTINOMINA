@@ -319,7 +319,7 @@ export default function TabLiquidacion({
              </div>
                  {deudaAnterior < 0 && (
                     <div className="mt-2.5 px-3.5 py-1.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-black w-fit flex items-center gap-1.5 shadow-sm">
-                       <span>⚠️ ADVERTENCIA: EL EMPLEADO DEBE {Math.abs(deudaAnterior).toFixed(1)} HORAS DE LA QUINCENA ANTERIOR</span>
+                       <span>⚠️ Tienes {Math.abs(deudaAnterior).toFixed(1)} hrs pendientes</span>
                     </div>
                  )}
           </div>
@@ -793,7 +793,7 @@ export default function TabLiquidacion({
                               <>
                                  {deudaAnteriorQuincena < 0 && (
                                     <div className="p-3 bg-rose-950/40 border border-rose-800/60 rounded-xl text-rose-300 text-xs font-black flex items-center gap-2 shadow-inner">
-                                       <span>⚠️ ADVERTENCIA: EL EMPLEADO DEBE {Math.abs(deudaAnteriorQuincena).toFixed(1)} HORAS DE LA QUINCENA ANTERIOR</span>
+                                       <span>⚠️ Tienes {Math.abs(deudaAnteriorQuincena).toFixed(1)} hrs pendientes</span>
                                     </div>
                                  )}
 

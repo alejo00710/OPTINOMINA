@@ -1358,7 +1358,7 @@ processedLogs.forEach(day => {
           }
           
           deudaRestanteTrasCobro = Math.min(0, parseFloat((deudaPreviaNeg + horasDescontadasDeuda).toFixed(2)));
-          mensajeCobroDeuda = `Amortización Banco Horas: Se descontaron ${horasDescontadasDeuda.toFixed(1)} hrs de su saldo pendiente en Ordinarias ${tipoCobroDeuda === 'diurnas' ? 'Diurnas' : 'Nocturnas'}.`;
+          mensajeCobroDeuda = `Se descontaron ${horasDescontadasDeuda.toFixed(1)} hrs que tenías pendientes en esta quincena`;
       }
       const cobrarDeuda = horasDescontadasDeuda > 0;
 
@@ -1371,7 +1371,7 @@ processedLogs.forEach(day => {
       let mensajeDescuentoActual = null;
 
       if (descuentoActualHoras > 0) {
-          mensajeDescuentoActual = `Descuento Quincena Actual: Se descontaron ${descuentoActualHoras} hrs por novedades.`;
+          mensajeDescuentoActual = `Se descontaron ${Number(descuentoActualHoras).toFixed(1)} hrs de un día que quedaste debiendo`;
       }
 
       // CRUCE AUTOMÁTICO DESHABILITADO:
@@ -3232,7 +3232,7 @@ const handleSaveToCloud = async () => {
         
         {deudaAnteriorModal < 0 && (
           <div className="bg-rose-100 text-rose-800 p-3 rounded-xl mb-6 font-bold border border-rose-300 flex items-center gap-2 shadow-sm">
-             <span className="text-xl">⚠️</span> ATENCIÓN: Este trabajador arrastra {Math.abs(deudaAnteriorModal)}h pendientes de la quincena pasada.
+             <span className="text-xl">⚠️</span> Tienes {Math.abs(deudaAnteriorModal).toFixed(1)} hrs pendientes
           </div>
         )}
         

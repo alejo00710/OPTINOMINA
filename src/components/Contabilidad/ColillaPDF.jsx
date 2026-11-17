@@ -298,7 +298,7 @@ export default function ColillaPDF({ empleados = [], tituloReporte = "SÁBANA CO
                 {emp.mensaje_cobro_deuda && (
                   <View style={[styles.detailRow, { backgroundColor: '#fef3c7' }]}>
                     <Text style={[styles.detailConcept, { color: '#92400e', fontWeight: 'bold' }]}>
-                      {`ℹ️ Amortización Banco Horas (${emp.mensaje_cobro_deuda})`}
+                      {`ℹ️ ${emp.mensaje_cobro_deuda}`}
                     </Text>
                     <Text style={[styles.detailValue, { color: '#92400e', fontWeight: 'bold' }]}>
                       {`-${Number(emp.horas_descontadas_deuda || 0).toFixed(1)} hrs`}
@@ -308,7 +308,7 @@ export default function ColillaPDF({ empleados = [], tituloReporte = "SÁBANA CO
                 {emp.mensaje_descuento_actual && (
                   <View style={[styles.detailRow, { backgroundColor: '#e0f2fe' }]}>
                     <Text style={[styles.detailConcept, { color: '#0369a1', fontWeight: 'bold' }]}>
-                      {`✂️ Descuento Quincena Actual (${emp.mensaje_descuento_actual})`}
+                      {`✂️ ${emp.mensaje_descuento_actual}`}
                     </Text>
                     <Text style={[styles.detailValue, { color: '#0369a1', fontWeight: 'bold' }]}>
                       {`-${Number(emp.descuento_actual_horas || 0).toFixed(1)} hrs`}
@@ -325,7 +325,7 @@ export default function ColillaPDF({ empleados = [], tituloReporte = "SÁBANA CO
                   return (
                     <View style={[styles.detailRow, { backgroundColor: '#fff1f2' }]}>
                       <Text style={[styles.detailConcept, { color: '#be123c', fontWeight: 'bold' }]}>
-                        ⚠️ Horas que Debe (Banco de Horas)
+                        {`⚠️ Tienes ${Math.abs(horasDebeBanco).toFixed(1)} hrs pendientes`}
                       </Text>
                       <Text style={[styles.detailValue, { color: '#be123c', fontWeight: 'bold' }]}>
                         {`-${Math.abs(horasDebeBanco).toFixed(1)} hrs`}

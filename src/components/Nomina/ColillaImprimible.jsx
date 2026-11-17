@@ -115,17 +115,17 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
         </div>
         {tieneDeudaBanco && (
           <div className="mb-2 p-1.5 bg-rose-50 border border-rose-200 rounded text-rose-800 text-[10px] font-black flex items-center gap-1.5">
-            <span>⚠️ AVISO: El trabajador arrastra una deuda de {cantDeudaHoras} horas pendientes en el Banco de Horas.</span>
+            <span>⚠️ Tienes {cantDeudaHoras} hrs pendientes</span>
           </div>
         )}
         {empleado.mensaje_cobro_deuda && (
           <div className="mb-2 p-1.5 bg-amber-50 border border-amber-300 rounded text-amber-900 text-[10px] font-bold flex items-center gap-1.5">
-            <span>ℹ️ AMORTIZACIÓN BANCO DE HORAS: {empleado.mensaje_cobro_deuda}</span>
+            <span>ℹ️ {empleado.mensaje_cobro_deuda}</span>
           </div>
         )}
         {empleado.mensaje_descuento_actual && (
           <div className="mb-2 p-1.5 bg-sky-50 border border-sky-300 rounded text-sky-900 text-[10px] font-bold flex items-center gap-1.5">
-            <span>✂️ DESCUENTO QUINCENA ACTUAL: {empleado.mensaje_descuento_actual}</span>
+            <span>✂️ {empleado.mensaje_descuento_actual}</span>
           </div>
         )}
 
@@ -250,7 +250,7 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
             {tieneDeudaBanco && (
               <tr className="bg-rose-50/60 font-bold">
                 <td className="border-r border-[#9ca3af] px-2 text-left text-rose-800">
-                  ⚠️ HORAS QUE DEBE (BANCO DE HORAS): {cantDeudaHoras} HRS PENDIENTES
+                  ⚠️ TIENES {cantDeudaHoras} HRS PENDIENTES
                 </td>
                 <td className="border-r border-[#9ca3af] px-2 text-right"></td>
                 <td className="px-2 text-right text-rose-700 font-black">
@@ -261,7 +261,7 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
             {empleado.mensaje_cobro_deuda && (
               <tr className="bg-amber-50/60 font-bold border-b border-[#9ca3af]">
                 <td className="border-r border-[#9ca3af] px-2 text-left text-amber-900">
-                  ℹ️ AMORTIZACIÓN BANCO DE HORAS ({empleado.mensaje_cobro_deuda})
+                  ℹ️ {empleado.mensaje_cobro_deuda.toUpperCase()}
                 </td>
                 <td className="border-r border-[#9ca3af] px-2 text-right"></td>
                 <td className="px-2 text-right text-amber-800 font-black">
@@ -272,7 +272,7 @@ export default function ColillaImprimible({ empleado, periodo, fechaCorte }) {
             {empleado.mensaje_descuento_actual && (
               <tr className="bg-sky-50/60 font-bold border-b border-[#9ca3af]">
                 <td className="border-r border-[#9ca3af] px-2 text-left text-sky-900">
-                  ✂️ DESCUENTO QUINCENA ACTUAL ({empleado.mensaje_descuento_actual})
+                  ✂️ {empleado.mensaje_descuento_actual.toUpperCase()}
                 </td>
                 <td className="border-r border-[#9ca3af] px-2 text-right"></td>
                 <td className="px-2 text-right text-sky-800 font-black">
