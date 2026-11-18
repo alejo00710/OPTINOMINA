@@ -665,30 +665,31 @@ export const calculateDailyRecord = (day, overrides, prefix, horaInicioDiurna, h
       }
   }
 
-  // Interceptor Novedad DEBE: Inyectar horas ordinarias negativas basadas en el turno programado
+  // Interceptor Novedad DEBE: Inyectar horas extras negativas basadas en el turno o tipo seleccionado
   if (estadoDia === "DEBE") {
       day.estado = "DEBE";
       day.novedad = "DEBE";
       hrPag = 0;
-      ext_diurna = 0;
-      ext_nocturna = 0;
-      finalExtDiu = 0;
-      finalExtNoc = 0;
+      ord_diurna = 0;
+      ord_nocturna = 0;
+      finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : 0;
+      finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : 0;
       fesDiu = 0;
       fesNoc = 0;
       extFesDiu = 0;
       extFesNoc = 0;
       netDiu = 0;
       netNoc = 0;
-      if (uShift.includes("10PM") && uShift.includes("6AM")) {
-          ord_diurna = 0;
-          ord_nocturna = -targetOrd;
+      const debeTipo = overrides[`${prefix}_debe_tipo`] || ((uShift.includes("10PM") && uShift.includes("6AM")) ? "ext_noc" : "ext_diu");
+      if (debeTipo === "ext_noc") {
+          finalExtNoc = overrides[`${prefix}_ext_noc`] !== undefined ? Number(overrides[`${prefix}_ext_noc`]) : -targetOrd;
+          finalExtDiu = overrides[`${prefix}_ext_diu`] !== undefined ? Number(overrides[`${prefix}_ext_diu`]) : 0;
       } else {
-          ord_diurna = -targetOrd;
-          ord_nocturna = 0;
+          finalExtDiu = overrides[`${prefix}_ext_diu`] !== undefined ? Number(overrides[`${prefix}_ext_diu`]) : -targetOrd;
+          finalExtNoc = overrides[`${prefix}_ext_noc`] !== undefined ? Number(overrides[`${prefix}_ext_noc`]) : 0;
       }
-      finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : ord_diurna;
-      finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : ord_nocturna;
+      ext_diurna = finalExtDiu;
+      ext_nocturna = finalExtNoc;
   }
 
   const calcLlegadaTardeMin = smartShift.lateMinutes || 0;
@@ -753,20 +754,21 @@ console.log(`🔎 EMPLEADO: ${idEmpleado} | FECHA: ${fechaDia} | TURNO BRUTO:`, 
 
   if (estadoDia === "DEBE") {
       hrPag = 0;
-      finalExtDiu = 0;
-      finalExtNoc = 0;
       fesDiu = 0;
       fesNoc = 0;
       extFesDiu = 0;
       extFesNoc = 0;
       llegadaTarde = 0;
       llegadaTardeMin = 0;
-      if (uShift.includes("10PM") && uShift.includes("6AM")) {
-          finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : 0;
-          finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : -targetOrd;
+      finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : 0;
+      finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : 0;
+      const debeTipo = overrides[`${prefix}_debe_tipo`] || ((uShift.includes("10PM") && uShift.includes("6AM")) ? "ext_noc" : "ext_diu");
+      if (debeTipo === "ext_noc") {
+          finalExtNoc = overrides[`${prefix}_ext_noc`] !== undefined ? Number(overrides[`${prefix}_ext_noc`]) : -targetOrd;
+          finalExtDiu = overrides[`${prefix}_ext_diu`] !== undefined ? Number(overrides[`${prefix}_ext_diu`]) : 0;
       } else {
-          finalDiurnas = overrides[`${prefix}_diurnas`] !== undefined ? Number(overrides[`${prefix}_diurnas`]) : -targetOrd;
-          finalNocturnas = overrides[`${prefix}_nocturnas`] !== undefined ? Number(overrides[`${prefix}_nocturnas`]) : 0;
+          finalExtDiu = overrides[`${prefix}_ext_diu`] !== undefined ? Number(overrides[`${prefix}_ext_diu`]) : -targetOrd;
+          finalExtNoc = overrides[`${prefix}_ext_noc`] !== undefined ? Number(overrides[`${prefix}_ext_noc`]) : 0;
       }
   }
 

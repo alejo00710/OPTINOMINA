@@ -463,16 +463,34 @@ export default function TabLiquidacion({
                                         }
                                      });
 
+                                     const uShiftForDebe = String(day.turno || day.turnoPuroDelJSON || "").toUpperCase();
+                                     const isNightForDebe = uShiftForDebe.includes("10PM") && uShiftForDebe.includes("6AM");
+                                     const defaultDebeTipo = isNightForDebe ? "ext_noc" : "ext_diu";
+                                     const debeTipoVal = overrides[`${prefix}_debe_tipo`] || defaultDebeTipo;
+
                                      return (
-                                        <select 
-                                           value={statusVal} 
-                                           onChange={(e) => handleCellEdit(`${prefix}_novedad_status`, e.target.value)} 
-                                           className={`ml-1 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider outline-none cursor-pointer text-center ${getStatusColor(statusVal)} hover:opacity-80`}
-                                        >
-                                           {optionsToRender.map(opt => (
-                                             <option key={opt} value={opt}>{opt}</option>
-                                           ))}
-                                        </select>
+                                        <div className="inline-flex items-center gap-1">
+                                           <select 
+                                              value={statusVal} 
+                                              onChange={(e) => handleCellEdit(`${prefix}_novedad_status`, e.target.value)} 
+                                              className={`ml-1 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider outline-none cursor-pointer text-center ${getStatusColor(statusVal)} hover:opacity-80`}
+                                           >
+                                              {optionsToRender.map(opt => (
+                                                <option key={opt} value={opt}>{opt}</option>
+                                              ))}
+                                           </select>
+                                           {statusVal === 'DEBE' && (
+                                              <select
+                                                 value={debeTipoVal}
+                                                 onChange={(e) => handleCellEdit(`${prefix}_debe_tipo`, e.target.value)}
+                                                 className="bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded px-1 py-0.5 text-[9px] font-black uppercase outline-none cursor-pointer shadow-sm transition-all"
+                                                 title="Seleccionar tipo de hora extra a descontar (S / T)"
+                                              >
+                                                 <option value="ext_diu">Ext. D</option>
+                                                 <option value="ext_noc">Ext. N</option>
+                                              </select>
+                                           )}
+                                        </div>
                                      );
                                   })()}
                                </td>
@@ -774,7 +792,8 @@ export default function TabLiquidacion({
                           const horasCobrarVal = overrides[`${selectedWorkerData.cedula}_horas_cobrar_deuda`] !== undefined
                              ? overrides[`${selectedWorkerData.cedula}_horas_cobrar_deuda`]
                              : (selectedWorkerData.horas_descontadas_deuda !== undefined && selectedWorkerData.horas_descontadas_deuda > 0 ? selectedWorkerData.horas_descontadas_deuda : "");
-                          const tipoCobroVal = overrides[`${selectedWorkerData.cedula}_tipo_cobro_deuda`] || "diurnas";
+                          const rawTipoCobro = overrides[`${selectedWorkerData.cedula}_tipo_cobro_deuda`] || selectedWorkerData?.tipo_cobro_deuda || "extra_diurna";
+                          const tipoCobroVal = (rawTipoCobro === 'nocturnas' || rawTipoCobro === 'extra_nocturna') ? 'extra_nocturna' : 'extra_diurna';
                           const estaCobrando = Number(horasCobrarVal) > 0;
 
                           const nuevaDeudaManualVal = overrides[`${selectedWorkerData.cedula}_nueva_deuda_manual`] !== undefined
@@ -809,7 +828,7 @@ export default function TabLiquidacion({
                                              {Number(selectedWorkerData.horas_descontadas_deuda || 0) > 0 && (
                                                 <span className="text-emerald-400 ml-1">({Number(selectedWorkerData.horas_descontadas_deuda).toFixed(1)} hrs amortizadas)</span>
                                              )}
-                                             . Cobrar directamente de horas ordinarias.
+                                             . Cobrar directamente de horas extras (S / T).
                                           </p>
                                        </div>
                                     </div>
@@ -860,8 +879,8 @@ export default function TabLiquidacion({
                                                    : "bg-slate-800/40 text-slate-500 border-slate-700/40 cursor-not-allowed opacity-50"
                                              }`}
                                           >
-                                             <option value="diurnas">diurnas</option>
-                                             <option value="nocturnas">nocturnas</option>
+                                             <option value="extra_diurna">Extra Diurna (S)</option>
+                                             <option value="extra_nocturna">Extra Nocturna (T)</option>
                                           </select>
                                        </div>
                                     </div>

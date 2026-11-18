@@ -454,7 +454,7 @@ export default function NominaPage() {
           saldo_prestamo: saldoPrestamo,
           saldo_optica: saldoOptica,
           cobrar_deuda: emp.cobrar_deuda || false,
-          tipo_cobro_deuda: emp.tipo_cobro_deuda || 'diurnas',
+          tipo_cobro_deuda: emp.tipo_cobro_deuda || 'extra_diurna',
           horas_descontadas_deuda: emp.horas_descontadas_deuda || 0,
           mensaje_cobro_deuda: emp.mensaje_cobro_deuda || null,
           descuento_actual_horas: emp.descuento_actual_horas || 0,
@@ -1244,189 +1244,6 @@ processedLogs.forEach(day => {
 });
 // --- FIN CÁLCULO DE NOVEDADES ---
 
-      const horasDebe = resolveValue(overrides, `${cedula}_horas_que_debe`, () => Number(emp.horas_debe || 0));
-      
-      const salarioBase = resolveValue(overrides, `${cedula}_salario_base`, () => Number(emp.salario_base || emp.salario || 0));
-
-      // CENTRALIZACIÓN DE LA VERDAD (Overrides > Biométrico)
-      // Prioridad absoluta a los valores editados en TabLiquidacion (tot_hr_*) o en overrides globales
-      const parseSafeHours = (v) => {
-          if (v === undefined || v === null || v === "") return null;
-          if (typeof v === "number") return isNaN(v) ? 0 : v;
-          const str = String(v).trim().replace(',', '.');
-          const n = parseFloat(str);
-          return isNaN(n) ? 0 : n;
-      };
-
-      const getOverrideHour = (key1, key2, fallbackFn) => {
-          const v1 = parseSafeHours(overrides[`${cedula}_${key1}`]);
-          if (v1 !== null) return v1;
-          if (key2) {
-              const v2 = parseSafeHours(overrides[`${cedula}_${key2}`]);
-              if (v2 !== null) return v2;
-          }
-          const fb = fallbackFn();
-          const nFb = parseSafeHours(fb);
-          return nFb !== null ? nFb : 0;
-      };
-
-      let finalDiurnas = getOverrideHour('tot_hr_diurnas', 'horas_diurnas', () => sumDiurnas);
-      let finalNocturnas = getOverrideHour('horas_nocturnas', 'tot_hr_nocturnas', () => sumNocturnas);
-      let finalFesDiu = getOverrideHour('tot_hr_fes_diu', 'festivas_diurnas', () => sumFesDiu);
-      let finalFesNoc = getOverrideHour('tot_hr_fes_noc', 'festivas_nocturnas', () => sumFesNoc);
-      
-      let finalExtNoc = getOverrideHour('tot_hr_ext_noc', 'extras_nocturnas', () => {
-          return (overrides[`${cedula}_horas_nocturnas`] !== undefined || overrides[`${cedula}_tot_hr_nocturnas`] !== undefined)
-              ? Math.max(0, sumNetNoc - Number(finalNocturnas))
-              : sumExtNoc;
-      });
-      
-      let finalExtDiu = getOverrideHour('tot_hr_ext_diu', 'extras_diurnas', () => {
-          const baseCalculada = sumHrPag - (finalDiurnas + finalNocturnas + finalFesDiu + finalFesNoc + finalExtNoc + sumExtFesDiu + sumExtFesNoc);
-          return (overrides[`${cedula}_horas_diurnas`] !== undefined || overrides[`${cedula}_tot_hr_diurnas`] !== undefined || overrides[`${cedula}_horas_nocturnas`] !== undefined || overrides[`${cedula}_tot_hr_nocturnas`] !== undefined)
-              ? Math.max(0, baseCalculada)
-              : sumExtDiu;
-      });
-      
-      let finalExtFesDiu = getOverrideHour('tot_hr_ext_fes_diu', 'extras_festivas', () => sumExtFesDiu);
-      let finalExtFesNoc = getOverrideHour('tot_hr_ext_fes_noc', 'extras_festivas_nocturnas', () => 
-          getOverrideHour('ext_fes_noc', null, () => sumExtFesNoc)
-      );
-
-      finalDiurnas = parseFloat(finalDiurnas) || 0;
-      finalNocturnas = parseFloat(finalNocturnas) || 0;
-      finalFesDiu = parseFloat(finalFesDiu) || 0;
-      finalFesNoc = parseFloat(finalFesNoc) || 0;
-      finalExtDiu = parseFloat(finalExtDiu) || 0;
-      finalExtNoc = parseFloat(finalExtNoc) || 0;
-      finalExtFesDiu = parseFloat(finalExtFesDiu) || 0;
-      finalExtFesNoc = parseFloat(finalExtFesNoc) || 0;
-
-      const esPersonalAdministrativo = emp.categoria === 'Administrativo' || emp.area === 'Administrativo';
-      if (esPersonalAdministrativo) {
-          finalNocturnas = 0;
-          finalFesDiu = 0;
-          finalFesNoc = 0;
-          finalExtDiu = 0;
-          finalExtNoc = 0;
-          finalExtFesDiu = 0;
-          finalExtFesNoc = 0;
-      }
-
-
-      // Recuperar deuda previa del colaborador y acumular nuevas deudas por faltas si existen
-      const deudaAcumuladaEmp = Number(emp.deuda_inicial ?? emp.horas_debe_acumuladas ?? emp.masterRow?.horas_debe_acumuladas ?? 0);
-      const deudaInicialNeg = deudaAcumuladaEmp < 0 ? deudaAcumuladaEmp : 0;
-      const nuevaFaltaNeg = horasDebe > 0 ? -horasDebe : 0;
-
-      // =========================================================================
-      // DESHABILITAR PENALIZACIONES BIOMÉTRICAS INESTABLES (BANCO DE HORAS):
-      // Las llegadas tarde (llegada_tarde, llegada_tarde_min) y comidas excedidas (comidas_excedidas, comidas_excedidas_min)
-      // quedan estrictamente EXCLUIDAS de la generación automática de deuda de tiempo.
-      // El sistema solo genera negativo automático por ausencias completas o turnos incompletos severos (horasDebe),
-      // o mediante la inyección del campo manual "nueva deuda manual".
-      // (NO sumar sumLlegadasMin ni sumComidasMin al tiempo negativo).
-      // =========================================================================
-
-      // Inyección manual de nueva deuda (Banco de Horas):
-      const nuevaDeudaManual = Math.max(0, Number(overrides[`${cedula}_nueva_deuda_manual`] || 0));
-      const nuevaDeudaManualNeg = nuevaDeudaManual > 0 ? -nuevaDeudaManual : 0;
-
-      // FÓRMULA DE SALDO EN VIVO:
-      // Deuda Anterior (negativa) - nuevaDeudaManual (se vuelve más negativa) + ausencias completas
-      const deudaPreviaNeg = parseFloat((deudaInicialNeg + nuevaFaltaNeg + nuevaDeudaManualNeg).toFixed(2));
-
-      // AMORTIZACIÓN MANUAL DEL BANCO DE HORAS (Cobro directo parcial/total en ordinarias)
-      const rawCobroParcial = overrides[`${cedula}_horas_cobrar_deuda`] !== undefined 
-          ? Number(overrides[`${cedula}_horas_cobrar_deuda`] || 0)
-          : (overrides[`${cedula}_cobrar_deuda`] === true || overrides[`${cedula}_cobrar_deuda`] === "true" ? Math.abs(deudaPreviaNeg) : 0);
-      const maxDeudaPermitida = Math.abs(deudaPreviaNeg);
-      const horasADescontar = deudaPreviaNeg < 0 ? Math.min(Math.max(0, rawCobroParcial), maxDeudaPermitida) : 0;
-      const tipoCobroDeuda = overrides[`${cedula}_tipo_cobro_deuda`] || 'diurnas';
-      let horasDescontadasDeuda = 0;
-      let mensajeCobroDeuda = null;
-
-      // Saldo restante tras el cobro parcial/total en ordinarias (ej. -8 + 4 = -4)
-      let deudaRestanteTrasCobro = deudaPreviaNeg;
-
-      if (horasADescontar > 0 && deudaPreviaNeg < 0) {
-          horasDescontadasDeuda = horasADescontar;
-          if (tipoCobroDeuda === 'nocturnas') {
-              finalNocturnas = Math.max(0, finalNocturnas - horasDescontadasDeuda);
-          } else {
-              finalDiurnas = Math.max(0, finalDiurnas - horasDescontadasDeuda);
-          }
-          
-          deudaRestanteTrasCobro = Math.min(0, parseFloat((deudaPreviaNeg + horasDescontadasDeuda).toFixed(2)));
-          mensajeCobroDeuda = `Se descontaron ${horasDescontadasDeuda.toFixed(1)} hrs que tenías pendientes en esta quincena`;
-      }
-      const cobrarDeuda = horasDescontadasDeuda > 0;
-
-      // =========================================================================
-      // DESCUENTO EN QUINCENA ACTUAL (100% INFORMATIVO PARA COLILLA Y REPORTES)
-      // La novedad (ej. DEBE) ya descuenta el tiempo automáticamente en la liquidación diaria.
-      // Por ende, NO resta horas (finalDiurnas / finalNocturnas) ni deduce dinero de sueldoCalc.
-      // =========================================================================
-      const descuentoActualHoras = Math.max(0, Number(overrides[`${cedula}_descuento_actual_horas`] || 0));
-      let mensajeDescuentoActual = null;
-
-      if (descuentoActualHoras > 0) {
-          mensajeDescuentoActual = `Se descontaron ${Number(descuentoActualHoras).toFixed(1)} hrs de un día que quedaste debiendo`;
-      }
-
-      // CRUCE AUTOMÁTICO DESHABILITADO:
-      // Las horas extras se liquidan al 100% brutas trabajadas sin descontar deuda previa.
-      const balanceExtrasST = finalExtDiu + finalExtNoc;
-      const sumaTotalTiempoExtras = balanceExtrasST;
-
-      const extDiuLiquidar = Math.max(0, finalExtDiu);
-      const extNocLiquidar = Math.max(0, finalExtNoc);
-      const extraDiurnaNeto = extDiuLiquidar;
-      const horasPendientes = finalExtDiu + finalExtNoc + finalExtFesDiu + finalExtFesNoc;
-
-      // PRESERVACIÓN DE LA DEUDA:
-      // Si no se amortiza manualmente en ordinarias, la deuda se preserva intacta para el cierre de quincena.
-      // Las horas extras trabajadas ya NO reducen este saldo de forma automática.
-      const nuevaDeudaAcumulada = deudaRestanteTrasCobro;
-      
-      const comisiones = resolveValue(overrides, `${cedula}_comisiones`, () => 0);
-      const interesesCesantias = resolveValue(overrides, `${cedula}_intereses_cesantias`, () => parseLocalNumber(emp.intereses_cesantias));
-      const devoluciones = resolveValue(overrides, `${cedula}_devoluciones`, () => parseLocalNumber(emp.devoluciones));
-      const motivoDevoluciones = overrides[`${cedula}_motivo_devoluciones`] !== undefined ? overrides[`${cedula}_motivo_devoluciones`] : (emp.motivo_devoluciones || '');
-      
-      const prestamoTotal = parseLocalNumber(Number(emp.prestamo_total || 0));
-      const basePrestamo = Math.min(parseLocalNumber(Number(emp.cuota_prestamo || 0)), prestamoTotal);
-      const rawDescuentosSaitemp = overrides[`${cedula}_prestamos`] !== undefined 
-          ? String(overrides[`${cedula}_prestamos`]) 
-          : (basePrestamo > 0 ? String(basePrestamo) : '');
-      const prestamos = resolveValue(overrides, `${cedula}_prestamos`, () => basePrestamo);
-      const saldoPrestamo = prestamoTotal - prestamos;
-
-      const polizaBolivar = resolveValue(overrides, `${cedula}_poliza_bolivar`, () => parseLocalNumber(Number(emp.poliza_bolivar || 0)));
-      const polizaPlenitud = resolveValue(overrides, `${cedula}_poliza_plenitud`, () => parseLocalNumber(Number(emp.poliza_plenitud || 0)));
-      const comfama = resolveValue(overrides, `${cedula}_comfama`, () => resolveValue(overrides, `${cedula}_libranza_comfama`, () => parseLocalNumber(Number(emp.comfama || emp.libranza_comfama || 0))));
-      const libranzaComfama = comfama;
-      const polizaSura = resolveValue(overrides, `${cedula}_poliza_sura`, () => parseLocalNumber(Number(emp.poliza_sura || 0)));
-      
-      const opticaTotal = parseLocalNumber(Number(emp.optica_total || 0));
-      const baseOptica = Math.min(parseLocalNumber(Number(emp.cuota_optica || 0)), opticaTotal);
-      const optica = resolveValue(overrides, `${cedula}_optica`, () => baseOptica);
-      const saldoOptica = opticaTotal - optica;
-      
-      const celular = resolveValue(overrides, `${cedula}_celular`, () => parseLocalNumber(Number(emp.celular || 0)));
-      const retencion = resolveValue(overrides, `${cedula}_retencion`, () => parseLocalNumber(Number(emp.retencion || 0)));
-      const otrosDescuentos = resolveValue(overrides, `${cedula}_otros_descuentos`, () => parseLocalNumber(Number(emp.otros_descuentos || 0)));
-      const motivoOtros = overrides[`${cedula}_motivo_otros`] !== undefined ? overrides[`${cedula}_motivo_otros`] : (emp.motivo_otros || '');
-      const bonificacion = resolveValue(overrides, `${cedula}_bonificacion`, () => 0);
-      
-      // Asignación directa y unificada de los valores de tiempo ya resueltos con override
-      const hrsDiurnasParaCalculo = finalDiurnas;
-      const hrsNocturnasParaCalculo = finalNocturnas;
-      const extDiurnasParaCalculo = finalExtDiu;
-      const extNocturnasParaCalculo = finalExtNoc;
-      const extFestivasParaCalculo = finalExtFesDiu;
-      const extFestivasNocturnasParaCalculo = finalExtFesNoc;
-
       // Mapeo Estricto de Novedades (Auditoría de Liquidación)
       // Conteo directo de novedades desde el horario / turnos de los días procesados
       let autoDiasDebe = 0;
@@ -1527,15 +1344,207 @@ processedLogs.forEach(day => {
       const dias_terminacion = getAbsenceDays('dias_terminacion', k => k.includes('TERMINACION DE CONTRATO') || k.includes('TERMINACIÓN DE CONTRATO') || k.includes('TERMINACION'), autoDiasTerminacion);
       const dias_debe = getAbsenceDays('dias_debe', k => k === 'DEBE' || k.includes('DEBE'), autoDiasDebe);
 
+      const horasDebe = resolveValue(overrides, `${cedula}_horas_que_debe`, () => Number(emp.horas_debe || 0));
+      
+      const salarioBase = resolveValue(overrides, `${cedula}_salario_base`, () => Number(emp.salario_base || emp.salario || 0));
+
+      // CENTRALIZACIÓN DE LA VERDAD (Overrides > Biométrico)
+      // Prioridad absoluta a los valores editados en TabLiquidacion (tot_hr_*) o en overrides globales
+      const parseSafeHours = (v) => {
+          if (v === undefined || v === null || v === "") return null;
+          if (typeof v === "number") return isNaN(v) ? 0 : v;
+          const str = String(v).trim().replace(',', '.');
+          const n = parseFloat(str);
+          return isNaN(n) ? 0 : n;
+      };
+
+      const getOverrideHour = (key1, key2, fallbackFn) => {
+          const v1 = parseSafeHours(overrides[`${cedula}_${key1}`]);
+          if (v1 !== null) return v1;
+          if (key2) {
+              const v2 = parseSafeHours(overrides[`${cedula}_${key2}`]);
+              if (v2 !== null) return v2;
+          }
+          const fb = fallbackFn();
+          const nFb = parseSafeHours(fb);
+          return nFb !== null ? nFb : 0;
+      };
+
+      let finalDiurnas = getOverrideHour('tot_hr_diurnas', 'horas_diurnas', () => sumDiurnas);
+      let finalNocturnas = getOverrideHour('horas_nocturnas', 'tot_hr_nocturnas', () => sumNocturnas);
+      let finalFesDiu = getOverrideHour('tot_hr_fes_diu', 'festivas_diurnas', () => sumFesDiu);
+      let finalFesNoc = getOverrideHour('tot_hr_fes_noc', 'festivas_nocturnas', () => sumFesNoc);
+      
+      let finalExtNoc = getOverrideHour('tot_hr_ext_noc', 'extras_nocturnas', () => {
+          return (overrides[`${cedula}_horas_nocturnas`] !== undefined || overrides[`${cedula}_tot_hr_nocturnas`] !== undefined)
+              ? Math.max(0, sumNetNoc - Number(finalNocturnas))
+              : sumExtNoc;
+      });
+      
+      let finalExtDiu = getOverrideHour('tot_hr_ext_diu', 'extras_diurnas', () => {
+          const baseCalculada = sumHrPag - (finalDiurnas + finalNocturnas + finalFesDiu + finalFesNoc + finalExtNoc + sumExtFesDiu + sumExtFesNoc);
+          return (overrides[`${cedula}_horas_diurnas`] !== undefined || overrides[`${cedula}_tot_hr_diurnas`] !== undefined || overrides[`${cedula}_horas_nocturnas`] !== undefined || overrides[`${cedula}_tot_hr_nocturnas`] !== undefined)
+              ? Math.max(0, baseCalculada)
+              : sumExtDiu;
+      });
+      
+      let finalExtFesDiu = getOverrideHour('tot_hr_ext_fes_diu', 'extras_festivas', () => sumExtFesDiu);
+      let finalExtFesNoc = getOverrideHour('tot_hr_ext_fes_noc', 'extras_festivas_nocturnas', () => 
+          getOverrideHour('ext_fes_noc', null, () => sumExtFesNoc)
+      );
+
+      finalDiurnas = parseFloat(finalDiurnas) || 0;
+      finalNocturnas = parseFloat(finalNocturnas) || 0;
+      finalFesDiu = parseFloat(finalFesDiu) || 0;
+      finalFesNoc = parseFloat(finalFesNoc) || 0;
+      finalExtDiu = parseFloat(finalExtDiu) || 0;
+      finalExtNoc = parseFloat(finalExtNoc) || 0;
+      finalExtFesDiu = parseFloat(finalExtFesDiu) || 0;
+      finalExtFesNoc = parseFloat(finalExtFesNoc) || 0;
+
+      const esPersonalAdministrativo = emp.categoria === 'Administrativo' || emp.area === 'Administrativo';
+      if (esPersonalAdministrativo) {
+          finalNocturnas = 0;
+          finalFesDiu = 0;
+          finalFesNoc = 0;
+          finalExtDiu = 0;
+          finalExtNoc = 0;
+          finalExtFesDiu = 0;
+          finalExtFesNoc = 0;
+      }
+
+      // Recuperar deuda previa del colaborador y acumular nuevas deudas por faltas si existen
+      const deudaAcumuladaEmp = Number(emp.deuda_inicial ?? emp.horas_debe_acumuladas ?? emp.masterRow?.horas_debe_acumuladas ?? 0);
+      const deudaInicialNeg = deudaAcumuladaEmp < 0 ? deudaAcumuladaEmp : 0;
+      const nuevaFaltaNeg = horasDebe > 0 ? -horasDebe : 0;
+
+      // =========================================================================
+      // DESHABILITAR PENALIZACIONES BIOMÉTRICAS INESTABLES (BANCO DE HORAS):
+      // Las llegadas tarde (llegada_tarde, llegada_tarde_min) y comidas excedidas (comidas_excedidas, comidas_excedidas_min)
+      // quedan estrictamente EXCLUIDAS de la generación automática de deuda de tiempo.
+      // El sistema solo genera negativo automático por ausencias completas o turnos incompletos severos (horasDebe),
+      // o mediante la inyección del campo manual "nueva deuda manual".
+      // (NO sumar sumLlegadasMin ni sumComidasMin al tiempo negativo).
+      // =========================================================================
+
+      // Inyección manual de nueva deuda (Banco de Horas):
+      const nuevaDeudaManual = Math.max(0, Number(overrides[`${cedula}_nueva_deuda_manual`] || 0));
+      const nuevaDeudaManualNeg = nuevaDeudaManual > 0 ? -nuevaDeudaManual : 0;
+
+      // FÓRMULA DE SALDO EN VIVO:
+      // Deuda Anterior (negativa) - nuevaDeudaManual (se vuelve más negativa) + ausencias completas
+      const deudaPreviaNeg = parseFloat((deudaInicialNeg + nuevaFaltaNeg + nuevaDeudaManualNeg).toFixed(2));
+
+      // AMORTIZACIÓN MANUAL DEL BANCO DE HORAS (Cobro directo parcial/total en extras S y T)
+      const rawCobroParcial = overrides[`${cedula}_horas_cobrar_deuda`] !== undefined 
+          ? Number(overrides[`${cedula}_horas_cobrar_deuda`] || 0)
+          : (overrides[`${cedula}_cobrar_deuda`] === true || overrides[`${cedula}_cobrar_deuda`] === "true" ? Math.abs(deudaPreviaNeg) : 0);
+      const maxDeudaPermitida = Math.abs(deudaPreviaNeg);
+      const horasADescontar = deudaPreviaNeg < 0 ? Math.min(Math.max(0, rawCobroParcial), maxDeudaPermitida) : 0;
+      let rawTipoCobro = overrides[`${cedula}_tipo_cobro_deuda`] || 'extra_diurna';
+      if (rawTipoCobro === 'nocturnas') rawTipoCobro = 'extra_nocturna';
+      if (rawTipoCobro === 'diurnas') rawTipoCobro = 'extra_diurna';
+      const tipoCobroDeuda = rawTipoCobro;
+      let horasDescontadasDeuda = 0;
+      let mensajeCobroDeuda = null;
+
+      // Saldo restante tras el cobro parcial/total en extras (ej. -8 + 4 = -4)
+      let deudaRestanteTrasCobro = deudaPreviaNeg;
+
+      if (horasADescontar > 0 && deudaPreviaNeg < 0) {
+          horasDescontadasDeuda = horasADescontar;
+          if (tipoCobroDeuda === 'extra_nocturna' || tipoCobroDeuda === 'nocturnas') {
+              finalExtNoc = Math.max(0, finalExtNoc - horasDescontadasDeuda);
+          } else {
+              finalExtDiu = Math.max(0, finalExtDiu - horasDescontadasDeuda);
+          }
+          
+          deudaRestanteTrasCobro = Math.min(0, parseFloat((deudaPreviaNeg + horasDescontadasDeuda).toFixed(2)));
+          mensajeCobroDeuda = `Se descontaron ${horasDescontadasDeuda.toFixed(1)} hrs que tenías pendientes en esta quincena`;
+      }
+      const cobrarDeuda = horasDescontadasDeuda > 0;
+
+      // Garantizar que finalExtDiu y finalExtNoc nunca sean negativas al monetizar
+      finalExtDiu = Math.max(0, finalExtDiu);
+      finalExtNoc = Math.max(0, finalExtNoc);
+
+      // =========================================================================
+      // DESCUENTO EN QUINCENA ACTUAL (100% INFORMATIVO PARA COLILLA Y REPORTES)
+      // La novedad (ej. DEBE) ya descuenta el tiempo automáticamente en la liquidación diaria.
+      // Por ende, NO resta horas (finalDiurnas / finalNocturnas) ni deduce dinero de sueldoCalc.
+      // =========================================================================
+      const descuentoActualHoras = Math.max(0, Number(overrides[`${cedula}_descuento_actual_horas`] || 0));
+      let mensajeDescuentoActual = null;
+
+      if (descuentoActualHoras > 0) {
+          mensajeDescuentoActual = `Se descontaron ${Number(descuentoActualHoras).toFixed(1)} hrs de un día que quedaste debiendo`;
+      }
+
+      // CRUCE AUTOMÁTICO DESHABILITADO:
+      // Las horas extras se liquidan al 100% brutas trabajadas sin descontar deuda previa.
+      const balanceExtrasST = finalExtDiu + finalExtNoc;
+      const sumaTotalTiempoExtras = balanceExtrasST;
+
+      const extDiuLiquidar = Math.max(0, finalExtDiu);
+      const extNocLiquidar = Math.max(0, finalExtNoc);
+      const extraDiurnaNeto = extDiuLiquidar;
+      const horasPendientes = finalExtDiu + finalExtNoc + finalExtFesDiu + finalExtFesNoc;
+
+      // PRESERVACIÓN DE LA DEUDA:
+      // Si no se amortiza manualmente en ordinarias, la deuda se preserva intacta para el cierre de quincena.
+      // Las horas extras trabajadas ya NO reducen este saldo de forma automática.
+      const nuevaDeudaAcumulada = deudaRestanteTrasCobro;
+      
+      const comisiones = resolveValue(overrides, `${cedula}_comisiones`, () => 0);
+      const interesesCesantias = resolveValue(overrides, `${cedula}_intereses_cesantias`, () => parseLocalNumber(emp.intereses_cesantias));
+      const devoluciones = resolveValue(overrides, `${cedula}_devoluciones`, () => parseLocalNumber(emp.devoluciones));
+      const motivoDevoluciones = overrides[`${cedula}_motivo_devoluciones`] !== undefined ? overrides[`${cedula}_motivo_devoluciones`] : (emp.motivo_devoluciones || '');
+      
+      const prestamoTotal = parseLocalNumber(Number(emp.prestamo_total || 0));
+      const basePrestamo = Math.min(parseLocalNumber(Number(emp.cuota_prestamo || 0)), prestamoTotal);
+      const rawDescuentosSaitemp = overrides[`${cedula}_prestamos`] !== undefined 
+          ? String(overrides[`${cedula}_prestamos`]) 
+          : (basePrestamo > 0 ? String(basePrestamo) : '');
+      const prestamos = resolveValue(overrides, `${cedula}_prestamos`, () => basePrestamo);
+      const saldoPrestamo = prestamoTotal - prestamos;
+
+      const polizaBolivar = resolveValue(overrides, `${cedula}_poliza_bolivar`, () => parseLocalNumber(Number(emp.poliza_bolivar || 0)));
+      const polizaPlenitud = resolveValue(overrides, `${cedula}_poliza_plenitud`, () => parseLocalNumber(Number(emp.poliza_plenitud || 0)));
+      const comfama = resolveValue(overrides, `${cedula}_comfama`, () => resolveValue(overrides, `${cedula}_libranza_comfama`, () => parseLocalNumber(Number(emp.comfama || emp.libranza_comfama || 0))));
+      const libranzaComfama = comfama;
+      const polizaSura = resolveValue(overrides, `${cedula}_poliza_sura`, () => parseLocalNumber(Number(emp.poliza_sura || 0)));
+      
+      const opticaTotal = parseLocalNumber(Number(emp.optica_total || 0));
+      const baseOptica = Math.min(parseLocalNumber(Number(emp.cuota_optica || 0)), opticaTotal);
+      const optica = resolveValue(overrides, `${cedula}_optica`, () => baseOptica);
+      const saldoOptica = opticaTotal - optica;
+      
+      const celular = resolveValue(overrides, `${cedula}_celular`, () => parseLocalNumber(Number(emp.celular || 0)));
+      const retencion = resolveValue(overrides, `${cedula}_retencion`, () => parseLocalNumber(Number(emp.retencion || 0)));
+      const otrosDescuentos = resolveValue(overrides, `${cedula}_otros_descuentos`, () => parseLocalNumber(Number(emp.otros_descuentos || 0)));
+      const motivoOtros = overrides[`${cedula}_motivo_otros`] !== undefined ? overrides[`${cedula}_motivo_otros`] : (emp.motivo_otros || '');
+      const bonificacion = resolveValue(overrides, `${cedula}_bonificacion`, () => 
+          resolveValue(overrides, `${cedula}_bonificacion_no_salarial`, () => 
+          resolveValue(overrides, `${cedula}_bonificacion_no_sal`, () => 0))
+      );
+      
+      // Asignación directa y unificada de los valores de tiempo ya resueltos con override
+      const hrsDiurnasParaCalculo = finalDiurnas;
+      const hrsNocturnasParaCalculo = finalNocturnas;
+      const extDiurnasParaCalculo = finalExtDiu;
+      const extNocturnasParaCalculo = finalExtNoc;
+      const extFestivasParaCalculo = finalExtFesDiu;
+      const extFestivasNocturnasParaCalculo = finalExtFesNoc;
+
       // Paso B (Descuento de Días): Suma todas estas ausencias (totalAusencias) y calcula los días pagados reales
+      // NOTA CRÍTICA: dias_debe YA NO resta a totalAusencias. El sueldo base y auxilio de transporte se mantienen al 100%.
       const totalAusencias = (dias_vacaciones || 0) + 
                              (dias_lic_rem || 0) + 
                              (dias_lic_norem || 0) + 
                              (diasIncapacidad || 0) + 
                              (dias_incap_at || 0) + 
                              (dias_calamidad || 0) + 
-                             (dias_sancion || 0) + 
-                             (dias_debe || 0);
+                             (dias_sancion || 0);
 
       const diasPagadosCalc = Math.max(0, 15 - totalAusencias);
       const diasPagados = (overrides[`${cedula}_dias_pagados`] !== undefined && overrides[`${cedula}_dias_pagados`] !== "" && overrides[`${cedula}_dias_pagados`] !== null)
@@ -1548,10 +1557,6 @@ processedLogs.forEach(day => {
 
       // Sueldo y Auxilio de Transporte basados en diasPagados
       let sueldoCalc = Math.round(valorDiaBase * diasPagados);
-      if (cobrarDeuda && horasDescontadasDeuda > 0 && tipoCobroDeuda === 'diurnas') {
-          const valorHoraOrdinaria = salarioBase / 210;
-          sueldoCalc = Math.max(0, sueldoCalc - Math.round(valorHoraOrdinaria * horasDescontadasDeuda));
-      }
       const ganaAuxilio = salarioBase <= (globalSmmlv * 2);
       const transporteCalc = ganaAuxilio ? Math.round((globalAuxTransporte / 30) * diasPagados) : 0;
 
@@ -1795,6 +1800,7 @@ processedLogs.forEach(day => {
           'total_deducciones': ['total_deducido', 'total_descuentos'],
           'neto_pagar': ['neto_a_pagar', 'neto'],
           'total_pagar': ['total_pagar', 'total_a_pagar'],
+          'bonificacion': ['bonificacion_no_salarial', 'bonificacion_no_sal'],
           'val_vacaciones': ['valor_vacaciones', 'vacaciones'],
           'incapacidad': ['val_incapacidad', 'valor_incapacidad', 'valor_incap', 'val_incap'],
           'val_lic_rem': ['valor_lic_rem', 'lic_rem'],
@@ -2485,11 +2491,29 @@ processedLogs.forEach(day => {
           }
       }
 
-      if (devengadosBase.includes(campoEditado) || campoEditado === 'dias_pagados') {
+      if (campoEditado === 'dias_pagados') {
+          delete newOverrides[`${cedula}_sueldo`];
+          delete newOverrides[`${cedula}_sueldo_calculado`];
+          delete newOverrides[`${cedula}_transporte`];
+          delete newOverrides[`${cedula}_rodamiento`];
+          delete newOverrides[`${cedula}_salud`];
+          delete newOverrides[`${cedula}_pension`];
+          delete newOverrides[`${cedula}_solidaridad`];
+          delete newOverrides[`${cedula}_total_devengados`];
+          delete newOverrides[`${cedula}_total_devengado`];
+          delete newOverrides[`${cedula}_total_deducciones`];
+          delete newOverrides[`${cedula}_total_deducido`];
+          delete newOverrides[`${cedula}_total_pagar`];
+          delete newOverrides[`${cedula}_neto_pagar`];
+      } else if (devengadosBase.includes(campoEditado)) {
           delete newOverrides[`${cedula}_total_devengados`];
           delete newOverrides[`${cedula}_total_devengado`];
           delete newOverrides[`${cedula}_total_pagar`];
           delete newOverrides[`${cedula}_neto_pagar`];
+      }
+      if (campoEditado === 'bonificacion' || campoEditado === 'bonificacion_no_salarial' || campoEditado === 'bonificacion_no_sal') {
+          delete newOverrides[`${cedula}_neto_pagar`];
+          delete newOverrides[`${cedula}_verificacion`];
       }
       if (deduccionesBase.includes(campoEditado)) {
           delete newOverrides[`${cedula}_total_deducciones`];
@@ -3532,22 +3556,33 @@ const handleSaveToCloud = async () => {
 
               const renderCard = (col) => {
                  const cKey = `${workerData.masterRow.cedula}_${col.key}`;
-                 let val = workerData[col.key] !== undefined ? workerData[col.key] : (overrides[cKey] !== undefined ? overrides[cKey] : "");
+                 const overrideVal = overrides[cKey] !== undefined 
+                    ? overrides[cKey] 
+                    : (col.key === 'bonificacion' 
+                       ? (overrides[`${workerData.masterRow.cedula}_bonificacion_no_salarial`] ?? overrides[`${workerData.masterRow.cedula}_bonificacion_no_sal`])
+                       : undefined);
+                 const isOverridden = overrideVal !== undefined;
+                 let val = isOverridden ? overrideVal : (workerData[col.key] !== undefined ? workerData[col.key] : "");
 
                  if (col.isCurrency && val !== "") val = Math.round(Number(val));
                  
                  const isLiquidacion = camposLiquidacion.includes(col.key);
                  const isFormulated = camposFormulados.includes(col.key);
-                 const hasBadge = isLiquidacion || isFormulated;
+                 const hasBadge = isLiquidacion || isFormulated || isOverridden;
 
                  return (
-                   <div key={col.key} className="relative bg-white border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group">
-                      {isLiquidacion && (
+                   <div key={col.key} className={`relative bg-white border p-4 rounded-2xl flex flex-col justify-center shadow-sm hover:shadow-md transition-all group ${isOverridden ? 'border-amber-300 ring-1 ring-amber-300/40 bg-amber-50/20' : 'border-slate-200/80 hover:border-emerald-300'}`}>
+                      {isOverridden && (
+                        <div className="absolute top-2 right-2 text-[10px] text-amber-700 flex items-center gap-1 mb-1 justify-end font-bold" title="Valor manual sobreescrito (Override)">
+                          <span>✏️ Manual</span>
+                        </div>
+                      )}
+                      {!isOverridden && isLiquidacion && (
                         <div className="absolute top-2 right-2 text-[10px] text-amber-600 flex items-center gap-1 mb-1 justify-end font-semibold" title="Viene de Liquidación">
                           <span>⏱️ Liquidación</span>
                         </div>
                       )}
-                      {isFormulated && (
+                      {!isOverridden && isFormulated && (
                         <div className="absolute top-2 right-2 text-[10px] text-indigo-500 flex items-center gap-1 mb-1 justify-end font-semibold">
                            <span>✨ Formulado</span>
                            <button onClick={() => handleOpenFormulaEditor(col.key)} className="hover:text-indigo-700 transition-colors p-1 rounded hover:bg-indigo-50" title="Editar Fórmula">⚙️</button>
@@ -3559,10 +3594,11 @@ const handleSaveToCloud = async () => {
                       <EditableCell
                          value={val}
                          onChange={(newVal) => handleCellEdit(cKey, newVal)}
-                         isOverridden={overrides[cKey] !== undefined}
+                         isOverridden={isOverridden}
                          isCalculated={col.isCalculated}
                          isCurrency={col.isCurrency}
                          isDecimal={col.isDecimal}
+                         isReadOnly={col.editable === false}
                          extraClasses=""
                       />
                      

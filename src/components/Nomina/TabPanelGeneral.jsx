@@ -765,8 +765,14 @@ export default function TabPanelGeneral({
                     
                     {visibleColumns.map(col => {
                        const cKey = `${row.cedula}_${col.key}`;
-                       // Prioritize override, then calculated payroll value, then default
-                       let val = overrides[cKey] !== undefined ? overrides[cKey] : (row[col.key] !== undefined ? row[col.key] : "");
+                       // Priorizar override (incluyendo posibles alias como bonificacion_no_salarial)
+                       const overrideVal = overrides[cKey] !== undefined 
+                          ? overrides[cKey] 
+                          : (col.key === 'bonificacion' 
+                             ? (overrides[`${row.cedula}_bonificacion_no_salarial`] ?? overrides[`${row.cedula}_bonificacion_no_sal`])
+                             : undefined);
+                       const isOverridden = overrideVal !== undefined;
+                       let val = isOverridden ? overrideVal : (row[col.key] !== undefined ? row[col.key] : "");
                        if (col.isCurrency && val !== "" && !isNaN(val)) val = Math.round(Number(val));
                        
                        return (
@@ -774,10 +780,11 @@ export default function TabPanelGeneral({
                              <EditableCell
                                 value={val}
                                 onChange={(newVal) => handleCellEdit(cKey, newVal)}
-                                isOverridden={overrides[cKey] !== undefined}
+                                isOverridden={isOverridden}
                                 isCalculated={col.isCalculated}
                                 isCurrency={col.isCurrency}
                                 isDecimal={col.isDecimal}
+                                isReadOnly={col.editable === false}
                              />
                           </td>
                        )
